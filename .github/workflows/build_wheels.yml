@@ -58,7 +58,7 @@ jobs:
           if [ ! -f VERSION ]; then
             echo "0.0.0" > VERSION
           fi
-          
+
           version=$(cat VERSION)
           IFS='.' read -r major minor patch <<< "$version"
           patch=$((patch + 1))
@@ -78,12 +78,12 @@ jobs:
 
       # Step 6: Install required dependencies
       - name: Install requirements
-        run: python3 -m pip install setuptools wheel build
+        run: python3 -m pip install build
 
       # Step 7: Build the Python wheel
       - name: Build wheels
         working-directory: ./
-        run: python3 -m build && rm dist/*.whl
+        run: python3 -m build
 
       # Step 8: Publish to PyPI
       - name: Publish to PyPI
