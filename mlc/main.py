@@ -1272,8 +1272,18 @@ class RepoAction(Action):
                 subprocess.run(clone_command, check=True)
 
             else:
-                logger.info(f"Repository {repo_name} already exists at {repo_path}. Pulling latest changes...")
-                subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
+                logger.info(f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
+    
+                # Check for local changes
+                status_command = ['git', '-C', repo_path, 'status', '--porcelain']
+                local_changes = subprocess.run(status_command, capture_output=True, text=True)
+
+                if local_changes.stdout:
+                    logger.warning("There are local changes in the repository. Please commit or stash them before checking out.")
+                    return {"return": 1, "error": f"Local changes detected in the already existing repository: {repo_path}"}
+                else:
+                    logger.info("No local changes detected. Fetching latest changes...")
+                    subprocess.run(['git', '-C', repo_path, 'fetch'], check=True)
             
             # Checkout to a specific branch or commit if --checkout is provided
             if checkout:
