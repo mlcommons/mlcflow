@@ -63,9 +63,6 @@ class Action:
     #mlc = None
     repos = [] #list of Repo objects
 
-    def execute(self, args):
-        raise NotImplementedError("Subclasses must implement the execute method")
-
     # Main access function to simulate a Python interface for CLI
     def access(self, options):
         """
@@ -87,19 +84,16 @@ class Action:
         action_target_split = action_target.split(",")
         action_target = action_target_split[0]
 
-        action = actions.get(action_target)
+        action = get_action(action_target, self)
 
-        if action:
-            if hasattr(action, action_name):
-                # Find the method and call it with the options
-                method = getattr(action, action_name)
-                result = method(self, options)
-                #logger.info(f"result ={result}")
-                return result
-            else:
-                return {'return': 1, 'error': f"'{action_name}' action is not supported for {action_target}."}
+        if action and hasattr(action, action_name):
+            # Find the method and call it with the options
+            method = getattr(action, action_name)
+            result = method(options)
+            #logger.info(f"result ={result}")
+            return result
         else:
-            return {'return': 1, 'error': f"Action target '{action_target}' is not defined."}
+            return {'return': 1, 'error': f"'{action_name}' action is not supported for {action_target}."}
         return {'return': 0}
 
     def find_target_folder(self, target):
@@ -1683,15 +1677,15 @@ actions = {
     }
 
 # Factory to get the appropriate action class
-def get_action(target):
+def get_action(target, parent):
     action_class = actions.get(target, None)
-    return action_class() if action_class else None
+    return action_class(parent) if action_class else None
 
 
 def access(i):
     action = i['action']
     target = i.get('target', i.get('automation'))
-    action_class = get_action(target)
+    action_class = get_action(target, default_parent)
     r = action_class.access(i)
     return r
 
@@ -1782,7 +1776,7 @@ def main():
             run_args['dest'] = args.extra[0]
 
     # Get the action handler for other commands
-    action = get_action(args.target)
+    action = get_action(args.target, default_parent)
     # Dynamically call the method (e.g., run, list, show)
     if action and hasattr(action, args.command):
         method = getattr(action, args.command)
