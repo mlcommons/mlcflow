@@ -1367,12 +1367,27 @@ class RepoAction(Action):
         repo_path = os.path.join(self.repos_path, repo_folder_name)
 
         if os.path.exists(repo_path):
-            shutil.rmtree(repo_path)
-            logger.info(f"Repo {run_args['repo']} residing in path {repo_path} has been successfully removed")
-            logger.info("Checking whether the repo was registered in repos.json")
+            # Check for local changes
+            status_command = ['git', '-C', repo_path, 'status', '--porcelain']
+            local_changes = subprocess.run(status_command, capture_output=True, text=True)
+
+            if local_changes.stdout:
+                logger.warning("Local changes detected in repository. Changes are listed below:")
+                print(local_changes.stdout)
+                confirm_remove = True if(input("Continue to remove repo?").lower()) in ["yes", "y"] else False
+            else:
+                logger.info("No local changes detected. Removing repo...")
+                confirm_remove = True
+            if confirm_remove:
+                shutil.rmtree(repo_path)
+                logger.info(f"Repo {run_args['repo']} residing in path {repo_path} has been successfully removed")
+                logger.info("Checking whether the repo was registered in repos.json")
+                self.unregister_repo(repo_path)
+            else:
+                logger.info("rm repo ooperation cancelled by user!")
         else:
             logger.warning(f"Repo {run_args['repo']} was not found in the repo folder. repos.json will be checked for any corrupted entry. If any, that will be removed.")
-        self.unregister_repo(repo_path)
+            self.unregister_repo(repo_path)
 
         return {"return": 0}
         

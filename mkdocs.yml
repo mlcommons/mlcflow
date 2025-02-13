@@ -22,7 +22,7 @@ nav:
   - Home:
     - README.md
   - Install:
-    - install/install.md
+    - install/index.md
   - MLC CLI:
     - Repo:
       - targets/repo/index.md
