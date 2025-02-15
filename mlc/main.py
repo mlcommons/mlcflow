@@ -1409,14 +1409,6 @@ class ScriptAction(Action):
         return res
 
     find = search
-
-    def cp(self,i):
-        i["target"] = "script"
-        return self.parent.cp(i)
-
-    def mv(self,i):
-        i["target"] = "script"
-        return self.parent.mv(i)
         
     def rm(self, i):
         if not i.get('target_name'):
