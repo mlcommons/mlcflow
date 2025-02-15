@@ -230,7 +230,7 @@ jobs:
     
     - name: Run find repo from test-mlc-access.py
       run: |
-        python -c "import test-mlc-access as test; test.find_repo()"
+        cd ./github/scripts && python -c "import test_mlc_access as test; test.test_find_repo()"
 
     - name: Pull MLCOMMONS mlperf-automations repository
       run: |
