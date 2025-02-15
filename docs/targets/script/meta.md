@@ -156,8 +156,8 @@ The `docker` key contains Docker-specific configurations:
 
 - **real_run** (`boolean`)  
 
-  - If `true`: The container **runs the MLC script**.  
-  - If `false`: Only the dependencies are executed.
+    - `true`: The container **runs the MLC script**.  
+    - `false`: Only the dependencies are executed.
 
 - **all_gpus** (`string`)  
   Use all available GPUs.
