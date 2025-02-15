@@ -145,6 +145,7 @@ mlc run script --tags=detect,os -j
 ```
 
 **Options:**  
+
 - `-j`: Shows the output in a JSON format
 
 - `mlcr` can be used as a shortcut to `mlc run script --tags=`
@@ -175,6 +176,7 @@ mlc run script --tags=detect,os -j
 
 <details>
   <summary><strong>Example Output</strong> 📌</summary>
+```
 arjun@arjun-spr:~$ mlcr detect,os -j
 [2025-02-16 03:30:40,702 module.py:560 INFO] - * mlcr detect,os
 [2025-02-16 03:30:40,704 module.py:5334 INFO] -        ! cd /home/arjun
@@ -252,6 +254,7 @@ arjun@arjun-spr:~$ mlcr detect,os -j
   },
   "deps": []
 }
+```
 
 </details>
 ---
