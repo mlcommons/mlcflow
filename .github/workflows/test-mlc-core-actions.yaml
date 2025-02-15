@@ -225,6 +225,18 @@ jobs:
         python -m pip install --ignore-installed --verbose pip setuptools
         python -m pip install .
     
-    - name: Run mlc access tests from test-mlc-access.py
+    - name: Pull a forked mlperf-automations repository
+      run: |
+        mlc pull repo anandhu-eng@mlperf-automations  --checkout=dev
+    
+    - name: Run find repo from test-mlc-access.py
+      run: |
+        python -c "import test-mlc-access as test; test.find_repo()"
+
+    - name: Pull MLCOMMONS mlperf-automations repository
+      run: |
+        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+
+    - name: Run tests from test-mlc-access.py
       run: |
         python .github/scripts/test-mlc-access.py
