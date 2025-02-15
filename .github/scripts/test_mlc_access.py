@@ -224,7 +224,7 @@ def test_add_script():
         "action": "add",
         "item": "mlcommons@mlperf-automations:my-script-4",
         "tags": "my,new-tags-4",
-        "template_tags": "detect,os"
+        "template_tags": "detect,cpu"
     })
     if res['return'] > 0:
         raise Exception(f"{res['error']}")
