@@ -5,106 +5,85 @@ This page provides a walkthrough of the `meta.yaml` file.
 ## Important Keys and Data Types
 
 - **alias** (`string`)  
-
   Alias of the script, which can be used instead of tags when running a script.
 
 - **uid** (`string`)  
-
   Unique identifier for individual scripts. Can be used instead of tags when running a script.
 
 - **automation_alias** (`string`)  
-
   Alias specific to script automation.
 
 - **automation_uid** (`string`)  
-
   Unique identifier for script automation.
 
 - **category** (`string`)  
-
   Defines the script category.
 
 - **tags** (`list of strings`)  
-
   List of tags users can specify to run the script.
 
 - **default_env** (`dictionary` with `string` values)  
-
-  Contains key-value pairs representing environment variables and their default values for a script.  
-  These default values are overridden if the same environment variable is set in script files or inherited from a parent script.
+  Contains key-value pairs representing environment variables and their default values for a script. These default values are overridden if the same environment variable is set in script files or inherited from a parent script.
 
 - **env** (`dictionary` with `string` values)  
-
   Defines environment variables and their corresponding values.
 
 - **input_mapping** (`dictionary` with `string` values)  
-
-  Maps input flags related to a script to corresponding environment variables.  
-  Only keys specified under `input_mapping` in `meta.yaml` are mapped to environment variables.
+  Maps input flags related to a script to corresponding environment variables. Only keys specified under `input_mapping` in `meta.yaml` are mapped to environment variables.
 
 - **env_key_mapping** (`dictionary` with `string` values)  
-
   Maps one environment key to another just for the `run` script execution.
 
 - **new_env_keys** (`list of strings`)  
-
   Specifies environment keys that should be passed to a parent script if this script is used as a dependency.
 
 - **new_state_keys** (`list of strings`)  
-
   Specifies state keys that should be passed to a parent script when used as a dependency.
 
 - **add_deps_recursive** (`dictionary`)  
-
   Customizes recursive dependencies with nested `tags` and other attributes.
 
 ---
 
 ## Dependencies  
 
-!!! note  
-    Dependencies in a script are specified as a **list of dictionaries**. Each dictionary can contain:
+Dependencies in a script are specified as a **list of dictionaries**. Each dictionary can contain:
 
-    - **tags**  
-      Comma-separated list of tags to identify a dependent script.
+- **tags**  
+  Comma-separated list of tags to identify a dependent script.
 
-    - **names** (`list of strings`)  
-      
-      - Identifiers for dependencies, allowing users to modify the dependency execution when needed.
+- **names** (`list of strings`)  
+  Identifiers for dependencies, allowing users to modify the dependency execution when needed.
 
-    - **enable_if_env** (`dictionary` with `list of strings` values)  
-      
-      - Specifies conditions under which a dependency is enabled based on environment variables. The conditions are **ANDed**.
+- **enable_if_env** (`dictionary` with `list of strings` values)  
+  Specifies conditions under which a dependency is enabled based on environment variables. The conditions are **ANDed**.
 
-    - **enable_if_any_env** (`dictionary` with `list of strings` values)  
-      
-      - Specifies conditions under which a dependency is enabled based on environment variables. The conditions are **ORed**.
+- **enable_if_any_env** (`dictionary` with `list of strings` values)  
+  Specifies conditions under which a dependency is enabled based on environment variables. The conditions are **ORed**.
 
-    - **skip_if_env** (`dictionary` with `list of strings` values)  
-      
-      - Specifies conditions under which a dependency should be skipped. The conditions are **ANDed**.
+- **skip_if_env** (`dictionary` with `list of strings` values)  
+  Specifies conditions under which a dependency should be skipped. The conditions are **ANDed**.
 
-    - **skip_if_any_env** (`dictionary` with `list of strings` values)  
-      
-      - Specifies conditions under which a dependency should be skipped. The conditions are **ORed**.
+- **skip_if_any_env** (`dictionary` with `list of strings` values)  
+  Specifies conditions under which a dependency should be skipped. The conditions are **ORed**.
 
-    - Any other script meta keys can also be included, which will be passed to the dependent script.
+Any other script meta keys can also be included, which will be passed to the dependent script.
 
 ### Types of Dependencies  
 
 In MLC scripts, there are **four types of dependencies**:
 
 1. **deps**  
-   - Executes **after** processing the script meta, but **before** the `preprocess` function.
+   Executes **after** processing the script meta, but **before** the `preprocess` function.
 
 2. **prehook_deps**  
-   - Executes **after** the `preprocess` function, but **before** the `run` script.
+   Executes **after** the `preprocess` function, but **before** the `run` script.
 
 3. **posthook_deps**  
-   - Executes **after** the `run` script, but **before** the `postprocess` function.
+   Executes **after** the `run` script, but **before** the `postprocess` function.
 
 4. **post_deps**  
-   - Executes **after** the `postprocess` function.
+   Executes **after** the `postprocess` function.
 
 For more details on script execution flow, see [Script Execution Flow](execution-flow.md).
 
@@ -113,25 +92,22 @@ For more details on script execution flow, see [Script Execution Flow](execution
 ## Variation Configuration  
 
 - **variations** (`dictionary`)  
-
-  - Contains script variations, including attributes like `alias`, `default_variations`, and `group`.
+  Contains script variations, including attributes like `alias`, `default_variations`, and `group`.
 
 - **group** (`string`)  
-
-  - Specifies the script variation group.  
+  Specifies the script variation group.  
+  
     - A maximum of **one variation** from a given group can be selected during script invocation.  
     - If `default: true` is set for a variation in a group, that variation is turned **on by default**, unless another variation is specified during script invocation.
 
 - **default_variations** (`dictionary` with `string` values)  
-
-  - Specifies default variations for the script.
+  Specifies default variations for the script.
 
 ---
 
 ## Docker Configuration  
 
-!!! tip  
-    The `docker` key contains Docker-specific configurations:
+The `docker` key contains Docker-specific configurations:
 
 - **base_image** (`string`)  
   Base Docker image.
@@ -179,6 +155,7 @@ For more details on script execution flow, see [Script Execution Flow](execution
   Defines shared memory size.
 
 - **real_run** (`boolean`)  
+
   - If `true`: The container **runs the MLC script**.  
   - If `false`: Only the dependencies are executed.
 
