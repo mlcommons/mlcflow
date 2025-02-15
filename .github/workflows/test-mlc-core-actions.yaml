@@ -136,7 +136,7 @@ jobs:
 
     - name: Test 10 - rm cache - More than one cache present
       run: |
-        mlc rm cache --tags=get,imagenet-aux 2>&1 --all | tee test7.log
+        mlc rm cache --tags=get,imagenet-aux -f
 
     - name: Test 11 - cp script - Copy mlc script 
       run: |
@@ -193,8 +193,7 @@ jobs:
     - name: Test 20 - list cache
       run: |
         mlc list cache
-    
-    
+
   test_mlc_access_core_actions:
 
     runs-on: ${{ matrix.os }}
@@ -240,3 +239,4 @@ jobs:
     - name: Run tests from test-mlc-access.py
       run: |
         python .github/scripts/test-mlc-access.py
+

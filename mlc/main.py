@@ -142,7 +142,17 @@ class Action:
         # Iterate through the list of repository paths
         for repo_path in repo_paths:
             if not os.path.exists(repo_path):
-                logger.warning(f"""Warning: {repo_path} not found. Consider doing `mlc rm repo {repo_path}`. Skipping...""")
+                logger.warning(f"""Warning: {repo_path} not found. Considering it as a corrupt entry and deleting automatically...""")
+                logger.warning(f"Deleting the {meta_yaml_path} entry from repos.json")
+                res = self.access(
+                    {
+                        "automation": "repo",
+                        "action": "rm",
+                        "repo": f"{os.path.basename(repo_path)}"    
+                    }
+                )
+                if res["return"] > 0:
+                    return res
                 continue
 
             if is_curdir_inside_path(repo_path):
@@ -157,17 +167,7 @@ class Action:
 
             # Check if meta.yaml exists
             if not os.path.isfile(meta_yaml_path):
-                logger.warning(f"{meta_yaml_path} not found. Skipping...")
-                logger.warning(f"Deleting the {meta_yaml_path} entry from repos.json")
-                res = self.access(
-                    {
-                        "automation": "repo",
-                        "action": "rm",
-                        "repo": f"{os.path.basename(repo_path)}"    
-                    }
-                )
-                if res["return"] > 0:
-                    return res
+                logger.warning(f"{meta_yaml_path} not found. Could be due to accidental deletion of meta.yaml. Try to stash the changes or reclone by doing `rm repo` and `pull repo`. Skipping...")
                 continue
 
             # Load the YAML file
@@ -557,13 +557,14 @@ class Action:
         
             if self.is_uid(src_item):
                 inp['uid'] = src_item
-
+            src_id = src_item
         else:
             #src_tags must be there
             if not run_args.get("src_tags"):
                 return {'return': 1, 'error': 'Either "src" or "src_tags" must be provided as an input for cp method'}
             src_tags = run_args['src_tags']
             inp['tags'] = src_tags
+            src_id = src_tags
 
         inp['target_name'] = action_target
 
@@ -571,9 +572,9 @@ class Action:
 
         choice = 0
         if len(res['list']) == 0:
-            return {'return': 1, 'error': f'No {action_target} found for {src_item}'}
+            return {'return': 1, 'error': f'No {action_target} found for {src_id}'}
         elif len(res['list']) > 1 and not run_args.get("quiet"):
-            print(f"More than one {action_target} found for {src_item}:")
+            print(f"More than one {action_target} found for {src_id}:")
 
             # Display available options
             for idx, item in enumerate(res['list'], start=1):

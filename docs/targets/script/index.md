@@ -1,177 +1,85 @@
-# Script
+# MLC script
 
-Currently, the following actions are supported for script:
+## Understanding MLC scripts
 
-## Find
+* An MLC script is identified by a set of tags and by an unique ID. 
+* Further each MLC script can have multiple variations and they are identified by variation tags which are treated in the same way as tags and identified by a `_` prefix.
 
-`find` action is used to list the path of partiicular scripts present in MLC repos registered in MLC.
-
-**Syntax**
-
-```bash
-mlc find script --tags=<list_of_tags_matching_to_particular_script>
+### MLC script execution flow
+```mermaid
+graph TD
+    MLC -->|env = incoming env + env_from_meta| B[Script]
+    B -->|env - local_env_keys| C[List of Dependencies]
+    C --> D[Preprocess]
+    D -->|env - local_env_keys| E[Prehook dependencies]
+    E -->F[Run script]
+    F -->|env - clean_env_keys_post_deps| G[Posthook dependencies]
+    G --> H[Postprocess]
+    H -->|env - clean_env_keys_post_deps| I[Post dependencies]
+    I -->|"env(new_env_keys)"| J[Script return]
 ```
 
-OR
+* When an MLC script is invoked (either by tags or by unique ID), its `meta.yaml` is processed first which will check for any `deps` script and if there are, then they are executed in order.
+* Once all the `deps` scripts are executed, `customize.py` file is checked and if existing `preprocess` function inside it is executed if present. 
+* Then any `prehook_deps`  scripts mentioned in `meta.yaml` are executed similar to `deps`
+* After this, keys in `env` dictionary is exported as `ENV` variables and `run` file if exists is executed.
+* Once run file execution is done, any `posthook_deps` scripts mentioned in `meta.yaml` are executed similar to `deps`
+* Then `postprocess` function inside customize.py is executed if present.
+* After this stage any `post_deps` scripts mentioned in `meta.yaml` is executed.
 
-```bash
-mlc find script <script_alias>
-```
+*If a script is already cached, then the `preprocess`, `run file` and `postprocess` executions won't happen and only the dependencies marked as `dynamic` will be executed from `deps`, `prehook_deps`, `posthook_deps` and `postdeps`.*
 
-OR
+### Input flags
+When we run an MLC script we can also pass inputs to it and any input added in `input_mapping` dictionary inside `meta.yaml` gets converted to the corresponding `ENV` variable.
 
-```bash
-mlc find script <script_uid>
-```
+### Conditional execution of any `deps`, `post_deps`
+We can use `skip_if_env` dictionary inside any `deps`, `prehook_deps`, `posthook_deps` or `post_deps` to make its execution conditional
 
-OR
+### Versions
+We can specify any specific version of a script using `version`. `version_max` and `version_min` are also possible options. 
 
-```bash
-mlc find script <script_alias>,<script_uid>
-```
+* When `version_min` is given, any version above this if present in the cache or detected in the system can be chosen. If nothing is detected `default_version` if present and if above `version_min` will be used for installation. Otherwise `version_min` will be used as `version`.
 
-Examples of `find` action for `script` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
+* When `version_max` is given, any version below this if present in the cache or detected in the system can be chosen. If nothing is detected `default_version` if present and if below `version_max` will be used for installation. Otherwise `version_max_usable` (additional needed input for `version_max`) will be used as `version`.
 
-## Show
+### Variations
+* Variations are used to customize MLC script and each unique combination of variations uses a unique cache entry. Each variation can turn on `env` keys also any other meta including dependencies specific to it. Variations are turned on like tags but with a `_` prefix. For example, if a script is having tags `"get,myscript"`, to call the variation `"test"` inside it, we have to use tags `"get,myscript,_test"`. 
+ 
+#### Variation groups
+`group` is a key to map variations into a group and at any time only one variation from a group can be used in the variation tags. For example, both `cpu` and `cuda` can be two variations under the `device` group, but user can at any time use either `cpu` or `cuda` as variation tags but not both.
 
-`show` action is used to list the path and meta data of partiicular scripts present in MLC repos registered in MLC.
+#### Dynamic variations
+Sometimes it is difficult to add all variations needed for a script like say `batch_size` which can take many different values. To handle this case, we support dynamic variations using '#' where '#' can be dynamically replaced by any string. For example, `"_batch_size.8"` can be used as a tag to turn on the dynamic variation `"_batch_size.#"`.
 
-**Syntax**
+### ENV flow during MLC script execution
 
-```bash
-mlc show script --tags=<list_of_tags_matching_to_particular_script>
-```
 
-OR
+* During a given script execution incoming `env` dictionary is saved `(saved_env)` and all the updates happens on a copy of it.
+* Once a script execution is over (which includes all the dependent script executions as well), newly created keys and any updated keys are merged with the `saved_env` provided the keys are mentioned in `new_env_keys`
+* Same behaviour applies to `state` dictionary.
 
-```bash
-mlc show script <script_alias>
-```
+#### Special env keys
+* Any env key with a prefix `MLC_TMP_*` and `MLC_GIT_*` are not passed by default to any dependency. These can be force passed by adding the key(s) to the `force_env_keys` list of the concerned dependency. 
+* Similarly we can avoid any env key from being passed to a given dependency by adding the prefix of the key in the `clean_env_keys` list of the concerned dependency.
+* `--input` is automatically converted to `MLC_INPUT` env key
+* `version` is converted to `MLC_VERSION`, ``version_min` to `MLC_VERSION_MIN` and `version_max` to `MLC_VERSION_MAX`
+* If `env['MLC_GH_TOKEN']=TOKEN_VALUE` is set then git URLs (specified by `MLC_GIT_URL`) are changed to add this token.
+* If `env['MLC_GIT_SSH']=yes`, then git URLs are changed to SSH from HTTPS.
 
-OR
+### Script Meta
+#### Special keys in script meta
+* TBD: `reuse_version`, `inherit_variation_tags`, `update_env_tags_from_env`
 
-```bash
-mlc show script <script_uid>
-```
+### How cache works?
+* If `cache=true` is set in a script meta, the result of the script execution is cached for further use. 
+* For a cached script, `env` and `state` updates are done using `new_env` and `new_state` dictionaries which are stored in the `cm-cached.json` file inside the cached folder.
+* By using `--new` input, a new cache entry can be forced even when an old one exist. 
+* By default no depndencies are run for a cached entry unless `dynamic` key is set for it. 
 
-OR
 
-```bash
-mlc show script <script_alias>,<script_uid>
-```
+Please see [here](https://github.com/mlcommons/mlperf-automations/blob/main/docs/getting-started.md) for trying MLC scripts.
 
-Examples of `show` action for `script` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
 
-## Rm
 
-`rm` action is used to remove one/more scripts present in repos which are registered in MLC.
 
-**Syntax**
-
-```bash
-mlc rm script --tags=<list_of_tags_matching_to_particular_script>
-```
-
-OR
-
-```bash
-mlc rm script <script_alias>
-```
-
-OR
-
-```bash
-mlc rm script <script_uid>
-```
-
-`-f` could be used to force remove scripts. Without `-f`, user would be prompted for confirmation to delete a script.
-
-Examples of `rm` action for `script` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
-
-## Add
-
-`add` script is used to add a new script to any of the registered MLC repos.
-
-**Syntax**
-
-```bash
-mlc add script <registered_mlc_repo_name>:<new_script_name> --tags=<set_of_tags> --template=<set_of_tags>
-```
-
-* `--tags` contains set of tags to identify the newly created script.
-* `--template` contains set of tags of the template script from which we are creating the new script. If not specified, default [template](https://github.com/mlcommons/mlperf-automations/tree/main/script/template-script) would be considered.
-* `registered_mlc_repo_name` is of the format `repo_owner`@`repo_name`.
-
-Examples of `add` action for `script` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
-
-## Mv
-
-`mv` script is used to move a script from source repo to destination repo.
-
-**Syntax**
-
-```bash
-mlc mv script <registered_mlc_source_repo_name>:<source_script_name> <registered_mlc_target_repo_name>:<source_script_name> 
-```
-
-* `registered_mlc_source/target_repo_name` is of the format `repo_owner`@`repo_name`.
-
-Examples of `mv` action for `script` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
-
-## Cp
-
-`cp` script is used to copy a script from source repo to destination repo.
-
-**Syntax**
-
-```bash
-mlc cp script <registered_mlc_source_repo_name>:<source_script_name> <registered_mlc_target_repo_name>:<source_script_name> 
-```
-
-* `registered_mlc_source/target_repo_name` is of the format `repo_owner`@`repo_name`.
-
-Examples of `cp` action for `script` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
-
-## Run
-
-`run` script is used to run scripts from any of the repos registered in MLC.
-
-**Syntax**
-
-```bash
-mlc run script --tags=<list_of_tags_matching_to_particular_script> <input_flags>
-```
-
-OR
-
-```bash
-mlcr <list_of_tags_matching_to_particular_script> <input_flags>
-```
-
-* `input_flags` are the additional input that could be given to a particular script. They are specified in the format `--<name_of_input_flag>=<value>`. Some of the examples could be found in run commands from inference documentation [here](https://docs.mlcommons.org/inference/benchmarks/language/gpt-j/).
-
-Examples of `run` action for `script` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
-
-## Docker
-
-`docker` script is used to run scripts inside a container environment.
-
-**Syntax**
-
-```bash
-mlc docker script --tags=<list_of_tags_matching_to_particular_script> <input_flags>
-```
-
-* `input_flags` are the additional input that could be given to a particular script. They are specified in the format `--<name_of_input_flag>=<value>`. Some of the examples could be found in run commands from inference documentation [here](https://docs.mlcommons.org/inference/benchmarks/language/gpt-j/).
-
-## Test
-
-`test` script is used to test run scripts. Note that `test` action could only be performed for scripts where `tests` section is configured in `meta.yaml`
-
-**Syntax**
-
-```bash
-mlc test script --tags=<list_of_tags_matching_to_particular_script>
-```
-
-* Please click [here](https://github.com/mlcommons/mlperf-automations/blob/0e647d7126e610d010a21dbfccca097febe80af9/script/get-generic-sys-util/meta.yaml#L24) to find the example script where the tests are being defined.
+&copy; 2022-25 [MLCommons](https://mlcommons.org)<br>

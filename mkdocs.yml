@@ -24,16 +24,17 @@ nav:
   - Install:
     - install/index.md
   - MLC CLI:
-    - Repo:
+    - RepoAction:
       - targets/repo/index.md
-    - Script:
+    - ScriptAction:
       - targets/script/index.md
-      - Script execution flow:
-        - targets/script/script-flow/index.md
-      - Script meta information:
-        - targets/script/script-meta-inf/index.md
-    - Cache:
+    - CacheAction:
       - targets/cache/index.md
+  - MLC Script:
+    - targets/script/index.md
+    - targets/script/script-meta.md
+    - targets/script/docker.md
+    - targets/script/test.md
 
 markdown_extensions:
   - pymdownx.tasklist:
