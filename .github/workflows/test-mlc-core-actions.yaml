@@ -238,5 +238,5 @@ jobs:
 
     - name: Run tests from test-mlc-access.py
       run: |
-        python .github/scripts/test-mlc-access.py
+        cd .github/scripts && python -c "import test_mlc_access as test; test.run_tests()"
 
