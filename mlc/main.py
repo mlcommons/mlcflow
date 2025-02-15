@@ -1410,6 +1410,10 @@ class ScriptAction(Action):
 
     find = search
 
+    def cp(self,i):
+        i["target"] = "script"
+        return self.parent.cp(i)
+        
     def rm(self, i):
         if not i.get('target_name'):
             i['target_name'] = "script"
