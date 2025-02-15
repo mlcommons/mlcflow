@@ -6,71 +6,62 @@ This page provides a walkthrough of the `meta.yaml` file.
 
 - **alias** (`string`)  
 
-  - Alias of the script, which can be used instead of tags when running a script.  
+  Alias of the script, which can be used instead of tags when running a script.  
 
 - **uid** (`string`)  
 
-  - Unique identifier for individual scripts.  
-
-  - Can be used instead of tags when running a script.  
+  Unique identifier for individual scripts. Can be used instead of tags when running a script.  
 
 - **automation_alias** (`string`)  
 
-  - Alias specific to script automation.  
+  Alias specific to script automation.  
 
 - **automation_uid** (`string`)  
 
-  - Unique identifier for script automation.  
+  Unique identifier for script automation.  
 
 - **category** (`string`)  
 
-  - Defines the script category.  
+  Defines the script category.  
 
 - **tags** (`list of strings`)  
 
-  - List of tags users can specify to run the script.  
+  List of tags users can specify to run the script.  
 
 - **default_env** (`dictionary` with `string` values)  
 
-  - Contains key-value pairs representing environment variables and their default values for a script.
-
-  - These default values are overridden if the same environment variable is set in script files or inherited from a parent script.  
+  Contains key-value pairs representing environment variables and their default values for a script. These default values are overridden if the same environment variable is set in script files or inherited from a parent script.  
 
 - **env** (`dictionary` with `string` values)  
 
-  - Defines environment variables and their corresponding values.  
+  Defines environment variables and their corresponding values.  
 
 - **input_mapping** (`dictionary` with `string` values)  
 
-  - Maps input flags related to a script to corresponding environment variables.  
-
-  - Only keys specified under `input_mapping` in `meta.yaml` are mapped to environment variables.  
+  Maps input flags related to a script to corresponding environment variables. Only keys specified under `input_mapping` in `meta.yaml` are mapped to environment variables.  
 
 - **env_key_mapping** (`dictionary` with `string` values)  
 
-  - Maps one environment key to another.  
+  Maps one environment key to another just for the `run` script execution.
 
 - **new_env_keys** (`list of strings`)  
 
-  - Specifies environment keys that should be passed to a parent script if this script is used as a dependency.  
+  Specifies environment keys that should be passed to a parent script if this script is used as a dependency.  
 
 - **new_state_keys** (`list of strings`)  
 
-  - Specifies state keys that should be passed to a parent script when used as a dependency.  
+  Specifies state keys that should be passed to a parent script when used as a dependency.  
 
 - **add_deps_recursive** (`dictionary`)  
 
-  - Customizes recursive dependencies with nested `tags` and other attributes.  
+  Customizes recursive dependencies with nested `tags` and other attributes.  
 
 ### Dependencies  
 
-  Dependencies in a script are specified as a list of dictionaries.
-
-  - Each dictionary can contain:
+  Dependencies in a script are specified as a list of dictionaries. Each dictionary can contain:
 
     - **tags**
-
-      - Comma separated list of tags to identify a dependent script
+    Comma separated list of tags to identify a dependent script
 
     - **names** (`list of strings`)
 
