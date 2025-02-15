@@ -212,7 +212,7 @@ def test_add_script():
         "action": "add",
         "item": "my-script-3",
         "tags": "my,new-tags-3",
-        "template_tags": "detect,os" 
+        "template_tags": "detect,cpu" 
     })
     if res['return'] > 0:
         raise Exception(f"{res['error']}")
