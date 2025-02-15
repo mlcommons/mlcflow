@@ -23,7 +23,7 @@ def test_find_repo():
     print("###### TEST - find repo")
     # format: <repo_owner>@<repos_name>
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "find",
         "repo": "anandhu-eng@mlperf-automations"
     })
@@ -35,7 +35,7 @@ def test_find_repo():
 
     # format: <repo_url>
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "find",
         "repo": "https://github.com/mlcommons/mlperf-automations.git"
     })
@@ -47,7 +47,7 @@ def test_find_repo():
 
     # format: <repo_uid>
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "find",
         "repo": "9cf241afa6074c89"
     })
@@ -59,7 +59,7 @@ def test_find_repo():
 
     # format: <repo_alias>
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "find",
         "repo": "mlcommons@mlperf-automations"
     })
@@ -71,7 +71,7 @@ def test_find_repo():
 
     # format: <repo_alias>,<repo_uid>
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "find",
         "repo": "mlcommons@mlperf-automations,9cf241afa6074c89"
     })
@@ -86,7 +86,7 @@ def test_find_repo():
 def test_list_repo():
     print("###### TEST - list repo")
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "list"
     })
     if res['return'] > 0:
@@ -97,7 +97,7 @@ def test_list_repo():
 def test_find_cache():
     print("###### TEST - find cache")
     res = mlc.access({
-        "automation": "cache",
+        "target": "cache",
         "action": "find",
         "tags": "get,imagenet-aux"
     })
@@ -112,7 +112,7 @@ def test_find_cache():
 def test_show_cache():
     print("###### TEST - show cache")
     res = mlc.access({
-        "automation": "cache",
+        "target": "cache",
         "action": "show",
         "tags": "get,imagenet-aux"
     })
@@ -127,7 +127,7 @@ def test_show_cache():
 def test_rm_cache():
     print("###### TEST - rm cache")
     res = mlc.access({
-        "automation": "cache",
+        "target": "cache",
         "action": "rm",
         "tags": "get,imagenet-aux",
         "target": "cache",
@@ -139,7 +139,7 @@ def test_rm_cache():
 def test_cp_script():
     print("###### TEST - cp script")
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "cp",
         "src": "detect-os",
         "dest": "my-os-detect"
@@ -152,7 +152,7 @@ def test_cp_script():
 def test_add_repo():
     print("###### TEST - add repo")
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "add",
         "repo": "my-new-repo"
     })
@@ -162,7 +162,7 @@ def test_add_repo():
         print(f"Successfully added repo")
 
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "add",
         "repo": "https://github.com/mlcommons/inference"
     })
@@ -172,7 +172,7 @@ def test_add_repo():
         print(f"Successfully added repo")
     
     res = mlc.access({
-        "automation": "repo",
+        "target": "repo",
         "action": "add",
         "repo": "https://mygit.com/myrepo"
     })
@@ -186,7 +186,7 @@ def test_add_repo():
 def test_add_script():
     print("###### TEST - add script")
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "add",
         "item": "my-script-1",
         "tags": "my,new-tags-1" 
@@ -197,7 +197,7 @@ def test_add_script():
         print("script with alias my-script-1 successfully added")
 
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "add",
         "item": "my-script-2",
         "tags": "my,new-tags-2" 
@@ -208,7 +208,7 @@ def test_add_script():
         print("script with alias my-script-2 successfully added")
 
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "add",
         "item": "my-script-3",
         "tags": "my,new-tags-3",
@@ -220,7 +220,7 @@ def test_add_script():
         print("script with alias my-script-3 successfully added")
 
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "add",
         "item": "mlcommons@mlperf-automations:my-script-4",
         "tags": "my,new-tags-4",
@@ -235,7 +235,7 @@ def test_add_script():
 
 def test_mv_script():
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "mv",
         "src": "my-script-1",
         "dest": "moved-my-script-1"
@@ -244,7 +244,7 @@ def test_mv_script():
         raise Exception(f"{res['error']}")
     
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "mv",
         "src": "my-script-2",
         "dest": "mlcommons@mlperf-automations:moved-my-script-2"
@@ -257,7 +257,7 @@ def test_mv_script():
 def test_show_script():
     print("###### TEST - show script")
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "show",
         "tags": "run-mlperf,inference"
     })
@@ -268,7 +268,7 @@ def test_show_script():
         process_output("script", "show" ,res)
     
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "show",
         "uid": "863735b7db8c44fc"
     })
@@ -279,7 +279,7 @@ def test_show_script():
         process_output("script", "show" ,res)
     
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "show",
         "alias": "detect-os,863735b7db8c44fc"
     })
@@ -290,7 +290,7 @@ def test_show_script():
         process_output("script", "show" ,res)
 
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "show",
         "alias": "detect-os"
     })
@@ -305,7 +305,7 @@ def test_show_script():
 def test_find_script():
     print("###### TEST - find script")
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "find",
         "tags": "run-mlperf,inference"
     })
@@ -316,7 +316,7 @@ def test_find_script():
         process_output("script", "find" ,res)
     
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "find",
         "uid": "863735b7db8c44fc"
     })
@@ -327,7 +327,7 @@ def test_find_script():
         process_output("script", "find" ,res)
     
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "find",
         "alias": "detect-os,863735b7db8c44fc"
     })
@@ -338,7 +338,7 @@ def test_find_script():
         process_output("script", "find" ,res)
 
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "find",
         "alias": "detect-os"
     })
@@ -354,7 +354,7 @@ def test_find_script():
 def test_rm_script():
     print("###### TEST - rm script")
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "rm",
         "tags": "app,image,corner-detection",
         "f": True
@@ -363,7 +363,7 @@ def test_rm_script():
         raise Exception(f"{res['error']}")
     
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "rm",
         "item": "get-ipol-src",
         "f": True
@@ -372,7 +372,7 @@ def test_rm_script():
         raise Exception(f"{res['error']}")
     
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "rm",
         "item": "63080407db4d4ac4",
         "f": True
@@ -385,7 +385,7 @@ def test_rm_script():
 def test_list_script():
     print("###### TEST - list script")
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "list"
     })
     if res['return'] > 0:
@@ -396,7 +396,7 @@ def test_list_script():
 def test_list_cache():
     print("###### TEST - list cache")
     res = mlc.access({
-        "automation": "cache",
+        "target": "cache",
         "action": "list"
     })
     if res['return'] > 0:
@@ -407,7 +407,7 @@ def test_list_cache():
 def test_run_script():
     print("###### TEST - run script")
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "run",
         "tags": "get,imagenet-aux"
     })
@@ -415,7 +415,7 @@ def test_run_script():
         raise Exception(f"{res['error']}")
     
     res = mlc.access({
-        "automation": "script",
+        "target": "script",
         "action": "run",
         "tags": "get,imagenet-aux,_from.dropbox"
     })
