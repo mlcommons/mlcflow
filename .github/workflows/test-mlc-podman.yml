@@ -35,8 +35,8 @@ jobs:
 
     - name: Uninstall docker and install podman
       run: |
-        sudo apt remove -y docker.io docker-ce docker-ce-cli containerd.io docker-compose-plugin
-        sudo apt purge -y docker.io docker-ce docker-ce-cli containerd.io docker-compose-plugin
+        sudo apt remove -y docker.io docker-ce docker-ce-cli containerd.io 
+        sudo apt purge -y docker.io docker-ce docker-ce-cli containerd.io 
         sudo rm -rf /var/lib/docker /var/lib/containerd
         sudo apt update
         sudo apt install -y podman
