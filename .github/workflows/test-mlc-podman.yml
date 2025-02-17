@@ -1,4 +1,4 @@
-ame: MLC Docker core action tests
+name: MLC Podman tests
 
 on:
   pull_request:
