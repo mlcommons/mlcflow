@@ -47,3 +47,29 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install --ignore-installed --verbose pip setuptools
         python -m pip install .
+
+    - name: Clone MLCOMMONS mlperf-automations repository
+      run: |
+        mlc pull repo mlcommons@mlperf-automations
+
+    - name: Test --docker_dt for running in detached mode
+      run: |
+        mlc docker run --tags=detect,os --docker_dt
+        docker stop $(docker ps -aq)
+
+    - name: Test --docker_detached for running in detached mode
+      run: |
+        mlc docker run --tags=detect,os --docker_detached
+        docker stop $(docker ps -aq)
+
+    - name: Test --docker_cache 
+      run: |
+        mlc docker run --tags=detect,os --docker_dt --docker_cache=no
+
+    - name: Test --docker_rebuild
+      run: |
+        mlc docker run --tags=detect,os --docker_dt --docker_cache=no --docker_rebuild
+
+    - name: Test --dockerfile_recreate
+      run: |
+        mlc docker run --tags=detect,os --docker_dt --docker_cache=no --docker_rebuild --dockerfile_recreate
