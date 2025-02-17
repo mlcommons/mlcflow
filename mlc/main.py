@@ -1230,7 +1230,7 @@ class RepoAction(Action):
             user, repo_name = match.groups()
             return {"return": 0, "value": f"{user}@{repo_name}"}
         else:
-            return {"return": 1, "error": f"Invalid GitHub URL format: {url}"} 
+            return {"return": 0, "value": os.path.basename(url).replace(".git", "")}
 
     def pull_repo(self, repo_url, branch=None, checkout = None):
         
@@ -1749,7 +1749,7 @@ def main():
     # Script and specific subcommands
     for action in ['docker', 'help']:
         action_parser = subparsers.add_parser(action, help=f'{action.capitalize()} a target.')
-        action_parser.add_argument('target', choices=['script'], help='Target type (script).')
+        action_parser.add_argument('target', choices=['script', 'run'], help='Target type (script).')
         # the argument given after target and before any extra options like --tags will be stored in "details"
         action_parser.add_argument('details', nargs='?', help='Details or identifier (optional for list).')
         action_parser.add_argument('extra', nargs=argparse.REMAINDER, help='Extra options (e.g.,  -v)')
@@ -1776,6 +1776,10 @@ def main():
         if args.target == "repo":
             run_args['repo'] = args.details
   
+    if args.command in ['docker']:
+        if args.target == "run":
+            run_args['target'] = 'script' #allowing run to be used for docker run instead of docker script
+
     if hasattr(args, 'details') and args.details and "," in args.details and not run_args.get("tags") and args.target in ["script", "cache"]:
         run_args['tags'] = args.details
 
