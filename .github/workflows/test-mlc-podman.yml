@@ -41,6 +41,8 @@ jobs:
         sudo apt update
         sudo apt install -y podman
         podman --version
+        echo "alias docker=podman" >> ~/.bashrc
+        source ~/.bashrc
 
     - name: Install mlcflow from the pull request's source repository and branch
       run: |
