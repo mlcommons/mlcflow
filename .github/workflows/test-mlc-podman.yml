@@ -52,7 +52,7 @@ jobs:
 
     - name: Clone MLCOMMONS mlperf-automations repository
       run: |
-        mlc pull repo mlcommons@mlperf-automations
+        mlc pull repo anandhu-eng@mlperf-automations --checkout=podman-fix
 
     - name: Test --docker_dt for running in detached mode
       run: |
