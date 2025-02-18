@@ -43,6 +43,7 @@ jobs:
         podman --version
         echo "alias docker=podman" >> ~/.bashrc
         source ~/.bashrc
+        which podman
 
     - name: Install mlcflow from the pull request's source repository and branch
       run: |
