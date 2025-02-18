@@ -66,7 +66,8 @@ OR
 mlc pull repo <repo_urll>
 ```
 
-- `--checkout` could be added if an user needs to checkout to a specific branch after cloning.
+- `--checkout` flag could be added if an user needs to checkout to a specific commit after cloning. Users would have to provide the particular commit SHA.
+- `--branch` flag could be added if an user needs to checkout to a specific branch after cloning. Users would have to provide the particular branch name.
 
 Examples of `pull` action for `repo` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
 
