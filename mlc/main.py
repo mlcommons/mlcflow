@@ -1387,6 +1387,8 @@ class RepoAction(Action):
         if not run_args['repo']:
             logger.error("The repository to be removed is not specified")
             return {"return": 1, "error": "The repository to be removed is not specified"}
+        
+        force_remove = True if run_args.get('f') else False
 
         repo_folder_name = run_args['repo']
 
@@ -1394,17 +1396,19 @@ class RepoAction(Action):
 
         if os.path.exists(repo_path):
             # Check for local changes
-            status_command = ['git', '-C', repo_path, 'status', '--porcelain']
+            status_command = ['git', '-C', repo_path, 'status', '--porcelain', '--untracked-files=no']
             local_changes = subprocess.run(status_command, capture_output=True, text=True)
 
             if local_changes.stdout:
                 logger.warning("Local changes detected in repository. Changes are listed below:")
                 print(local_changes.stdout)
-                confirm_remove = True if(input("Continue to remove repo?").lower()) in ["yes", "y"] else False
+                confirm_remove = True if force_remove or (input("Continue to remove repo?").lower()) in ["yes", "y"] else False
             else:
                 logger.info("No local changes detected. Removing repo...")
                 confirm_remove = True
             if confirm_remove:
+                if force_remove:
+                    logger.info("Force remove is set.")
                 shutil.rmtree(repo_path)
                 logger.info(f"Repo {run_args['repo']} residing in path {repo_path} has been successfully removed")
                 logger.info("Checking whether the repo was registered in repos.json")
