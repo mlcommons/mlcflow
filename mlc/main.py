@@ -1360,9 +1360,6 @@ class RepoAction(Action):
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
                     return {"return": 1, "error": "Only one among the three flags(branch, checkout and tag) could be specified"}
             
-            if sum(bool(var) for var in [pat, ssh]) > 1:
-                    return {"return": 1, "error": "Only one among the two flags(pat, ssh) could be specified"}
-            
             res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh)
             if res['return'] > 0:
                 return res
