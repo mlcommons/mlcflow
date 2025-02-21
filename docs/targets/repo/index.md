@@ -145,7 +145,7 @@ Example of `list` action for `repo` target could be found inside the GitHub acti
 
 ## Rm (Remove)
 
-`rm` action removes a specified repository from MLCFlow, deleting both the repo folder and its registration.
+`rm` action removes a specified repository from MLCFlow, deleting both the repo folder and its registration. If there are any modified local changes, the user will be prompted for confirmation unless the `-f` flag is used to force removal.
 
 **Example Command**
 
