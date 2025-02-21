@@ -193,6 +193,11 @@ jobs:
     - name: Test 20 - list cache
       run: |
         mlc list cache
+    
+    - name: Test 21 - Test mlc pull repo to checkout based on particular release tag
+      run: |
+        mlc rm repo mlcommons@mlperf-automations -f
+        mlc pull repo mlcommons@mlperf-automations --tag=mlperf-automations-v1.0.0
 
   test_mlc_access_core_actions:
 
