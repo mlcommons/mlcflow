@@ -1,4 +1,5 @@
-from action import Action
+from .action import Action
+
 class CacheAction(Action):
 
     def __init__(self, parent=None):
