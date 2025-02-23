@@ -211,18 +211,7 @@ actions = {
         'experiment': ExperimentAction
     }
 
-# Factory to get the appropriate action class
-def get_action(target, parent):
-    action_class = actions.get(target, None)
-    return action_class(parent) if action_class else None
 
-
-def access(i):
-    action = i['action']
-    target = i.get('target', i.get('automation'))
-    action_class = get_action(target, default_parent)
-    r = action_class.access(i)
-    return r
 
 def mlcr():
     first_arg_value = "run"
