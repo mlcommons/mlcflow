@@ -8,6 +8,8 @@ from .action import Action, get_action, logger
 from .RepoAction import RepoAction
 from .ScriptAction import ScriptAction
 from .CacheAction import CacheAction
+
+from action_factory import get_action
 from .logger import logger
 
 
