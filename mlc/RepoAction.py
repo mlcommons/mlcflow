@@ -2,7 +2,7 @@ from .action import Action
 import os
 import re
 from . import utils
-from logger import logger
+from .logger import logger
 
 class RepoAction(Action):
 
