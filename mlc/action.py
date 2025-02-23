@@ -5,7 +5,7 @@ import yaml
 import logging
 from pathlib import Path
 
-from logger import logger, setup_logging
+from .logger import logger, setup_logging
 
 from . import utils
 from .index import Index
