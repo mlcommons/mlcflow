@@ -141,16 +141,6 @@ class CfgAction(Action):
         return {'return': 0, 'config': self.cfg}
 
 
-actions = {
-        'repo': RepoAction,
-        'script': ScriptAction,
-        'cache': CacheAction,
-        'cfg': CfgAction,
-        'experiment': ExperimentAction
-    }
-
-
-
 def mlcr():
     first_arg_value = "run"
     second_arg_value = "script"
