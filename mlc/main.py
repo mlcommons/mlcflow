@@ -16,6 +16,7 @@ import shutil
 from . import utils
 
 from .action import Action
+from .action import logger
 from .RepoAction import RepoAction
 from .ScriptAction import ScriptAction
 from .CacheAction import CacheAction
@@ -35,9 +36,6 @@ class ColoredFormatter(logging.Formatter):
         if record.levelname in self.COLORS:
             record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{Style.RESET_ALL}"
         return super().format(record)
-
-logger = logging.getLogger(__name__)
-
 
 
 class CustomJSONEncoder(json.JSONEncoder):
