@@ -9,7 +9,8 @@ from .logger import logger, setup_logging
 
 from . import utils
 from .index import Index
-from .repo import Repo 
+from .repo import Repo
+from .item import Item
 
 def access(i):
     action = i['action']
