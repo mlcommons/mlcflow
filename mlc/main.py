@@ -9,14 +9,15 @@ import yaml
 import sys
 import logging
 from types import SimpleNamespace
-import mlc.utils as utils
 from pathlib import Path
 from colorama import Fore, Style, init
 import shutil
-from action import Action
-from RepoAction import RepoAction
-from ScriptAction import ScriptAction
-from CacheAction import CacheAction
+
+from .utils import utils
+from .action import Action
+from .RepoAction import RepoAction
+from .ScriptAction import ScriptAction
+from .CacheAction import CacheAction
 
 # Initialize colorama for Windows support
 init(autoreset=True)
