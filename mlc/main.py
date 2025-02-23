@@ -38,24 +38,6 @@ class ColoredFormatter(logging.Formatter):
 
 logger = logging.getLogger(__name__)
 
-# Set up logging configuration
-def setup_logging(log_path = os.getcwd(),log_file = 'mlc-log.txt'):
-    
-    if not logger.hasHandlers():
-        logFormatter = ColoredFormatter('[%(asctime)s %(filename)s:%(lineno)d %(levelname)s] - %(message)s')
-        logger.setLevel(logging.INFO)
-   
-
-        # File hander for logging in file in the specified path
-        file_handler = logging.FileHandler("{0}/{1}".format(log_path, log_file))
-        file_handler.setFormatter(logging.Formatter('[%(asctime)s %(filename)s:%(lineno)d %(levelname)s] - %(message)s'))
-        logger.addHandler(file_handler)
-    
-        # Console handler for logging on console
-        consoleHandler = logging.StreamHandler()
-        consoleHandler.setFormatter(logFormatter)
-        logger.addHandler(consoleHandler)
-        logger.propagate = False
 
 class Index:
     def __init__(self, repos_path, repos):
