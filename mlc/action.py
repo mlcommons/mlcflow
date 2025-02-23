@@ -28,6 +28,8 @@ def setup_logging(log_path = os.getcwd(),log_file = 'mlc-log.txt'):
         logger.addHandler(consoleHandler)
         logger.propagate = False
 
+logger = logging.getLogger(__name__)
+
 # Factory to get the appropriate action class
 def get_action(target, parent):
     action_class = actions.get(target, None)
