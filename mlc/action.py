@@ -12,19 +12,6 @@ from .index import Index
 from .repo import Repo
 from .item import Item
 
-default_parent = None
-
-def access(i):
-    from .action_factory import get_action
-    
-    action = i['action']
-    target = i.get('target', i.get('automation'))
-    action_class = get_action(target, default_parent)
-    r = action_class.access(i)
-    return r
-
-
-
 # Base class for actions
 class Action:
     repos_path = None
@@ -744,3 +731,19 @@ class Action:
         return {'return': 0, 'list': result}
 
     find = search
+
+default_parent = None
+
+def access(i):
+    from .action_factory import get_action
+    if not default_parent:
+        default_parent = Action()
+    
+    action = i['action']
+    target = i.get('target', i.get('automation'))
+    action_class = get_action(target, default_parent)
+    r = action_class.access(i)
+    return r
+
+
+
