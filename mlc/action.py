@@ -11,9 +11,10 @@ from . import utils
 from .index import Index
 from .repo import Repo
 from .item import Item
-from .action_factory import get_action
 
 def access(i):
+    from .action_factory import get_action
+    
     action = i['action']
     target = i.get('target', i.get('automation'))
     action_class = get_action(target, default_parent)
