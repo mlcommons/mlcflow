@@ -1,3 +1,5 @@
+from logger import logger
+
 class Index:
     def __init__(self, repos_path, repos):
         """
