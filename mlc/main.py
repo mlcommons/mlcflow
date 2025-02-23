@@ -83,6 +83,9 @@ def process_console_output(res, target, action, run_args):
             for item in res['list']:
                 logger.info(f"""Item path: {item.path}""")
 
+if default_parent is None:
+    default_parent = Action()
+
 # Main CLI function
 def main():
     parser = argparse.ArgumentParser(prog='mlc', description='A CLI tool for managing repos, scripts, and caches.')
