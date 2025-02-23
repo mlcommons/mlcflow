@@ -7,8 +7,7 @@ from pathlib import Path
 
 from . import utils
 from .index import Index
-from .main import Repo 
-from .main import get_action
+from .repo import Repo 
 
 # Set up logging configuration
 def setup_logging(log_path = os.getcwd(),log_file = 'mlc-log.txt'):
