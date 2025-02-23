@@ -1,4 +1,4 @@
-from .action import Action, default_parent
+from .action import Action
 import os
 from . import utils
 from .logger import logger
@@ -6,8 +6,6 @@ from .logger import logger
 class ScriptAction(Action):
     parent = None
     def __init__(self, parent=None):
-        if parent is None:
-            parent = default_parent
         self.parent = parent
         self.__dict__.update(vars(parent))
 
