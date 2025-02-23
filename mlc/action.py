@@ -733,11 +733,11 @@ class Action:
     find = search
 
 default_parent = None
+if not default_parent:
+    default_parent = Action()
 
 def access(i):
     from .action_factory import get_action
-    if not default_parent:
-        default_parent = Action()
     
     action = i['action']
     target = i.get('target', i.get('automation'))
