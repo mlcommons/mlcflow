@@ -8,6 +8,8 @@ from .action import Action, logger
 from .RepoAction import RepoAction
 from .ScriptAction import ScriptAction
 from .CacheAction import CacheAction
+from .CfgAction import CfgAction
+from .ExperimentAction import ExperimentAction
 
 from .action_factory import get_action
 from .logger import logger
@@ -55,29 +57,6 @@ class Automation:
         #logger.info(result)
         return {'return': 0, 'list': result}
         #indices
-        
-
-# Child classes for specific entities (Repo, Script, Cache)
-# Extends Action class
-
-
-class ExperimentAction(Action):
-    def __init__(self, parent=None):
-        if parent is None:
-            parent = default_parent
-        #super().__init__(parent)
-        self.parent = parent
-        self.__dict__.update(vars(parent))
-
-    def show(self, args):
-        logger.info(f"Showing experiment with identifier: {args.details}")
-        return {'return': 0}
-
-    def list(self, args):
-        logger.info("Listing all experiments.")
-        return {'return': 0}
-
-
 
 
 def mlcr():
