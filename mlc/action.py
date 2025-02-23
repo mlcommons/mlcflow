@@ -6,17 +6,11 @@ import logging
 from pathlib import Path
 
 from .logger import logger, setup_logging
+from .action_factory import get_action
 
 from . import utils
 from .index import Index
 from .repo import Repo 
-
-
-# Factory to get the appropriate action class
-def get_action(target, parent):
-    action_class = actions.get(target, None)
-    return action_class(parent) if action_class else None
-
 
 def access(i):
     action = i['action']
@@ -25,7 +19,9 @@ def access(i):
     r = action_class.access(i)
     return r
 
-# Base class for CLI actions
+
+
+# Base class for actions
 class Action:
     repos_path = None
     cfg = None
