@@ -1,4 +1,4 @@
-from .action import Action, default_parent
+from .action import Action
 import os
 import json
 from . import utils
@@ -7,8 +7,6 @@ from .logger import logger
 class CacheAction(Action):
 
     def __init__(self, parent=None):
-        if parent is None:
-            parent = default_parent
         #super().__init__(parent)
         self.parent = parent
         self.__dict__.update(vars(parent))
