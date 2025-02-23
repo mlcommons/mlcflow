@@ -70,10 +70,7 @@ def mlcr():
     # Call the main function
     main()
 
-default_parent = None
 
-if default_parent is None:
-    default_parent = Action()
 
 def process_console_output(res, target, action, run_args):
     if action in ["find", "search"]:
