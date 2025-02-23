@@ -1,6 +1,6 @@
 from .RepoAction import RepoAction
 from .ScriptAction import ScriptAction
-from .CaacheAction import CacheAction
+from .CacheAction import CacheAction
 
 
 # Factory to get the appropriate action class
