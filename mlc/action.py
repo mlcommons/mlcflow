@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 
 from .logger import logger, setup_logging
-from .action_factory import get_action
 
 from . import utils
 from .index import Index
@@ -40,6 +39,8 @@ class Action:
         Args:
         options (dict): Dictionary containing action and relevant parameters.
         """
+        from .action_factory import get_action
+
         #logger.info(f"options in access = {options}") 
         
         action_name = options.get('action')
