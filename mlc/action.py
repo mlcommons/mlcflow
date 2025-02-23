@@ -14,9 +14,6 @@ from .item import Item
 
 default_parent = None
 
-if default_parent is None:
-    default_parent = Action()
-
 def access(i):
     from .action_factory import get_action
     
