@@ -1,7 +1,7 @@
 from .action import Action
 import os
-import re
 import subprocess
+import re
 import yaml
 import json
 from . import utils
@@ -109,7 +109,6 @@ class RepoAction(Action):
         return {'return': 0}
 
     def find(self, run_args):
-        try:
             # Get repos_list using the existing method
             repos_list = self.load_repos_and_meta()
             if(run_args.get('item', run_args.get('artifact'))):
@@ -146,7 +145,7 @@ class RepoAction(Action):
                     repo_name = result["value"]
                 else:
                     return result
-            
+
             # Check if repo_name exists in repos.json
             matched_repo_path = None
             for repo_obj in repos_list:
@@ -173,9 +172,6 @@ class RepoAction(Action):
                 lst.append(matched_repo_path)
             
             return {'return': 0, 'list': lst}
-        except Exception as e:
-            # Return error message if any exception occurs
-            return {"return": 1, "error": str(e)}
 
     def github_url_to_user_repo_format(self, url):
         """
@@ -184,11 +180,9 @@ class RepoAction(Action):
         :param url: str, GitHub repository URL (e.g., https://github.com/user/repo_name.git)
         :return: str, formatted as user@repo_name
         """
-        import re
-
         # Regex to match GitHub URLs
         pattern = r"(?:https?://)?(?:www\.)?github\.com/([^/]+)/([^/.]+)(?:\.git)?"
-
+        
         match = re.match(pattern, url)
         if match:
             user, repo_name = match.groups()
