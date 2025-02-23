@@ -4,7 +4,7 @@ from pathlib import Path
 
 from . import utils
 
-from .action import Action, logger
+from .action import Action, logger, default_parent
 from .RepoAction import RepoAction
 from .ScriptAction import ScriptAction
 from .CacheAction import CacheAction
