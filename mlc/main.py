@@ -1,17 +1,6 @@
 import argparse
-import subprocess
-import re
 import os
-import importlib.util
-import platform
-import json
-import yaml
-import sys
-import logging
-from types import SimpleNamespace
 from pathlib import Path
-from colorama import Fore, Style, init
-import shutil
 
 from . import utils
 
@@ -54,12 +43,12 @@ class Item:
 
     def _save_meta(self):
         yaml_file = os.path.join(self.path, "meta.yaml")
-        json_file = os.path.join(self.path, "meta.json")
+        _file = os.path.join(self.path, "meta.")
 
         if os.path.exists(yaml_file):
             utils.save_yaml(yaml_file, self.meta)
-        elif os.path.exists(json_file):
-            utils.save_json(json_file, self.meta)
+        elif os.path.exists(_file):
+            utils.save_(_file, self.meta)
 
 class Automation:
     action_object = None
@@ -76,12 +65,12 @@ class Automation:
 
     def _load_meta(self):
         yaml_file = os.path.join(self.path, "meta.yaml")
-        json_file = os.path.join(self.path, "meta.json")
+        _file = os.path.join(self.path, "meta.")
 
         if os.path.exists(yaml_file):
             self.meta = utils.read_yaml(yaml_file)
-        elif os.path.exists(json_file):
-            self.meta = utils.read_json(json_file)
+        elif os.path.exists(_file):
+            self.meta = utils.read_(_file)
         else:
             logger.info(f"No meta file found in {self.path}")
 
