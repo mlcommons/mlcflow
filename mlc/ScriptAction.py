@@ -1,4 +1,5 @@
-from action import Action
+from .action import Action
+
 class ScriptAction(Action):
     parent = None
     def __init__(self, parent=None):
