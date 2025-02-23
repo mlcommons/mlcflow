@@ -1,5 +1,5 @@
+from .action import Action
 
-from action import Action
 class RepoAction(Action):
 
     def __init__(self, parent=None):
