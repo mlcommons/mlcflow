@@ -20,8 +20,7 @@ from .action import logger
 from .RepoAction import RepoAction
 from .ScriptAction import ScriptAction
 from .CacheAction import CacheAction
-
-
+from logger import logger
 
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
