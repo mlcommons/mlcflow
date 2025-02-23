@@ -5,12 +5,15 @@ import yaml
 import logging
 from pathlib import Path
 
+from colorama import Fore, Style, init as colorama_init
+
 from . import utils
 from .index import Index
 from .repo import Repo 
 
 # Initialize colorama for Windows support
-init(autoreset=True)
+colorama_init(autoreset=True)
+
 class ColoredFormatter(logging.Formatter):
     """Custom formatter class to add colors to log levels"""
     COLORS = {
