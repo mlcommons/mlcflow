@@ -1,3 +1,15 @@
+import os
+import logging
+import json
+import yaml
+import logging
+from pathlib import Path
+
+from . import utils
+from .index import Index
+from .main import Repo 
+from .main import get_action
+
 # Set up logging configuration
 def setup_logging(log_path = os.getcwd(),log_file = 'mlc-log.txt'):
     
@@ -20,14 +32,14 @@ def setup_logging(log_path = os.getcwd(),log_file = 'mlc-log.txt'):
 
 # Base class for CLI actions
 class Action:
-    repos_path = None
+    s_path = None
     cfg = None
     action_type = None
     logger = None
-    local_repo = None
-    current_repo_path = None
+    local_ = None
+    current__path = None
     #mlc = None
-    repos = [] #list of Repo objects
+    s = [] #list of  objects
 
     # Main access function to simulate a Python interface for CLI
     def access(self, options):
@@ -63,11 +75,11 @@ class Action:
         return {'return': 0}
 
     def find_target_folder(self, target):
-        # Traverse through each repo to find the first 'target' folder inside an 'automation' folder
-        for repo in self.repos:
-            repo_path = repo.path
-            if os.path.isdir(repo_path):
-                automation_folder = os.path.join(repo_path, 'automation')
+        # Traverse through each  to find the first 'target' folder inside an 'automation' folder
+        for  in self.s:
+            _path = .path
+            if os.path.isdir(_path):
+                automation_folder = os.path.join(_path, 'automation')
                 
                 if os.path.isdir(automation_folder):
                     # Check if there's a 'script' folder inside the 'automation' folder
@@ -76,20 +88,20 @@ class Action:
                         return target_folder
         return None
 
-    def load_repos_and_meta(self):
-        repos_list = []
-        repos_file_path = os.path.join(self.repos_path, 'repos.json')
+    def load_s_and_meta(self):
+        s_list = []
+        s_file_path = os.path.join(self.s_path, 's.json')
 
         # Read the JSON file line by line
         try:
-            # Load and parse the JSON file containing the list of repository paths
-            with open(repos_file_path, 'r') as file:
-                repo_paths = json.load(file)  # Load the JSON file into a list
+            # Load and parse the JSON file containing the list of sitory paths
+            with open(s_file_path, 'r') as file:
+                _paths = json.load(file)  # Load the JSON file into a list
         except json.JSONDecodeError as e:
             logger.error(f"Error decoding JSON: {e}")
             return []
         except FileNotFoundError:
-            logger.error(f"Error: File {repos_file_path} not found.")
+            logger.error(f"Error: File {s_file_path} not found.")
             return []
         except Exception as e:
             logger.error(f"Error reading file: {e}")
@@ -103,35 +115,35 @@ class Action:
             # Check if curdir is inside base_path
             return base_path in curdir.parents or curdir == base_path
 
-        # Iterate through the list of repository paths
-        for repo_path in repo_paths:
-            if not os.path.exists(repo_path):
-                logger.warning(f"""Warning: {repo_path} not found. Considering it as a corrupt entry and deleting automatically...""")
-                logger.warning(f"Deleting the {meta_yaml_path} entry from repos.json")
+        # Iterate through the list of sitory paths
+        for _path in _paths:
+            if not os.path.exists(_path):
+                logger.warning(f"""Warning: {_path} not found. Considering it as a corrupt entry and deleting automatically...""")
+                logger.warning(f"Deleting the {meta_yaml_path} entry from s.json")
                 res = self.access(
                     {
-                        "automation": "repo",
+                        "automation": "",
                         "action": "rm",
-                        "repo": f"{os.path.basename(repo_path)}"    
+                        "": f"{os.path.basename(_path)}"    
                     }
                 )
                 if res["return"] > 0:
                     return res
                 continue
 
-            if is_curdir_inside_path(repo_path):
-                self.current_repo_path = repo_path
-            repo_path = repo_path.strip()  # Remove any extra whitespace or newlines
+            if is_curdir_inside_path(_path):
+                self.current__path = _path
+            _path = _path.strip()  # Remove any extra whitespace or newlines
 
            # Skip empty lines
-            if not repo_path:
+            if not _path:
                 continue
 
-            meta_yaml_path = os.path.join(repo_path, "meta.yaml")
+            meta_yaml_path = os.path.join(_path, "meta.yaml")
 
             # Check if meta.yaml exists
             if not os.path.isfile(meta_yaml_path):
-                logger.warning(f"{meta_yaml_path} not found. Could be due to accidental deletion of meta.yaml. Try to stash the changes or reclone by doing `rm repo` and `pull repo`. Skipping...")
+                logger.warning(f"{meta_yaml_path} not found. Could be due to accidental deletion of meta.yaml. Try to stash the changes or reclone by doing `rm ` and `pull `. Skipping...")
                 continue
 
             # Load the YAML file
@@ -143,8 +155,8 @@ class Action:
                 continue
 
             if meta['alias'] == "local":
-                self.local_repo = f"""{meta['alias']},{meta['uid']}"""
-            # Create a Repo object and add it to the list
+                self.local_ = f"""{meta['alias']},{meta['uid']}"""
+            # Create a  object and add it to the list
             repos_list.append(Repo(path=repo_path, meta=meta))
         return repos_list
 
@@ -193,7 +205,6 @@ class Action:
             with open(os.path.join(mlc_local_repo_path, "meta.yaml"), "w") as json_file:
                 json.dump(local_repo_meta, json_file, indent=4)
         
-        # TODO: what if user changes the mlc local repo path in between
         repo_json_path = os.path.join(self.repos_path, "repos.json")
         if not os.path.exists(repo_json_path):
             with open(repo_json_path, 'w') as f:
@@ -209,9 +220,6 @@ class Action:
         self.index = Index(self.repos_path, self.repos)
 
 
-        #self.repos = {
-        #'lst': repo_paths
-        #}
 
     def add(self, i):
         """
