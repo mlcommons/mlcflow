@@ -13,7 +13,7 @@ from pathlib import Path
 from colorama import Fore, Style, init
 import shutil
 
-import utils
+from . import utils
 
 from .action import Action
 from .RepoAction import RepoAction
