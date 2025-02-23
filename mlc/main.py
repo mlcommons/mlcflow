@@ -21,21 +21,6 @@ from .RepoAction import RepoAction
 from .ScriptAction import ScriptAction
 from .CacheAction import CacheAction
 
-# Initialize colorama for Windows support
-init(autoreset=True)
-class ColoredFormatter(logging.Formatter):
-    """Custom formatter class to add colors to log levels"""
-    COLORS = {
-        'INFO': Fore.GREEN,
-        'WARNING': Fore.YELLOW,
-        'ERROR': Fore.RED
-    }
-
-    def format(self, record):
-        # Add color to the levelname
-        if record.levelname in self.COLORS:
-            record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{Style.RESET_ALL}"
-        return super().format(record)
 
 
 class CustomJSONEncoder(json.JSONEncoder):
