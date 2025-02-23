@@ -2,6 +2,7 @@ from .logger import logger
 import os
 import json
 import yaml
+from .repo import Repo
 
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):

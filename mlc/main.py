@@ -11,6 +11,7 @@ from .CacheAction import CacheAction
 from .CfgAction import CfgAction
 from .ExperimentAction import ExperimentAction
 
+from .item import Item
 from .action_factory import get_action
 from .logger import logger
 
@@ -31,12 +32,12 @@ class Automation:
 
     def _load_meta(self):
         yaml_file = os.path.join(self.path, "meta.yaml")
-        _file = os.path.join(self.path, "meta.")
+        json_file = os.path.join(self.path, "meta.json")
 
         if os.path.exists(yaml_file):
             self.meta = utils.read_yaml(yaml_file)
-        elif os.path.exists(_file):
-            self.meta = utils.read_(_file)
+        elif os.path.exists(json_file):
+            self.meta = utils.read_json(json_file)
         else:
             logger.info(f"No meta file found in {self.path}")
 

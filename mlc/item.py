@@ -1,3 +1,7 @@
+import os
+from .logger import logger
+from . import utils
+
 class Item:
     def __init__(self, path, repo):
         self.meta = None
