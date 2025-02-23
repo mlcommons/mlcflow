@@ -1,4 +1,19 @@
 from .logger import logger
+import os
+import json
+import yaml
+
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Repo):
+            # Customize how to serialize the Repo object
+            return {
+                "path": obj.path,
+                "meta": obj.meta,
+            }
+        # For other unknown types, use the default behavior
+        return super().default(obj)
+
 
 class Index:
     def __init__(self, repos_path, repos):
