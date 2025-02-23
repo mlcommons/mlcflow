@@ -1,7 +1,7 @@
 import yaml
 import os
 from . import utils
-from .action import Action
+from .action import Action, default_parent
 from .logger import logger
 
 class CfgAction(Action):
