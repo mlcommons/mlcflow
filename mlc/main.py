@@ -11,16 +11,6 @@ from .ScriptAction import ScriptAction
 from .CacheAction import CacheAction
 from .logger import logger
 
-class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Repo):
-            # Customize how to serialize the Repo object
-            return {
-                "path": obj.path,
-                "meta": obj.meta,
-            }
-        # For other unknown types, use the default behavior
-        return super().default(obj)
 
 class Item:
     def __init__(self, path, repo):
