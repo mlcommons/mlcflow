@@ -1,5 +1,5 @@
 __version__ = "0.1.0" 
 
-from .main import access
+from .action import access
 
 __all__ = ['access']
