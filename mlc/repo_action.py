@@ -246,6 +246,7 @@ class RepoAction(Action):
 
                 if local_changes.stdout.strip():
                     logger.warning("There are local changes in the repository. Please commit or stash them before checking out.")
+                    print(local_changes.stdout.strip())
                     return {"return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
                 else:
                     logger.info("No local changes detected. Fetching latest changes...")
