@@ -10,7 +10,6 @@ theme:
   features:
     - content.tabs.link
     - content.code.copy
-    - navigation.expand
     - navigation.sections
     - navigation.indexes
     - navigation.instant
@@ -24,18 +23,19 @@ nav:
   - Install:
     - install/index.md
   - MLC CLI:
-    - RepoAction:
-      - targets/repo/index.md
-    - ScriptAction:
-      - targets/script/index.md
-    - CacheAction:
-      - targets/cache/index.md
-  - MLC Script:
-    - targets/script/index.md
-    - targets/script/execution-flow.md
-    - targets/script/meta.md
-    - targets/script/docker.md
-    - targets/script/test.md
+    - Repos:
+      - Repo Action:
+        - targets/repo/index.md
+    - Script: 
+      - Script Action:
+        - targets/script/index.md
+        - targets/script/execution-flow.md
+        - targets/script/meta.md
+        - targets/script/docker.md
+        - targets/script/test.md
+    - Cache:
+      - Cache Action:
+        - targets/cache/index.md
 
 markdown_extensions:
   - pymdownx.tasklist:
