@@ -347,7 +347,7 @@ class RepoAction(Action):
 def rm_repo(repo_path, repos_file_path, force_remove):
         logger.info("rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json")
         
-
+        repo_name = os.path.basename(repo_path)
         if os.path.exists(repo_path):
             # Check for local changes
             status_command = ['git', '-C', repo_path, 'status', '--porcelain', '--untracked-files=no']
@@ -364,13 +364,13 @@ def rm_repo(repo_path, repos_file_path, force_remove):
                 if force_remove:
                     logger.info("Force remove is set.")
                 shutil.rmtree(repo_path)
-                logger.info(f"Repo {run_args['repo']} residing in path {repo_path} has been successfully removed")
+                logger.info(f"Repo {repo_name} residing in path {repo_path} has been successfully removed")
                 logger.info("Checking whether the repo was registered in repos.json")
                 unregister_repo(repo_path, repos_file_path)
             else:
                 logger.info("rm repo ooperation cancelled by user!")
         else:
-            logger.warning(f"Repo {run_args['repo']} was not found in the repo folder. repos.json will be checked for any corrupted entry. If any, that will be removed.")
+            logger.warning(f"Repo {repo_name} was not found in the repo folder. repos.json will be checked for any corrupted entry. If any, that will be removed.")
             unregister_repo(repo_path, repos_file_path)
 
         return {"return": 0}
