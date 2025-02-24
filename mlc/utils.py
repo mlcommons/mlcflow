@@ -611,6 +611,25 @@ def get_new_uid():
         return {"return": 0, "uid": new_uid}
     except Exception as e:
         return {"return": 1, "error": f"Failed to generate UID: {str(e)}"}
+    
+def modify_git_url(get_type, url, params={}):
+    """
+    Modify the GitHub url to support cloning of repo with either ssh or pat
+
+    Returns:
+        dict: A dictionary containing:
+            - return (int): 0 if successful, >0 if there was an error.
+            - url (str): Modified git url.
+    """
+    from giturlparse import parse
+    p = parse(url)
+    if get_type == "ssh":
+        return {"return": 0, "url": p.url2ssh }
+    elif get_type == "pat":
+        token = params['token']
+        return {"return": 0, "url":"https://git:" + token + "@" + p.host + "/" + p.owner + "/" + p.repo }
+    else:
+        return {"return": 1, "error": f"Unsupported type: {get_type}"}
 
 def convert_tags_to_list(tags_string):
     """
