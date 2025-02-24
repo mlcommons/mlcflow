@@ -1300,8 +1300,9 @@ class RepoAction(Action):
                 logger.info(f"Checking out to {checkout} in {repo_path}...")
                 subprocess.run(['git', '-C', repo_path, 'checkout', checkout], check=True)
             
-            subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
-            
+            if not tag:
+                subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
+
             logger.info("Repository successfully pulled.")
             logger.info("Registering the repo in repos.json")
 
