@@ -340,12 +340,13 @@ class RepoAction(Action):
         repo_path = os.path.join(self.repos_path, repo_folder_name)
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
         
-        return rm_repo(repo_path, repos_file_path) 
+        force_remove = True if run_args.get('f') else False
         
-def rm_repo(repo_path, repos_file_path):
+        return rm_repo(repo_path, repos_file_path, force_remove) 
+        
+def rm_repo(repo_path, repos_file_path, force_remove):
         logger.info("rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json")
         
-        force_remove = True if run_args.get('f') else False
 
         if os.path.exists(repo_path):
             # Check for local changes
