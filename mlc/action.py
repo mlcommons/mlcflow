@@ -48,7 +48,7 @@ class Action:
         action_target_split = action_target.split(",")
         action_target = action_target_split[0]
 
-        action = get_action(action_target, self.parent if self.parent else self)
+        action = get_action(action_target, self)
 
         if action and hasattr(action, action_name):
             # Find the method and call it with the options
