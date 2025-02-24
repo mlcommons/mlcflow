@@ -48,6 +48,7 @@ class Index:
                     "path": path,
                     "repo": repo
                 })
+        self._save_indices()
 
     def get_index(self, folder_type, uid):
         for index in range(len(self.indices[folder_type])):
@@ -71,6 +72,7 @@ class Index:
                     "path": path,
                     "repo": repo
                 }
+        self._save_indices()
 
     def rm(self, meta, folder_type, path):
         uid = meta['uid']
@@ -79,6 +81,7 @@ class Index:
             logger.warning(f"Index is not having the {folder_type} item {path}")
         else:
             del(self.indices[folder_type][index])
+        self._save_indices()
 
     def build_index(self):
         """
