@@ -94,20 +94,9 @@ class RepoAction(Action):
         return {'return': 0}
 
     def unregister_repo(self, repo_path):
-        logger.info(f"Unregistering the repo in path {repo_path}")
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
+        return unregister_repo(repo_path, repos_file_path)
 
-        with open(repos_file_path, 'r') as f:
-            repos_list = json.load(f)
-        
-        if repo_path in repos_list:
-            repos_list.remove(repo_path)
-            with open(repos_file_path, 'w') as f:
-                json.dump(repos_list, f, indent=2)  
-            logger.info(f"Path: {repo_path} has been removed.")
-        else:
-            logger.info(f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
-        return {'return': 0}
 
     def find(self, run_args):
             # Get repos_list using the existing method
@@ -342,6 +331,12 @@ class RepoAction(Action):
         return {"return": 0}
     
     def rm(self, run_args):
+        repo_path = os.path.join(self.repos_path, repo_folder_name)
+        repos_file_path = os.path.join(self.repos_path, 'repos.json')
+        
+        return rm_repo(run_args, repo_path, repos_file_path) 
+        
+def rm_repo(run_args, repo_path, repos_file_path):
         logger.info("rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json")
         
         if not run_args['repo']:
@@ -352,7 +347,6 @@ class RepoAction(Action):
 
         repo_folder_name = run_args['repo']
 
-        repo_path = os.path.join(self.repos_path, repo_folder_name)
 
         if os.path.exists(repo_path):
             # Check for local changes
@@ -372,12 +366,27 @@ class RepoAction(Action):
                 shutil.rmtree(repo_path)
                 logger.info(f"Repo {run_args['repo']} residing in path {repo_path} has been successfully removed")
                 logger.info("Checking whether the repo was registered in repos.json")
-                self.unregister_repo(repo_path)
+                unregister_repo(repo_path, repos_file_path)
             else:
                 logger.info("rm repo ooperation cancelled by user!")
         else:
             logger.warning(f"Repo {run_args['repo']} was not found in the repo folder. repos.json will be checked for any corrupted entry. If any, that will be removed.")
-            self.unregister_repo(repo_path)
+            unregister_repo(repo_path, repos_file_path)
 
         return {"return": 0}
+    
+def unregister_repo(repo_path, repos_file_path):
+        logger.info(f"Unregistering the repo in path {repo_path}")
+
+        with open(repos_file_path, 'r') as f:
+            repos_list = json.load(f)
         
+        if repo_path in repos_list:
+            repos_list.remove(repo_path)
+            with open(repos_file_path, 'w') as f:
+                json.dump(repos_list, f, indent=2)  
+            logger.info(f"Path: {repo_path} has been removed.")
+        else:
+            logger.info(f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
+        return {'return': 0}
+

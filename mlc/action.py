@@ -106,13 +106,9 @@ class Action:
             if not os.path.exists(repo_path):
                 logger.warning(f"""Warning: {repo_path} not found. Considering it as a corrupt entry and deleting automatically...""")
                 logger.warning(f"Deleting the {meta_yaml_path} entry from repos.json")
-                res = self.access(
-                    {
-                        "automation": "repo",
-                        "action": "rm",
-                        "repo": f"{os.path.basename(repo_path)}"    
-                    }
-                )
+                from .repo_action import rm_repo
+                res = rm_repo(repo_path, os.path.join(self.repos_path, 'repos.json'))
+
                 if res["return"] > 0:
                     return res
                 continue
