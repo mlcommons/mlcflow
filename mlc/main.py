@@ -1291,7 +1291,6 @@ class RepoAction(Action):
                 else:
                     logger.info("No local changes detected. Fetching latest changes...")
                     subprocess.run(['git', '-C', repo_path, 'fetch'], check=True)
-                    subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
             
             if tag:
                 checkout = "tags/"+tag
@@ -1300,6 +1299,8 @@ class RepoAction(Action):
             if checkout or tag:
                 logger.info(f"Checking out to {checkout} in {repo_path}...")
                 subprocess.run(['git', '-C', repo_path, 'checkout', checkout], check=True)
+            
+            subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
             
             logger.info("Repository successfully pulled.")
             logger.info("Registering the repo in repos.json")
