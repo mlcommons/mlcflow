@@ -331,6 +331,12 @@ class RepoAction(Action):
         return {"return": 0}
     
     def rm(self, run_args):
+
+        if not run_args['repo']:
+            logger.error("The repository to be removed is not specified")
+            return {"return": 1, "error": "The repository to be removed is not specified"}
+
+        repo_folder_name = run_args['repo']
         repo_path = os.path.join(self.repos_path, repo_folder_name)
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
         
@@ -339,14 +345,7 @@ class RepoAction(Action):
 def rm_repo(run_args, repo_path, repos_file_path):
         logger.info("rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json")
         
-        if not run_args['repo']:
-            logger.error("The repository to be removed is not specified")
-            return {"return": 1, "error": "The repository to be removed is not specified"}
-
         force_remove = True if run_args.get('f') else False
-
-        repo_folder_name = run_args['repo']
-
 
         if os.path.exists(repo_path):
             # Check for local changes
