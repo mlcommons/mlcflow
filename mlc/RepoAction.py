@@ -191,7 +191,7 @@ class RepoAction(Action):
         else:
             return {"return": 0, "value": os.path.basename(url).replace(".git", "")}
 
-    def pull_repo(self, repo_url, branch=None, checkout = None):
+    def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None):
         
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path # either the value will be from 'MLC_REPOS'
@@ -201,6 +201,20 @@ class RepoAction(Action):
         if re.match(r'^[\w-]+@[\w-]+$', repo_url):
             user, repo = repo_url.split('@')
             repo_url = f"https://github.com/{user}/{repo}.git"
+
+        # support pat and ssh
+        if pat or ssh:
+            tmp_param = {}
+            url_type = "pat" if pat else "ssh"
+            if pat:
+                tmp_param["token"] = pat
+            res = utils.modify_git_url(url_type, repo_url, tmp_param)
+            if res["return"] > 0:
+                return res
+            else:
+                print(res)
+                repo_url = res["url"]
+
 
         # Extract the repo name from URL
         repo_name = repo_url.split('/')[-1].replace('.git', '')
@@ -236,13 +250,19 @@ class RepoAction(Action):
                 else:
                     logger.info("No local changes detected. Fetching latest changes...")
                     subprocess.run(['git', '-C', repo_path, 'fetch'], check=True)
-            
+
+            if tag:
+                checkout = "tags/"+tag
+
             # Checkout to a specific branch or commit if --checkout is provided
-            if checkout:
+            if checkout or tag:
                 logger.info(f"Checking out to {checkout} in {repo_path}...")
                 subprocess.run(['git', '-C', repo_path, 'checkout', checkout], check=True)
             
-            logger.info("Repository successfully pulled.")
+            if not tag:
+                subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
+                logger.info("Repository successfully pulled.")
+
             logger.info("Registering the repo in repos.json")
 
             # check the meta file to obtain uids
@@ -294,8 +314,15 @@ class RepoAction(Action):
         else:
             branch = run_args.get('branch')
             checkout = run_args.get('checkout')
+            tag = run_args.get('tag')
 
-            res = self.pull_repo(repo_url, branch, checkout)
+            pat = run_args.get('pat')
+            ssh = run_args.get('ssh')
+
+            if sum(bool(var) for var in [branch, checkout, tag]) > 1:
+                    return {"return": 1, "error": "Only one among the three flags(branch, checkout and tag) could be specified"}
+
+            res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh)
             if res['return'] > 0:
                 return res
 
@@ -320,23 +347,27 @@ class RepoAction(Action):
             logger.error("The repository to be removed is not specified")
             return {"return": 1, "error": "The repository to be removed is not specified"}
 
+        force_remove = True if run_args.get('f') else False
+
         repo_folder_name = run_args['repo']
 
         repo_path = os.path.join(self.repos_path, repo_folder_name)
 
         if os.path.exists(repo_path):
             # Check for local changes
-            status_command = ['git', '-C', repo_path, 'status', '--porcelain']
+            status_command = ['git', '-C', repo_path, 'status', '--porcelain', '--untracked-files=no']
             local_changes = subprocess.run(status_command, capture_output=True, text=True)
 
             if local_changes.stdout:
                 logger.warning("Local changes detected in repository. Changes are listed below:")
                 print(local_changes.stdout)
-                confirm_remove = True if(input("Continue to remove repo?").lower()) in ["yes", "y"] else False
+                confirm_remove = True if force_remove or (input("Continue to remove repo?").lower()) in ["yes", "y"] else False
             else:
                 logger.info("No local changes detected. Removing repo...")
                 confirm_remove = True
             if confirm_remove:
+                if force_remove:
+                    logger.info("Force remove is set.")
                 shutil.rmtree(repo_path)
                 logger.info(f"Repo {run_args['repo']} residing in path {repo_path} has been successfully removed")
                 logger.info("Checking whether the repo was registered in repos.json")
