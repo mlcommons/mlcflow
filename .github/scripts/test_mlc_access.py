@@ -1,8 +1,7 @@
 import logging
 import os  
 import subprocess  
-import mlc  
-import pytest 
+import mlc   
 
 # Configure logging
 logging.basicConfig(
