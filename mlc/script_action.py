@@ -110,7 +110,7 @@ Main Script Meta:""")
         if not script_path:
             logger.warning("""Script automation not found. Pulling default MLCFlow script repo - mlcommons@mlperf-automations dev branch.""")
             from .repo_action import pull_repo
-            res = pull_repo(repo_url="mlcommons@mlperf-automations", branch="dev")
+            res = pull_repo(repo_url="mlcommons@mlperf-automations", branch="dev", repos_path=self.repos_path, repos=self.repos)
             if res["return"]>0:
                 return res
             script_path = self.find_target_folder("script")
