@@ -337,7 +337,11 @@ class Action:
             return res
 
         if len(res['list']) == 0:
-            return {'return': 16, 'error': f'No {target_name} found for {inp}'}
+            # Do not error out if fetch_all is used
+            if inp["fetch_all"] == True:
+                logger.warning(f"{target_name} is empty! nothing to be cleared!")
+            else:
+                return {'return': 16, 'error': f'No {target_name} found for {inp}'}
         elif len(res['list']) > 1:
             logger.info(f"More than 1 {target_name} found for {inp}:")
             if not i.get('all'):
