@@ -180,118 +180,6 @@ class RepoAction(Action):
         else:
             return {"return": 0, "value": os.path.basename(url).replace(".git", "")}
 
-    def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None):
-        
-        # Determine the checkout path from environment or default
-        repo_base_path = self.repos_path # either the value will be from 'MLC_REPOS'
-        os.makedirs(repo_base_path, exist_ok=True)  # Ensure the directory exists
-
-        # Handle user@repo format (convert to standard GitHub URL)
-        if re.match(r'^[\w-]+@[\w-]+$', repo_url):
-            user, repo = repo_url.split('@')
-            repo_url = f"https://github.com/{user}/{repo}.git"
-
-        # support pat and ssh
-        if pat or ssh:
-            tmp_param = {}
-            url_type = "pat" if pat else "ssh"
-            if pat:
-                tmp_param["token"] = pat
-            res = utils.modify_git_url(url_type, repo_url, tmp_param)
-            if res["return"] > 0:
-                return res
-            else:
-                print(res)
-                repo_url = res["url"]
-
-
-        # Extract the repo name from URL
-        repo_name = repo_url.split('/')[-1].replace('.git', '')
-        res = self.github_url_to_user_repo_format(repo_url)
-        if res["return"] > 0:
-            return res
-        else:
-            repo_download_name = res["value"]
-            repo_path = os.path.join(repo_base_path, repo_download_name)
-
-        try:
-            # If the directory doesn't exist, clone it
-            if not os.path.exists(repo_path):
-                logger.info(f"Cloning repository {repo_url} to {repo_path}...")
-                
-                # Build clone command without branch if not provided
-                clone_command = ['git', 'clone', repo_url, repo_path]
-                if branch:
-                    clone_command = ['git', 'clone', '--branch', branch, repo_url, repo_path]
-                
-                subprocess.run(clone_command, check=True)
-
-            else:
-                logger.info(f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
-    
-                # Check for local changes
-                status_command = ['git', '-C', repo_path, 'status', '--porcelain', '--untracked-files=no']
-                local_changes = subprocess.run(status_command, capture_output=True, text=True)
-
-                if local_changes.stdout.strip():
-                    logger.warning("There are local changes in the repository. Please commit or stash them before checking out.")
-                    print(local_changes.stdout.strip())
-                    return {"return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
-                else:
-                    logger.info("No local changes detected. Fetching latest changes...")
-                    subprocess.run(['git', '-C', repo_path, 'fetch'], check=True)
-
-            if tag:
-                checkout = "tags/"+tag
-
-            # Checkout to a specific branch or commit if --checkout is provided
-            if checkout or tag:
-                logger.info(f"Checking out to {checkout} in {repo_path}...")
-                subprocess.run(['git', '-C', repo_path, 'checkout', checkout], check=True)
-            
-            if not tag:
-                subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
-                logger.info("Repository successfully pulled.")
-
-            logger.info("Registering the repo in repos.json")
-
-            # check the meta file to obtain uids
-            meta_file_path = os.path.join(repo_path, 'meta.yaml')
-            if not os.path.exists(meta_file_path):
-                logger.warning(f"meta.yaml not found in {repo_path}. Repo pulled but not register in mlc repos. Skipping...")
-                return {"return": 0}
-            
-            with open(meta_file_path, 'r') as meta_file:
-                meta_data = yaml.safe_load(meta_file)
-                meta_data["path"] = repo_path
-
-            # Check UID conflicts
-            is_conflict = self.conflicting_repo(meta_data)
-            if is_conflict['return'] > 0:
-                if "UID not present" in is_conflict['error']:
-                    logger.warning(f"UID not found in meta.yaml at {repo_path}. Repo pulled but can not register in mlc repos. Skipping...")
-                    return {"return": 0}
-                elif "already registered" in is_conflict["error"]:
-                    #logger.warning(is_conflict["error"])
-                    logger.info("No changes made to repos.json.")
-                    return {"return": 0}
-                else:
-                    logger.warning(f"The repo to be cloned has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
-                    self.unregister_repo(is_conflict['conflicting_path'])
-                    self.register_repo(repo_path, meta_data)
-                    logger.warning(f"{repo_path} is registered in repos.json and {is_conflict['conflicting_path']} is unregistered.")
-                    return {"return": 0}
-            else:         
-                r = self.register_repo(repo_path, meta_data)
-                if r['return'] > 0:
-                    return r
-                return {"return": 0}
-
-        except subprocess.CalledProcessError as e:
-            return {'return': 1, 'error': f"Git command failed: {e}"}
-        except Exception as e:
-            return {'return': 1, 'error': f"Error pulling repository: {str(e)}"}
-
     def pull(self, run_args):
         repo_url = run_args.get('repo', run_args.get('url', 'repo'))
         if not repo_url or repo_url == "repo":
@@ -312,7 +200,7 @@ class RepoAction(Action):
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
                     return {"return": 1, "error": "Only one among the three flags(branch, checkout and tag) could be specified"}
 
-            res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh)
+            res = pull_repo(repo_url, branch, checkout, tag, pat, ssh)
             if res['return'] > 0:
                 return res
 
@@ -390,3 +278,114 @@ def unregister_repo(repo_path, repos_file_path):
             logger.info(f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
         return {'return': 0}
 
+def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None):
+        
+    # Determine the checkout path from environment or default
+    repo_base_path = self.repos_path # either the value will be from 'MLC_REPOS'
+    os.makedirs(repo_base_path, exist_ok=True)  # Ensure the directory exists
+
+    # Handle user@repo format (convert to standard GitHub URL)
+    if re.match(r'^[\w-]+@[\w-]+$', repo_url):
+        user, repo = repo_url.split('@')
+        repo_url = f"https://github.com/{user}/{repo}.git"
+
+    # support pat and ssh
+    if pat or ssh:
+        tmp_param = {}
+        url_type = "pat" if pat else "ssh"
+        if pat:
+            tmp_param["token"] = pat
+        res = utils.modify_git_url(url_type, repo_url, tmp_param)
+        if res["return"] > 0:
+            return res
+        else:
+            print(res)
+            repo_url = res["url"]
+
+
+    # Extract the repo name from URL
+    repo_name = repo_url.split('/')[-1].replace('.git', '')
+    res = self.github_url_to_user_repo_format(repo_url)
+    if res["return"] > 0:
+        return res
+    else:
+        repo_download_name = res["value"]
+        repo_path = os.path.join(repo_base_path, repo_download_name)
+
+    try:
+        # If the directory doesn't exist, clone it
+        if not os.path.exists(repo_path):
+            logger.info(f"Cloning repository {repo_url} to {repo_path}...")
+                
+            # Build clone command without branch if not provided
+            clone_command = ['git', 'clone', repo_url, repo_path]
+            if branch:
+                clone_command = ['git', 'clone', '--branch', branch, repo_url, repo_path]
+                
+            subprocess.run(clone_command, check=True)
+
+        else:
+            logger.info(f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
+    
+            # Check for local changes
+            status_command = ['git', '-C', repo_path, 'status', '--porcelain', '--untracked-files=no']
+            local_changes = subprocess.run(status_command, capture_output=True, text=True)
+
+            if local_changes.stdout.strip():
+                logger.warning("There are local changes in the repository. Please commit or stash them before checking out.")
+                print(local_changes.stdout.strip())
+                return {"return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
+            else:
+                logger.info("No local changes detected. Fetching latest changes...")
+                subprocess.run(['git', '-C', repo_path, 'fetch'], check=True)
+
+        if tag:
+            checkout = "tags/"+tag
+
+        # Checkout to a specific branch or commit if --checkout is provided
+        if checkout or tag:
+            logger.info(f"Checking out to {checkout} in {repo_path}...")
+            subprocess.run(['git', '-C', repo_path, 'checkout', checkout], check=True)
+            
+        if not tag:
+            subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
+            logger.info("Repository successfully pulled.")
+
+        logger.info("Registering the repo in repos.json")
+
+        # check the meta file to obtain uids
+        meta_file_path = os.path.join(repo_path, 'meta.yaml')
+        if not os.path.exists(meta_file_path):
+            logger.warning(f"meta.yaml not found in {repo_path}. Repo pulled but not register in mlc repos. Skipping...")
+            return {"return": 0}
+            
+        with open(meta_file_path, 'r') as meta_file:
+            meta_data = yaml.safe_load(meta_file)
+            meta_data["path"] = repo_path
+
+        # Check UID conflicts
+        is_conflict = self.conflicting_repo(meta_data)
+        if is_conflict['return'] > 0:
+            if "UID not present" in is_conflict['error']:
+                logger.warning(f"UID not found in meta.yaml at {repo_path}. Repo pulled but can not register in mlc repos. Skipping...")
+                return {"return": 0}
+            elif "already registered" in is_conflict["error"]:
+                #logger.warning(is_conflict["error"])
+                logger.info("No changes made to repos.json.")
+                return {"return": 0}
+            else:
+                logger.warning(f"The repo to be cloned has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
+                self.unregister_repo(is_conflict['conflicting_path'])
+                self.register_repo(repo_path, meta_data)
+                logger.warning(f"{repo_path} is registered in repos.json and {is_conflict['conflicting_path']} is unregistered.")
+                return {"return": 0}
+        else:         
+            r = self.register_repo(repo_path, meta_data)
+            if r['return'] > 0:
+                return r
+            return {"return": 0}
+
+    except subprocess.CalledProcessError as e:
+        return {'return': 1, 'error': f"Git command failed: {e}"}
+    except Exception as e:
+        return {'return': 1, 'error': f"Error pulling repository: {str(e)}"}
