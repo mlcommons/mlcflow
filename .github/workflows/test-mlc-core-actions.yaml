@@ -237,9 +237,9 @@ jobs:
       run: |
         cd .github/scripts && python -c "import test_mlc_access as test; test.test_find_repo()"
 
-    - name: Pull MLCOMMONS mlperf-automations repository
+    - name: Try running a script with no automation repo - should clone default mlcommons repo
       run: |
-        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+        mlcr detect,os
 
     - name: Run tests from test-mlc-access.py
       run: |

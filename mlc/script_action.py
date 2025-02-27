@@ -108,7 +108,12 @@ Main Script Meta:""")
         # Import script submodule 
         script_path = self.find_target_folder("script")
         if not script_path:
-            return {'return': 1, 'error': f"""Script automation not found. Have you done "mlc pull repo mlcommons@mlperf-automations --branch=dev"?"""}
+            logger.warning("""Script automation not found. Pulling default MLCFlow script repo - mlcommons@mlperf-automations dev branch.""")
+            from .repo_action import pull_repo
+            res = pull_repo(repo_url="mlcommons@mlperf-automations", branch="dev")
+            if res["return"]>0:
+                return res
+            script_path = self.find_target_folder("script")
 
         module_path = os.path.join(script_path, "module.py")
         module = self.dynamic_import_module(module_path)
