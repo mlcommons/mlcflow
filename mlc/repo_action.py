@@ -172,7 +172,7 @@ class RepoAction(Action):
         return {'return': 0}
     
     def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None):
-        pull_repo(repo_url, self.repos_path, branch, checkout, tag, pat, ssh)
+        return pull_repo(repo_url, self.repos_path, branch, checkout, tag, pat, ssh)
 
             
     def list(self, run_args):
