@@ -164,7 +164,7 @@ class RepoAction(Action):
         return {'return': 0}
     
     def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None):
-        return pull_repo(repo_url, self.repos_path, branch, checkout, tag, pat, ssh)
+        return pull_repo(repo_url, self.repos_path, self.repos, branch, checkout, tag, pat, ssh)
 
             
     def list(self, run_args):
@@ -238,7 +238,7 @@ def unregister_repo(repo_path, repos_file_path):
             logger.info(f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
         return {'return': 0}
 
-def pull_repo(repo_url, repos_path, branch=None, checkout = None, tag = None, pat = None, ssh = None):
+def pull_repo(repo_url, repos_path, repos, branch=None, checkout = None, tag = None, pat = None, ssh = None):
         
     # Determine the checkout path from environment or default
     repo_base_path = repos_path # either the value will be from 'MLC_REPOS'
@@ -324,7 +324,7 @@ def pull_repo(repo_url, repos_path, branch=None, checkout = None, tag = None, pa
             meta_data["path"] = repo_path
 
         # Check UID conflicts
-        is_conflict = conflicting_repo(meta_data)
+        is_conflict = conflicting_repo(meta_data, repos)
         if is_conflict['return'] > 0:
             if "UID not present" in is_conflict['error']:
                 logger.warning(f"UID not found in meta.yaml at {repo_path}. Repo pulled but can not register in mlc repos. Skipping...")
