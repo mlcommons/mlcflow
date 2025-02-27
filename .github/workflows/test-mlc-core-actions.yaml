@@ -241,6 +241,10 @@ jobs:
       run: |
         mlc pull repo mlcommons@mlperf-automations --checkout=dev
 
+    - name: Test for rm cache - invalid cache entry tags(test succeeds if command fails)
+      run: |
+        ! mlc rm cache --tags=sample,invalid,tags
+
     - name: Test for rm cache when the cache folder is empty(only for mlc rm cache without specifying particular script)
       run: |
         mlc rm cache -f
