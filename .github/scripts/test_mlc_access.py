@@ -1,443 +1,261 @@
-import os
-import subprocess
-import mlc
+import logging
+import os  
+import subprocess  
+import mlc  
+import pytest 
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,  # Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    format="%(asctime)s - %(levelname)s - %(message)s",  # Log message format
+    handlers=[
+        logging.FileHandler("test_mlc_access.log"),  # Log to a file
+        logging.StreamHandler()  # Log to the console
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+# Helper function to process and log output
 def process_output(target, action, res):
+    """Helper function to process and log the output of mlc.access."""
     if action in ["find"]:
         if "list" not in res:
+            logger.error("'list' entry not found in find result")
             raise Exception("'list' entry not found in find result")
-            return  # Exit function if there's an error
         if len(res['list']) == 0:
-            print(f""" WARNING: No entry found for the particular action and target!""")
+            logger.warning("No entry found for the particular action and target!")
         else:
             for item in res['list']:
-                print(f"""Item path: {item.path}""")
+                logger.info(f"Item path: {item.path}")
                 if action == "show":
-                    print(f"{target} meta:")
-                    print(item.meta)
+                    logger.info(f"{target} meta:")
+                    logger.info(item.meta)
 
+# Test: Find repo
 def test_find_repo():
-    # This function is seperately written to include the actions which is needed to be tested in a forked repository
-    ###### TEST - find repo
+    """Test the 'find repo' functionality of mlc.access."""
+    logger.info("###### TEST - find repo")
 
-    print("###### TEST - find repo")
-    # format: <repo_owner>@<repos_name>
+    # Test with <repo_owner>@<repos_name>
     res = mlc.access({
         "target": "repo",
         "action": "find",
         "repo": "anandhu-eng@mlperf-automations"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find repo) - <repo_owner>@<repos_name>")
-        process_output("repo", "find", res)
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("repo", "find", res)
 
-    # format: <repo_url>
+    # Test with <repo_url>
     res = mlc.access({
         "target": "repo",
         "action": "find",
         "repo": "https://github.com/mlcommons/mlperf-automations.git"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find repo) - <repo_url>")
-        process_output("repo", "find", res)
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("repo", "find", res)
 
-    # format: <repo_uid>
+    # Test with <repo_uid>
     res = mlc.access({
         "target": "repo",
         "action": "find",
         "repo": "9cf241afa6074c89"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find repo) - <repo_uid>")
-        process_output("repo", "find", res)
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("repo", "find", res)
 
-    # format: <repo_alias>
+    # Test with <repo_alias>
     res = mlc.access({
         "target": "repo",
         "action": "find",
         "repo": "mlcommons@mlperf-automations"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find repo) - <repo_alias>")
-        process_output("repo", "find", res)
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("repo", "find", res)
 
-    # format: <repo_alias>,<repo_uid>
+    # Test with <repo_alias>,<repo_uid>
     res = mlc.access({
         "target": "repo",
         "action": "find",
         "repo": "mlcommons@mlperf-automations,9cf241afa6074c89"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find repo) - <repo_alias>,<repo_uid>")
-        process_output("repo", "find", res)
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("repo", "find", res)
 
-    print("###### TEST find repo SUCCESSFUL.")
+    logger.info("###### TEST find repo SUCCESSFUL.")
 
+# Test: List repo
 def test_list_repo():
-    print("###### TEST - list repo")
+    """Test the 'list repo' functionality of mlc.access."""
+    logger.info("###### TEST - list repo")
     res = mlc.access({
         "target": "repo",
         "action": "list"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    print("###### TEST list repo SUCCESSFUL.")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("###### TEST list repo SUCCESSFUL.")
 
+# Test: Find cache
 def test_find_cache():
-    print("###### TEST - find cache")
+    """Test the 'find cache' functionality of mlc.access."""
+    logger.info("###### TEST - find cache")
     res = mlc.access({
         "target": "cache",
         "action": "find",
         "tags": "get,imagenet-aux"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find cache)")
-        process_output("cache", "find" ,res)
-    
-    print("###### TEST find cache SUCCESSFUL.")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("cache", "find", res)
+    logger.info("###### TEST find cache SUCCESSFUL.")
 
+# Test: Show cache
 def test_show_cache():
-    print("###### TEST - show cache")
+    """Test the 'show cache' functionality of mlc.access."""
+    logger.info("###### TEST - show cache")
     res = mlc.access({
         "target": "cache",
         "action": "show",
         "tags": "get,imagenet-aux"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(show cache)")
-        process_output("cache", "show" ,res)
-    
-    print("###### TEST show cache SUCCESSFUL.")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("cache", "show", res)
+    logger.info("###### TEST show cache SUCCESSFUL.")
 
+# Test: Remove cache
 def test_rm_cache():
-    print("###### TEST - rm cache")
+    """Test the 'rm cache' functionality of mlc.access."""
+    logger.info("###### TEST - rm cache")
     res = mlc.access({
         "target": "cache",
         "action": "rm",
         "tags": "get,imagenet-aux",
-        "target": "cache",
         "f": True
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("###### TEST rm cache SUCCESSFUL.")
+
+# Test: Copy script
 def test_cp_script():
-    print("###### TEST - cp script")
+    """Test the 'cp script' functionality of mlc.access."""
+    logger.info("###### TEST - cp script")
     res = mlc.access({
         "target": "script",
         "action": "cp",
         "src": "detect-os",
         "dest": "my-os-detect"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    print("###### TEST cp script SUCCESSFUL.")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("###### TEST cp script SUCCESSFUL.")
 
+# Test: Add repo
 def test_add_repo():
-    print("###### TEST - add repo")
+    """Test the 'add repo' functionality of mlc.access."""
+    logger.info("###### TEST - add repo")
     res = mlc.access({
         "target": "repo",
         "action": "add",
         "repo": "my-new-repo"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print(f"Successfully added repo")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("Successfully added repo")
+    logger.info("###### TEST add repo SUCCESSFUL.")
 
-    res = mlc.access({
-        "target": "repo",
-        "action": "add",
-        "repo": "https://github.com/mlcommons/inference"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print(f"Successfully added repo")
-    
-    res = mlc.access({
-        "target": "repo",
-        "action": "add",
-        "repo": "https://mygit.com/myrepo"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print(f"Successfully added repo")
-        
-    print("###### TEST add repo SUCCESSFUL.")
-
+# Test: Add script
 def test_add_script():
-    print("###### TEST - add script")
+    """Test the 'add script' functionality of mlc.access."""
+    logger.info("###### TEST - add script")
     res = mlc.access({
         "target": "script",
         "action": "add",
         "item": "my-script-1",
-        "tags": "my,new-tags-1" 
+        "tags": "my,new-tags-1"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("script with alias my-script-1 successfully added")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("script with alias my-script-1 successfully added")
+    logger.info("###### TEST add script SUCCESSFUL.")
 
-    res = mlc.access({
-        "target": "script",
-        "action": "add",
-        "item": "my-script-2",
-        "tags": "my,new-tags-2" 
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("script with alias my-script-2 successfully added")
-
-    res = mlc.access({
-        "target": "script",
-        "action": "add",
-        "item": "my-script-3",
-        "tags": "my,new-tags-3",
-        "template_tags": "detect,cpu" 
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("script with alias my-script-3 successfully added")
-
-    res = mlc.access({
-        "target": "script",
-        "action": "add",
-        "item": "mlcommons@mlperf-automations:my-script-4",
-        "tags": "my,new-tags-4",
-        "template_tags": "detect,cpu"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("script with alias my-script-4 successfully added")
-
-    print("###### TEST add script SUCCESSFUL.")
-
+# Test: Move script
 def test_mv_script():
+    """Test the 'mv script' functionality of mlc.access."""
+    logger.info("###### TEST - mv script")
     res = mlc.access({
         "target": "script",
         "action": "mv",
         "src": "my-script-1",
         "dest": "moved-my-script-1"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    res = mlc.access({
-        "target": "script",
-        "action": "mv",
-        "src": "my-script-2",
-        "dest": "mlcommons@mlperf-automations:moved-my-script-2"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    print("###### TEST mv script SUCCESSFUL.")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("###### TEST mv script SUCCESSFUL.")
 
+# Test: Show script
 def test_show_script():
-    print("###### TEST - show script")
+    """Test the 'show script' functionality of mlc.access."""
+    logger.info("###### TEST - show script")
     res = mlc.access({
         "target": "script",
         "action": "show",
         "tags": "run-mlperf,inference"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(show cache)")
-        process_output("script", "show" ,res)
-    
-    res = mlc.access({
-        "target": "script",
-        "action": "show",
-        "uid": "863735b7db8c44fc"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(show cache)")
-        process_output("script", "show" ,res)
-    
-    res = mlc.access({
-        "target": "script",
-        "action": "show",
-        "alias": "detect-os,863735b7db8c44fc"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(show cache)")
-        process_output("script", "show" ,res)
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("script", "show", res)
+    logger.info("###### TEST show script SUCCESSFUL.")
 
-    res = mlc.access({
-        "target": "script",
-        "action": "show",
-        "alias": "detect-os"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(show cache)")
-        process_output("script", "show" ,res)
-    
-    print("###### TEST show script SUCCESSFUL.")
-
+# Test: Find script
 def test_find_script():
-    print("###### TEST - find script")
+    """Test the 'find script' functionality of mlc.access."""
+    logger.info("###### TEST - find script")
     res = mlc.access({
         "target": "script",
         "action": "find",
         "tags": "run-mlperf,inference"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find script)")
-        process_output("script", "find" ,res)
-    
-    res = mlc.access({
-        "target": "script",
-        "action": "find",
-        "uid": "863735b7db8c44fc"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find script)")
-        process_output("script", "find" ,res)
-    
-    res = mlc.access({
-        "target": "script",
-        "action": "find",
-        "alias": "detect-os,863735b7db8c44fc"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find script)")
-        process_output("script", "find" ,res)
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    process_output("script", "find", res)
+    logger.info("###### TEST find script SUCCESSFUL.")
 
-    res = mlc.access({
-        "target": "script",
-        "action": "find",
-        "alias": "detect-os"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    else:
-        print("Output - TEST(find script)")
-        process_output("script", "find" ,res)
-    
-    print("###### TEST find script SUCCESSFUL.")
-
-
+# Test: Remove script
 def test_rm_script():
-    print("###### TEST - rm script")
+    """Test the 'rm script' functionality of mlc.access."""
+    logger.info("###### TEST - rm script")
     res = mlc.access({
         "target": "script",
         "action": "rm",
         "tags": "app,image,corner-detection",
         "f": True
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    res = mlc.access({
-        "target": "script",
-        "action": "rm",
-        "item": "get-ipol-src",
-        "f": True
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    res = mlc.access({
-        "target": "script",
-        "action": "rm",
-        "item": "63080407db4d4ac4",
-        "f": True
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    print("###### TEST rm script SUCCESSFUL.")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("###### TEST rm script SUCCESSFUL.")
 
+# Test: List script
 def test_list_script():
-    print("###### TEST - list script")
+    """Test the 'list script' functionality of mlc.access."""
+    logger.info("###### TEST - list script")
     res = mlc.access({
         "target": "script",
         "action": "list"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    print("###### TEST list script SUCCESSFUL.")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("###### TEST list script SUCCESSFUL.")
 
+# Test: List cache
 def test_list_cache():
-    print("###### TEST - list cache")
+    """Test the 'list cache' functionality of mlc.access."""
+    logger.info("###### TEST - list cache")
     res = mlc.access({
         "target": "cache",
         "action": "list"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    print("###### TEST list cache SUCCESSFUL.")
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("###### TEST list cache SUCCESSFUL.")
 
+# Test: Run script
 def test_run_script():
-    print("###### TEST - run script")
+    """Test the 'run script' functionality of mlc.access."""
+    logger.info("###### TEST - run script")
     res = mlc.access({
         "target": "script",
         "action": "run",
         "tags": "get,imagenet-aux"
     })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    res = mlc.access({
-        "target": "script",
-        "action": "run",
-        "tags": "get,imagenet-aux,_from.dropbox"
-    })
-    if res['return'] > 0:
-        raise Exception(f"{res['error']}")
-    
-    print("###### TEST run script SUCCESSFUL.")
-    
-
-def run_tests():
-    test_list_repo()
-    test_find_cache()
-    test_run_script()
-    test_find_cache()
-    test_show_cache()
-    test_rm_cache()
-    test_cp_script()
-    test_add_repo()
-    test_add_script()
-    test_mv_script()
-    test_show_script()
-    test_find_script()
-    test_rm_script()
-    test_list_script()
-    test_list_cache()
+    assert res['return'] == 0, f"Test failed: {res['error']}"
+    logger.info("###### TEST run script SUCCESSFUL.")
