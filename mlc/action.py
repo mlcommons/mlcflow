@@ -340,6 +340,7 @@ class Action:
             # Do not error out if fetch_all is used
             if inp["fetch_all"] == True:
                 logger.warning(f"{target_name} is empty! nothing to be cleared!")
+                return {"return": 0}
             else:
                 return {'return': 16, 'error': f'No {target_name} found for {inp}'}
         elif len(res['list']) > 1:
