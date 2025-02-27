@@ -358,7 +358,7 @@ def pull_repo(repo_url, repos_path, branch=None, checkout = None, tag = None, pa
     except Exception as e:
         return {'return': 1, 'error': f"Error pulling repository: {str(e)}"}
     
-def github_url_to_user_repo_format(self, url):
+def github_url_to_user_repo_format(url):
         """
         Converts a GitHub repo URL to user@repo_name format.
 
