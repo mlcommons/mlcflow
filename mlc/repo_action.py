@@ -151,7 +151,7 @@ class RepoAction(Action):
             for repo_object in self.repos:
                 repo_folder_name = os.path.basename(repo_object.path)
                 if "@" in repo_folder_name:
-                    res = self.pull_repo(repo_folder_name, self.repos_path)
+                    res = self.pull_repo(repo_folder_name)
                     if res['return'] > 0:
                         return res
         else:
@@ -246,7 +246,7 @@ def unregister_repo(repo_path, repos_file_path):
             logger.info(f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
         return {'return': 0}
 
-def pull_repo(self, repo_url, repos_path, branch=None, checkout = None, tag = None, pat = None, ssh = None):
+def pull_repo(repo_url, repos_path, branch=None, checkout = None, tag = None, pat = None, ssh = None):
         
     # Determine the checkout path from environment or default
     repo_base_path = repos_path # either the value will be from 'MLC_REPOS'
@@ -379,7 +379,7 @@ def register_repo(repo_path, repos_path, repo_meta):
     
         if repo_meta.get('deps'):
             for dep in repo_meta['deps']:
-                pull_repo(dep['url'], repo_path, branch=dep.get('branch'), checkout=dep.get('checkout'))
+                pull_repo(dep['url'], repos_path, branch=dep.get('branch'), checkout=dep.get('checkout'))
 
         # Get the path to the repos.json file in $HOME/MLC
         repos_file_path = os.path.join(repos_path, 'repos.json')
