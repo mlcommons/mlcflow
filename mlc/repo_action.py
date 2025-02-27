@@ -62,15 +62,7 @@ class RepoAction(Action):
         return {'return': 0}
 
     def conflicting_repo(self, repo_meta):
-        for repo_object in self.repos:
-            if repo_object.meta.get('uid', '') == '':
-                return {"return": 1, "error": f"UID is not present in file 'meta.yaml' in the repo path {repo_object.path}"}
-            if repo_meta["uid"] == repo_object.meta.get('uid', ''):
-                if repo_meta['path'] == repo_object.path:
-                    return {"return": 1, "error": f"Same repo is already registered"}
-                else:
-                    return {"return": 1, "error": f"Conflicting with repo in the path {repo_object.path}", "conflicting_path": repo_object.path}
-        return {"return": 0}
+        return conflicting_repo(repo_meta, self.repos)
     
     def unregister_repo(self, repo_path):
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
@@ -332,7 +324,7 @@ def pull_repo(repo_url, repos_path, branch=None, checkout = None, tag = None, pa
             meta_data["path"] = repo_path
 
         # Check UID conflicts
-        is_conflict = self.conflicting_repo(meta_data)
+        is_conflict = conflicting_repo(meta_data)
         if is_conflict['return'] > 0:
             if "UID not present" in is_conflict['error']:
                 logger.warning(f"UID not found in meta.yaml at {repo_path}. Repo pulled but can not register in mlc repos. Skipping...")
@@ -395,3 +387,14 @@ def register_repo(repo_path, repos_path, repo_meta):
             json.dump(repos_list, f, indent=2)
             logger.info(f"Updated repos.json at {repos_file_path}")
         return {'return': 0}
+
+def conflicting_repo(repo_meta, repos):
+    for repo_object in repos:
+        if repo_object.meta.get('uid', '') == '':
+            return {"return": 1, "error": f"UID is not present in file 'meta.yaml' in the repo path {repo_object.path}"}
+        if repo_meta["uid"] == repo_object.meta.get('uid', ''):
+            if repo_meta['path'] == repo_object.path:
+                return {"return": 1, "error": f"Same repo is already registered"}
+            else:
+                return {"return": 1, "error": f"Conflicting with repo in the path {repo_object.path}", "conflicting_path": repo_object.path}
+    return {"return": 0}
