@@ -36,7 +36,7 @@ class RepoAction(Action):
             #check if its an URL
             if utils.is_valid_url(i_repo_path):
                 if "github.com" in i_repo_path:
-                    res = self.github_url_to_user_repo_format(i_repo_path)
+                    res = github_url_to_user_repo_format(i_repo_path)
                     if res['return'] > 0:
                         return res
                     repo_folder_name = res['value']
@@ -72,30 +72,12 @@ class RepoAction(Action):
                     return {"return": 1, "error": f"Conflicting with repo in the path {repo_object.path}", "conflicting_path": repo_object.path}
         return {"return": 0}
     
-    def register_repo(self, repo_path, repo_meta):
-    
-        if repo_meta.get('deps'):
-            for dep in repo_meta['deps']:
-                self.pull_repo(dep['url'], branch=dep.get('branch'), checkout=dep.get('checkout'))
-
-        # Get the path to the repos.json file in $HOME/MLC
-        repos_file_path = os.path.join(self.repos_path, 'repos.json')
-
-        with open(repos_file_path, 'r') as f:
-            repos_list = json.load(f)
-        
-        if repo_path not in repos_list:
-            repos_list.append(repo_path)
-            logger.info(f"Added new repo path: {repo_path}")
-
-        with open(repos_file_path, 'w') as f:
-            json.dump(repos_list, f, indent=2)
-            logger.info(f"Updated repos.json at {repos_file_path}")
-        return {'return': 0}
-
     def unregister_repo(self, repo_path):
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
         return unregister_repo(repo_path, repos_file_path)
+    
+    def register_repo(self, repo_path, repo_meta):
+        return register_repo(repo_path, self.repos_path, repo_meta)
 
 
     def find(self, run_args):
@@ -130,7 +112,7 @@ class RepoAction(Action):
             elif "@" in repo:
                 repo_name = repo
             elif "github.com" in repo:
-                result = self.github_url_to_user_repo_format(repo)
+                result = github_url_to_user_repo_format(repo)
                 if result["return"] == 0:
                     repo_name = result["value"]
                 else:
@@ -163,30 +145,13 @@ class RepoAction(Action):
             
             return {'return': 0, 'list': lst}
 
-    def github_url_to_user_repo_format(self, url):
-        """
-        Converts a GitHub repo URL to user@repo_name format.
-
-        :param url: str, GitHub repository URL (e.g., https://github.com/user/repo_name.git)
-        :return: str, formatted as user@repo_name
-        """
-        # Regex to match GitHub URLs
-        pattern = r"(?:https?://)?(?:www\.)?github\.com/([^/]+)/([^/.]+)(?:\.git)?"
-        
-        match = re.match(pattern, url)
-        if match:
-            user, repo_name = match.groups()
-            return {"return": 0, "value": f"{user}@{repo_name}"}
-        else:
-            return {"return": 0, "value": os.path.basename(url).replace(".git", "")}
-
     def pull(self, run_args):
         repo_url = run_args.get('repo', run_args.get('url', 'repo'))
         if not repo_url or repo_url == "repo":
             for repo_object in self.repos:
                 repo_folder_name = os.path.basename(repo_object.path)
                 if "@" in repo_folder_name:
-                    res = self.pull_repo(repo_folder_name)
+                    res = self.pull_repo(repo_folder_name, self.repos_path)
                     if res['return'] > 0:
                         return res
         else:
@@ -200,11 +165,14 @@ class RepoAction(Action):
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
                     return {"return": 1, "error": "Only one among the three flags(branch, checkout and tag) could be specified"}
 
-            res = pull_repo(repo_url, branch, checkout, tag, pat, ssh)
+            res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh)
             if res['return'] > 0:
                 return res
 
         return {'return': 0}
+    
+    def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None):
+        pull_repo(repo_url, self.repos_path, branch, checkout, tag, pat, ssh)
 
             
     def list(self, run_args):
@@ -278,10 +246,10 @@ def unregister_repo(repo_path, repos_file_path):
             logger.info(f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
         return {'return': 0}
 
-def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None):
+def pull_repo(self, repo_url, repos_path, branch=None, checkout = None, tag = None, pat = None, ssh = None):
         
     # Determine the checkout path from environment or default
-    repo_base_path = self.repos_path # either the value will be from 'MLC_REPOS'
+    repo_base_path = repos_path # either the value will be from 'MLC_REPOS'
     os.makedirs(repo_base_path, exist_ok=True)  # Ensure the directory exists
 
     # Handle user@repo format (convert to standard GitHub URL)
@@ -305,7 +273,7 @@ def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = No
 
     # Extract the repo name from URL
     repo_name = repo_url.split('/')[-1].replace('.git', '')
-    res = self.github_url_to_user_repo_format(repo_url)
+    res = github_url_to_user_repo_format(repo_url)
     if res["return"] > 0:
         return res
     else:
@@ -375,12 +343,12 @@ def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = No
                 return {"return": 0}
             else:
                 logger.warning(f"The repo to be cloned has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
-                self.unregister_repo(is_conflict['conflicting_path'])
-                self.register_repo(repo_path, meta_data)
+                unregister_repo(is_conflict['conflicting_path'], os.path.join(repos_path, 'repos.json'))
+                register_repo(repo_path, repos_path, meta_data)
                 logger.warning(f"{repo_path} is registered in repos.json and {is_conflict['conflicting_path']} is unregistered.")
                 return {"return": 0}
         else:         
-            r = self.register_repo(repo_path, meta_data)
+            r = register_repo(repo_path, repos_path, meta_data)
             if r['return'] > 0:
                 return r
             return {"return": 0}
@@ -389,3 +357,41 @@ def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = No
         return {'return': 1, 'error': f"Git command failed: {e}"}
     except Exception as e:
         return {'return': 1, 'error': f"Error pulling repository: {str(e)}"}
+    
+def github_url_to_user_repo_format(self, url):
+        """
+        Converts a GitHub repo URL to user@repo_name format.
+
+        :param url: str, GitHub repository URL (e.g., https://github.com/user/repo_name.git)
+        :return: str, formatted as user@repo_name
+        """
+        # Regex to match GitHub URLs
+        pattern = r"(?:https?://)?(?:www\.)?github\.com/([^/]+)/([^/.]+)(?:\.git)?"
+        
+        match = re.match(pattern, url)
+        if match:
+            user, repo_name = match.groups()
+            return {"return": 0, "value": f"{user}@{repo_name}"}
+        else:
+            return {"return": 0, "value": os.path.basename(url).replace(".git", "")}
+        
+def register_repo(repo_path, repos_path, repo_meta):
+    
+        if repo_meta.get('deps'):
+            for dep in repo_meta['deps']:
+                pull_repo(dep['url'], repo_path, branch=dep.get('branch'), checkout=dep.get('checkout'))
+
+        # Get the path to the repos.json file in $HOME/MLC
+        repos_file_path = os.path.join(repos_path, 'repos.json')
+
+        with open(repos_file_path, 'r') as f:
+            repos_list = json.load(f)
+        
+        if repo_path not in repos_list:
+            repos_list.append(repo_path)
+            logger.info(f"Added new repo path: {repo_path}")
+
+        with open(repos_file_path, 'w') as f:
+            json.dump(repos_list, f, indent=2)
+            logger.info(f"Updated repos.json at {repos_file_path}")
+        return {'return': 0}
