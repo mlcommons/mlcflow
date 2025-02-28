@@ -113,6 +113,7 @@ Main Script Meta:""")
             res = pull_repo(repo_url="mlcommons@mlperf-automations", branch="dev", repos_path=self.repos_path, repos=self.repos)
             if res["return"]>0:
                 return res
+            self.repos = self.load_repos_and_meta()
             script_path = self.find_target_folder("script")
 
         module_path = os.path.join(script_path, "module.py")
