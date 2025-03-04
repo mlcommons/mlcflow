@@ -41,9 +41,6 @@ jobs:
         sudo apt update
         sudo apt install -y podman
         podman --version
-        echo "alias docker=podman" >> ~/.bashrc
-        source ~/.bashrc
-        export PATH=$(which podman | xargs dirname):$PATH
 
     - name: Install mlcflow from the pull request's source repository and branch
       run: |
@@ -58,12 +55,12 @@ jobs:
     - name: Test --docker_dt for running in detached mode
       run: |
         mlc docker run --tags=detect,os --docker_dt
-        docker stop $(docker ps -aq)
+        podman stop $(podman ps -aq)
 
     - name: Test --docker_detached for running in detached mode
       run: |
         mlc docker run --tags=detect,os --docker_detached
-        docker stop $(docker ps -aq)
+        podman stop $(podman ps -aq)
 
     - name: Test --docker_cache 
       run: |
