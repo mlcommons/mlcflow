@@ -3,7 +3,6 @@ import logging
 import os  
 import subprocess  
 import mlc   
-import pytest
 
 # Configure logging
 logging.basicConfig(
@@ -260,3 +259,21 @@ def test_run_script():
     })
     assert res['return'] == 0, f"Test failed: {res['error']}"
     logger.info("###### TEST run script SUCCESSFUL.")
+
+# Run all tests
+def run_tests():
+    test_list_repo()
+    test_find_cache()
+    test_run_script()
+    test_find_cache()
+    test_show_cache()
+    test_rm_cache()
+    test_cp_script()
+    test_add_repo()
+    test_add_script()
+    test_mv_script()
+    test_show_script()
+    test_find_script()
+    test_rm_script()
+    test_list_script()
+    test_list_cache()    
