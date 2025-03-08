@@ -1,20 +1,14 @@
 
-import logging
 import os  
 import subprocess  
 import mlc   
+from mlc import get_mlc_logger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,  # Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    format="%(asctime)s - %(levelname)s - %(message)s",  # Log message format
-    handlers=[
-        logging.FileHandler("test_mlc_access.log"),  # Log to a file
-        logging.StreamHandler()  # Log to the console
-    ]
-)
+logger = get_mlc_logger()
 
-logger = logging.getLogger(__name__)
+logger.info("test info")
+logger.warning("test warning")
+logger.error("test error")
 
 # Helper function to process and log output
 def process_output(target, action, res):

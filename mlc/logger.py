@@ -40,3 +40,7 @@ def setup_logging(log_path = os.getcwd(),log_file = 'mlc-log.txt'):
         logger.propagate = False
 
 logger = logging.getLogger(__name__)
+
+def get_mlc_logger():
+    setup_logging(log_path=os.getcwd(),log_file='mlc-log.txt')
+    return logger
