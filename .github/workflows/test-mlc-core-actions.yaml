@@ -241,6 +241,15 @@ jobs:
       run: |
         mlc pull repo mlcommons@mlperf-automations --checkout=dev
 
+    - name: Test for rm cache - invalid cache entry tags(test succeeds if command fails)
+      run: |
+        ! mlc rm cache --tags=sample,invalid,tags
+
+    - name: Test for rm cache when the cache folder is empty(only for mlc rm cache without specifying particular script)
+      run: |
+        mlc rm cache -f
+        mlc rm cache -f
+
     - name: Run tests from test-mlc-access.py
       run: |
         cd .github/scripts && python -c "import test_mlc_access as test; test.run_tests()"
