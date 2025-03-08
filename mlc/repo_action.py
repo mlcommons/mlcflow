@@ -296,8 +296,8 @@ class RepoAction(Action):
         repo_url = run_args.get('repo', run_args.get('url', 'repo'))
         if not repo_url or repo_url == "repo":
             for repo_object in self.repos:
-                repo_folder_name = os.path.basename(repo_object.path)
-                if "@" in repo_folder_name:
+                if os.path.exists(os.path.join(repo_object.path, ".git")):
+                    repo_folder_name = os.path.basename(repo_object.path)
                     res = self.pull_repo(repo_folder_name)
                     if res['return'] > 0:
                         return res
