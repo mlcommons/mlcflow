@@ -47,13 +47,26 @@ class Automation:
         target_index = indices.get(self.automation_type)
         result = []
         if target_index:
-            tags= i.get("tags")
-            tags_split = tags.split(",")
+            tags = i.get("tags")
+            if tags == '':
+                tags_split = []
+            else:
+                tags_split = tags.split(",")
             n_tags = [p for p in tags_split if p.startswith("-")]
             p_tags = list(set(tags_split) - set(n_tags))
+            uid = None
+            alias = None
+            if not tags:
+                if i.get('details'):
+                    item_split = i['details'].split(",")
+                    if len(item_split) > 1:
+                        alias = item_split[0]
+                        uid = item_split[1]
+                    else:
+                        uid = item_split[0]
             for res in target_index:
                 c_tags = res["tags"]
-                if set(p_tags).issubset(set(c_tags)) and set(n_tags).isdisjoint(set(c_tags)):
+                if set(p_tags).issubset(set(c_tags)) and set(n_tags).isdisjoint(set(c_tags)) and (not uid or uid == res['uid']) and (not alias or alias == res['alias']):
                     it = Item(res['path'], res['repo'])
                     result.append(it)
         #logger.info(result)

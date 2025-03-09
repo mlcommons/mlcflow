@@ -121,6 +121,7 @@ jobs:
     - name: Test 7 - run script - Output being used for testing mlc cache
       run: |
         mlc run script --tags=get,imagenet-aux --quiet
+        mlc run script bb2c6dd8c8c64217 --quiet
         mlc run script --tags=get,imagenet-aux,_from.dropbox --quiet
 
     - name: Test 8 - find cache - More than one cache present
