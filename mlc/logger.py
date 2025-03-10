@@ -1,4 +1,4 @@
-from colorama import Fore, Style, init as colorama_init
+    from colorama import Fore, Style, init as colorama_init
 import logging
 import os
 
@@ -25,7 +25,12 @@ def setup_logging(log_path = os.getcwd(),log_file = 'mlc-log.txt'):
     
     if not logger.hasHandlers():
         logFormatter = ColoredFormatter('[%(asctime)s %(filename)s:%(lineno)d %(levelname)s] - %(message)s')
-        logger.setLevel(logging.INFO)
+        if os.getenv('MLC_LOG_LEVEL', '') == 'v':
+            logger.setLevel(logging.DEBUG)
+        elif os.getenv('MLC_LOG_LEVEL', '') == 's':
+            logger.setLevel(logging.ERROR)
+        else:
+            logger.setLevel(logging.INFO)
    
 
         # File hander for logging in file in the specified path
