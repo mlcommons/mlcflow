@@ -1,4 +1,4 @@
-    from colorama import Fore, Style, init as colorama_init
+from colorama import Fore, Style, init as colorama_init
 import logging
 import os
 
