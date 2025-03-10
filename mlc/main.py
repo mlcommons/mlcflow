@@ -165,6 +165,18 @@ def main():
         if hasattr(args, 'extra') and args.extra:
             run_args['dest'] = args.extra[0]
 
+    log_levels = {
+        '-v': logging.DEBUG,   # Verbose -> Debug level
+        '-s': logging.ERROR,   # Silent -> Error level
+        }
+    # Set log level based on the first matching flag
+    for flag, level in log_levels.items():
+        if flag in args.extra:
+            logger.setLevel(level)
+            break
+    else:
+        logger.setLevel(logging.INFO)  # Default to INFO if no flag matches
+
     # Get the action handler for other commands
     action = get_action(args.target, default_parent)
     # Dynamically call the method (e.g., run, list, show)
