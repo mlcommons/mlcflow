@@ -132,7 +132,6 @@ def main():
     
     # Parse arguments
     args = parser.parse_args()
-    print(args)
 
     # set log level for MLCFlow if -v/--verbose or -s/--silent is specified
     log_levels = {
@@ -146,7 +145,7 @@ def main():
         if flag in args.extra:
             logger.setLevel(level)
             args.extra.remove(flag)
-            
+
     #logger.info(f"Args = {args}")
 
     res = utils.convert_args_to_dictionary(args.extra)
