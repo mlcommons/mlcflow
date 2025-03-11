@@ -134,6 +134,19 @@ def main():
     args = parser.parse_args()
     print(args)
 
+    # set log level for MLCFlow if -v/--verbose or -s/--silent is specified
+    log_levels = {
+        '-v': logging.DEBUG,
+        '-verbose': logging.DEBUG,
+        '-s': logging.ERROR,
+        '--silent': logging.ERROR
+        }
+    # Set log level based on the first matching flag
+    for flag, level in log_levels.items():
+        if flag in args.extra:
+            logger.setLevel(level)
+            args.extra.remove(flag)
+            
     #logger.info(f"Args = {args}")
 
     res = utils.convert_args_to_dictionary(args.extra)
@@ -165,19 +178,6 @@ def main():
             run_args['src'] = args.details
         if hasattr(args, 'extra') and args.extra:
             run_args['dest'] = args.extra[0]
-
-    # set log level for MLCFlow if -v/--verbose or -s/--silent is specified
-    log_levels = {
-        '-v': logging.DEBUG,
-        '-verbose': logging.DEBUG,
-        '-s': logging.ERROR,
-        '--silent': logging.ERROR
-        }
-    # Set log level based on the first matching flag
-    for flag, level in log_levels.items():
-        if flag in args.extra:
-            logger.setLevel(level)
-            break
 
     # Get the action handler for other commands
     action = get_action(args.target, default_parent)
