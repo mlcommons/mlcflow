@@ -503,10 +503,6 @@ class Action:
         inp = {}
         src_item = run_args.get('src')
         src_tags = None
-
-        # remove backslash if there in src item
-        if src_item.endswith('/'):
-            src_item = src_item[:-1]
         
         if src_item:
             src_split = src_item.split(":")
