@@ -503,6 +503,11 @@ class Action:
         inp = {}
         src_item = run_args.get('src')
         src_tags = None
+
+        # remove backslash if there in src item
+        if src_item.endswith('/'):
+            src_item = src_item[:-1]
+        
         if src_item:
             src_split = src_item.split(":")
             if len(src_split) > 1:
@@ -510,6 +515,7 @@ class Action:
                 src_item = src_split[1].strip()
             else:
                 src_item = src_split[0].strip()
+
             inp['alias'] = src_item
             inp['folder_name'] = src_item #we dont know if the user gave the alias or the folder name, we first check for alias and then the folder name
         
