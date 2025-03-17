@@ -338,7 +338,7 @@ class Action:
 
         if len(res['list']) == 0:
             # Do not error out if fetch_all is used
-            if inp["fetch_all"] == True:
+            if inp.get("fetch_all", False) == True:
                 logger.warning(f"{target_name} is empty! nothing to be cleared!")
                 return {"return": 0}
             else:
