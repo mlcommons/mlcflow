@@ -142,6 +142,7 @@ jobs:
     - name: Test 11 - cp script - Copy mlc script 
       run: |
         mlc cp script detect-os my-os-detect
+        mlc cp script detect-os/ my-os-detect-1
 
     - name: Test 12 - add repo - Add a new MLC repo 
       run: |
