@@ -11,7 +11,7 @@ class ScriptAction(Action):
     Script Action
     ####################################################################################################################
 
-    Currently, the following actions are supported for Scripts:
+    The following actions are currently supported for scripts:
     1. add
     2. find
     3. show
@@ -22,7 +22,7 @@ class ScriptAction(Action):
     8. Docker
     9. Test
 
-    In MLCFlow, Scripts can be identified in different ways:
+    Scripts in MLCFlow can be identified using different methods:
 
     Using tags: --tags=<comma-separated-tags> (e.g., --tags=detect,os)
     Using alias: <script_alias> (e.g., detect-os)
@@ -42,7 +42,7 @@ class ScriptAction(Action):
     Action: Find (Alias: Search)
     ####################################################################################################################
 
-    The find/search action retrieves the path of scripts available in MLC repositories.  
+    The `find` (or `search`) action retrieves the path of scripts available in MLC repositories.
 
     Example Command:
 
@@ -64,7 +64,7 @@ class ScriptAction(Action):
     Action: Remove(rm)
     ####################################################################################################################
 
-    Deletes one or more scripts from MLC repositories. 
+    The `remove` (`rm`) action deletes one or more scripts from MLC repositories.  
 
     Example Command:
 
@@ -83,7 +83,7 @@ class ScriptAction(Action):
     Action: Show
     ####################################################################################################################
 
-    Retrieves the path and metadata of searched script in MLC repositories. 
+    The `show` action retrieves the path and metadata of the searched script in MLC repositories.  
 
     Example Command:
 
@@ -105,7 +105,7 @@ class ScriptAction(Action):
       For full script meta, see meta file at /home/arjun/MLC/repos/gateoverflow@mlperf-automations/script/detect-os/meta.yaml
 
     Note:
-    - We have an action named Find which is the subset of show, it retrieves only the path of the searched script in MLC repositories 
+    - The `find` action is a subset of `show`, retrieving only the path of the searched script in MLC repositories.
 
         """
         self.action_type = "script"
@@ -136,14 +136,14 @@ Main Script Meta:""")
     Action: Add
     ####################################################################################################################
 
-    Creates a new script in a registered MLC repository. 
+    The `add` action creates a new script in a registered MLC repository.  
 
     Syntax:
 
     mlc add script <user@repo>:new_script --tags=benchmark
 
     Options:
-        --template_tags: A comma-separated list of tags to create a new MLC script based on existing templates.
+        --template_tags: A comma-separated list of tags to create a new MLC script based on existing templates.  
 
     Example Output:
           
@@ -251,7 +251,7 @@ Main Script Meta:""")
     Action: Docker
     ####################################################################################################################
 
-    Runs scripts inside a containerized environment.  
+    The `docker` action runs scripts inside a containerized environment.  
 
     An MLCFlow script can be executed inside a Docker container using either of the following syntaxes:
 
@@ -266,13 +266,13 @@ Main Script Meta:""")
         Runs the specified script inside a Docker container in detached mode (e.g., `mlc docker run --tags=detect,os --docker_dt).
         By default, the Docker container is launched in interactive mode.
     2. --docker_cache:
-        Disabling the use of the Docker cache will force Docker to build all layers from scratch, ignoring previously cached layers (e.g., mlc docker run --tags=detect,os --docker_cache=no)
+        Disabling this flag forces Docker to build all layers from scratch, ignoring cached layers. (e.g., mlc docker run --tags=detect,os --docker_cache=no)
         By default, the value is set to true/yes.
     3. --docker_rebuild:
-        Enabling this flag will rebuild the Docker container even if there are existing containers with the same tag. (e.g., mlc docker run --tags=detect,os --docker_rebuild)
+        Enables rebuilding the Docker container even if an existing container with the same tag is present. (e.g., mlc docker run --tags=detect,os --docker_rebuild)
         By default, the value is set to False.
     4. --dockerfile_recreate:
-        Enabling this flag will recreate the Dockerfile on Docker run (e.g., mlc docker run --tags=detect,os --docker_rebuild --dockerfile_recreate)
+        Forces recreation of the **Dockerfile** during execution. (e.g., mlc docker run --tags=detect,os --docker_rebuild --dockerfile_recreate)
         By default, the value is set to False.
 
     Example Command:
@@ -289,7 +289,7 @@ Main Script Meta:""")
     Action: Run
     ####################################################################################################################
 
-    Executes a script from an MLC repository. 
+    The `run` action executes a script from an MLC repository.  
 
     Example Command:
 
@@ -297,10 +297,9 @@ Main Script Meta:""")
 
     Options:
 
-    1. -j: Shows the output in a JSON format
-    2. mlcr can be used as a shortcut to mlc run script --tags=
-    3. *<Individual script inputs>: In addition to the above options an mlcr command also takes any input specified with 
-        in a script meta in input_mappings as its input.
+    1. -j: Displays the output in JSON format.
+    2. Instead of using `mlc run script --tags=`, you can simply use `mlcr`.
+    3. *<Individual script inputs>: The `mlcr` command can accept additional inputs defined in the script's `input_mappings` metadata.  
 
         """
         return self.call_script_module_function("run", run_args)
@@ -312,7 +311,7 @@ Main Script Meta:""")
     Action: Run
     ####################################################################################################################
 
-    Validates scripts configured with a tests section in meta.yaml. 
+    The `test` action validates scripts that are configured with a `tests` section in `meta.yaml`.  
 
     Example Command:
 
@@ -329,7 +328,7 @@ Main Script Meta:""")
     Action: List
     ####################################################################################################################
 
-    Lists all the scripts and their paths present in repos which are registered in MLC.
+    The `list` action displays all scripts and their paths from repositories registered in MLC.  
 
     Example Command:
 

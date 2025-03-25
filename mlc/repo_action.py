@@ -21,7 +21,7 @@ class RepoAction(Action):
     4. list
     5. remove(rm)
 
-    In MLCFlow, repos can be identified in different ways:
+    Repositories in MLCFlow can be identified using any of the following methods:
 
     Using MLC repo folder name format: <repoowner@reponame> (e.g.,mlcommons@mlperf-automations)
     Using alias: <repo_alias> (e.g., mlcommons@mlperf-automations)
@@ -31,7 +31,7 @@ class RepoAction(Action):
 
     Note:
 
-    - repo uid and repo alias for a particular MLC repository can be found inside meta.yml file.
+    - repo uid and repo alias for a particular MLC repository can be found inside the meta.yml file.
 
     """
 
@@ -48,8 +48,8 @@ class RepoAction(Action):
     Action: Add
     ####################################################################################################################
 
-    add action is used to create a new MLC repo and register in MLCFlow. 
-    The newly created repo folder will be present inside the repos folder within the parent MLC directory.
+    The `add` action is used to create a new MLC repository and register it in MLCFlow.  
+    The newly created repo folder will be stored inside the `repos` folder within the parent MLC directory.  
 
     Example Command:
 
@@ -63,8 +63,8 @@ class RepoAction(Action):
       [2025-02-19 16:34:37,573 main.py:1130 INFO] - Updated repos.json at /home/anandhu/MLC/repos/repos.json
 
     Note:
-      - repo_uid is not supported in the add action for repo target since uid for the repo is assigned automatically while 
-        creating the repository.
+      - repo_uid is not supported in the add action for repo target, as the UID is assigned automatically when the repository
+        is created.
 
         """
         if not run_args['repo']:
@@ -367,25 +367,21 @@ class RepoAction(Action):
     Action: Pull
     ####################################################################################################################
 
-    pull action clones an MLC repository and registers it in MLC.
+    The `pull` action clones an MLC repository and registers it in MLC.
 
-    If the repository already exists locally in MLC repos directory, it fetches the latest changes if there are no 
-    uncommited modifications(does not include untracked files/folders). The pull action could be also used to checkout 
-    to a particular branch or release tag with flags --checkout and --tag.
+    If the repository already exists locally in the MLC repos directory, it fetches the latest changes only if there are no 
+    uncommited modifications(excluding untracked files/folders). The `pull` action could be also used to checkout 
+    to a particular branch, commit or release tag using flags --checkout and --tag.
 
     Example Command:
 
     mlc pull repo mlcommons@script-automations
 
 
-    - The --checkout flag can be used if a user needs to check out a specific commit or branch after cloning. 
-      The user must provide the commit SHA if they want to check out a specific commit. This flag can be used in cases 
-      where the repository exists locally.
-    - The --branch flag can be used if a user needs to check out a specific branch after cloning. The user must provide 
-      the branch name. This flag will only work when cloning a new repository.
-    - The --tag flag can be used to check out a particular release tag.
-    - --pat=<access_token> or --ssh flag can be used to clone a private repository.
-
+    - `--checkout <commit_sha>`: Checks out a specific commit after cloning (applicable when the repository exists locally).
+    - `--branch <branch_name>`: Checks out a specific branch **while cloning** a new repository.
+    - `--tag <release_tag>`: Checks out a particular release tag.
+    - `--pat <access_token>` or `--ssh`: Clones a private repository using a personal access token or SSH.
 
     Example Output:
 
@@ -404,9 +400,9 @@ class RepoAction(Action):
       [2025-02-19 16:46:57,605 main.py:1126 INFO] - Added new repo path: /home/anandhu/MLC/repos/mlcommons@mlperf-automations
       [2025-02-19 16:46:57,606 main.py:1130 INFO] - Updated repos.json at /home/anandhu/MLC/repos/repos.json
 
-        Note:  
-          - repo_uid and repo_alias are not supported in the pull action for the repo target.
-          - Only one of --checkout, --branch, or --tag should be specified when using this action.
+    Note:  
+        - repo_uid and repo_alias are not supported in the pull action for the repo target.
+        - Only one of --checkout, --branch, or --tag should be specified at a time.
 
         """
         repo_url = run_args.get('repo', run_args.get('url', 'repo'))
@@ -442,8 +438,8 @@ class RepoAction(Action):
     Action: List
     ####################################################################################################################
 
-    list action displays all registered MLC repositories along with their aliases and paths.
-
+    The `list` action displays all registered MLC repositories along with their aliases and paths.
+    
     Example Command:
 
     mlc list repo
@@ -481,9 +477,9 @@ class RepoAction(Action):
     Action: rm
     ####################################################################################################################
 
-    rm action removes a specified repository from MLCFlow, deleting both the repo folder and its registration. 
-    If there are any modified local changes, the user will be prompted for confirmation unless the -f flag is used for
-    force removal.
+    The `rm` action removes a specified repository from MLCFlow, deleting both the repo folder and its registration.  
+    If there are any modified local changes, the user will be prompted for confirmation unless the `-f` flag is used  
+    for force removal.
  
     Example Command:
 

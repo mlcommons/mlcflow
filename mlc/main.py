@@ -104,17 +104,17 @@ if default_parent is None:
 # Main CLI function
 def main():
     """
-    MLCFlow is a CLI tool for managing repos, scripts and caches.
-    This framework is designed to drive the automatioin workflows of MLPerf benchmarks more efficiently.
-    You can use this tool for any of your workflow automation tasks.
+    MLCFlow is a CLI tool for managing repos, scripts, and caches.
+    This framework is designed to streamline automation workflows for MLPerf benchmarks more efficiently.
+    You can also use this tool for any of your workflow automation tasks.
 
-    There are actions and targets in MLCFlow. MLCFlow CLI enables users to perform actions on specified targets using simple syntax:
+    MLCFlow CLI operates using actions and targets. It enables users to perform actions on specified targets using the following syntax:
           
     mlc <action> <target> [options]
 
-    Here, actions are the operations to be performed and the target is the object on which the action is executed.
+    Here, actions represent the operations to be performed, and the target is the object on which the action is executed.
 
-    Each target has its own set of specific actions to tailor automation workflows as specifed below
+    Each target has a specific set of actions to tailor automation workflows, as shown below:
     
     | Target  | Actions                                               |
     |---------|-------------------------------------------------------|
@@ -125,9 +125,13 @@ def main():
     Example:
       mlc run script detect-os
       
-    For help related to a particular target, run the command: mlc help <target>
+    For help related to a particular target, run: 
     
-    For help related to particular action for a particular target, run the command: mlc help <action> <target>
+    mlc help <target>
+    
+    For help related to a specific action for a target, run: 
+    
+    mlc help <action> <target>
     """
     parser = argparse.ArgumentParser(prog='mlc', description='A CLI tool for managing repos, scripts, and caches.', add_help=False)
 
