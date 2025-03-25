@@ -18,9 +18,9 @@ MLC scripts can be identified in different ways:
 
 ---
 
-## **Find**  
+## **Find(Alias: Search)**  
 
-The `find` action retrieves the path of scripts available in MLC repositories.  
+The `find/search` action retrieves the path of scripts available in MLC repositories.  
 
 ### **Syntax Variations**  
 
@@ -135,6 +135,17 @@ mlc rm script --tags=detect,os -f
 
 ---
 
+## **List**  
+
+Lists all the scripts and their paths present in repos which are registered in MLC.
+
+**Example Command:**  
+```bash
+mlc list script
+```
+
+---
+
 ## **Run**  
 
 Executes a script from an MLC repository.  
@@ -171,8 +182,11 @@ mlc run script --tags=detect,os -j
 - *`<Individual script inputs>`: In addition to the above options an `mlcr` command also takes any input specified with in a script meta in `input_mappings` as its input.
 
 **Log Levels**
+
 - *Default*  : Provides all logs at the `info` level.
+
 - *Silent* `[--silent/-s]`  : Disables all `debug` and `info` level logs from automation. Logs from individual scripts will still be visible.
+
 - *verbose* `[--verbose/-v]` : Displays both `info` and `debug` level logs from automation, along with logs from individual scripts.
 
 <details>
