@@ -505,6 +505,10 @@ class Action:
         src_tags = None
         
         if src_item:
+            # remove backslash if there in src item
+            if src_item.endswith('/'):
+                src_item = src_item[:-1]
+                
             src_split = src_item.split(":")
             if len(src_split) > 1:
                 src_repo = src_split[0].strip()
