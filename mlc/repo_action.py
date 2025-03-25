@@ -439,7 +439,7 @@ class RepoAction(Action):
         """
     ####################################################################################################################
     Target: Repo
-    Action: Pull
+    Action: List
     ####################################################################################################################
 
     list action displays all registered MLC repositories along with their aliases and paths.

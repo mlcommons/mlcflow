@@ -312,18 +312,11 @@ Main Script Meta:""")
     Action: Run
     ####################################################################################################################
 
-    Executes a script from an MLC repository. 
+    Validates scripts configured with a tests section in meta.yaml. 
 
     Example Command:
 
-    mlc run script --tags=detect,os -j
-
-    Options:
-
-    1. -j: Shows the output in a JSON format
-    2. mlcr can be used as a shortcut to mlc run script --tags=
-    3. *<Individual script inputs>: In addition to the above options an mlcr command also takes any input specified with 
-        in a script meta in input_mappings as its input.
+    mlc test script --tags=benchmark
 
         """
         return self.call_script_module_function("test", run_args)
