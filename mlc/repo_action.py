@@ -9,6 +9,31 @@ from . import utils
 from .logger import logger
 
 class RepoAction(Action):
+    """
+    ####################################################################################################################
+    Repo Action
+    ####################################################################################################################
+    
+    Currently, the following actions are supported for Repos:
+    1. add
+    2. find
+    3. pull
+    4. list
+    5. remove(rm)
+
+    In MLCFlow, repos can be identified in different ways:
+
+    Using MLC repo folder name format: <repoowner@reponame> (e.g.,mlcommons@mlperf-automations)
+    Using alias: <repo_alias> (e.g., mlcommons@mlperf-automations)
+    Using UID: <repo_uid> (e.g., 9cf241afa6074c89)
+    Using both alias and UID: <repo_alias>,<repo_uid> (e.g., mlcommons@mlperf-automations,9cf241afa6074c89)
+    Using URL: <repo_url> (e.g., https://github.com/mlcommons/mlperf-automations)
+
+    Note:
+
+    - repo uid and repo alias for a particular MLC repository can be found inside meta.yml file.
+
+    """
 
     def __init__(self, parent=None):
         #super().__init__(parent)
@@ -17,6 +42,31 @@ class RepoAction(Action):
 
 
     def add(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Repo
+    Action: Add
+    ####################################################################################################################
+
+    add action is used to create a new MLC repo and register in MLCFlow. 
+    The newly created repo folder will be present inside the repos folder within the parent MLC directory.
+
+    Example Command:
+
+    mlc add repo mlcommons@script-automations
+
+    Example Output:
+
+      anandhu@anandhu-VivoBook-ASUSLaptop-X515UA-M515UA:~$ mlc add repo mlcommons@script-automations
+      [2025-02-19 16:34:37,570 main.py:1085 INFO] - New repo path: /home/anandhu/MLC/repos/mlcommons@script-automations
+      [2025-02-19 16:34:37,573 main.py:1126 INFO] - Added new repo path: /home/anandhu/MLC/repos/mlcommons@script-automations
+      [2025-02-19 16:34:37,573 main.py:1130 INFO] - Updated repos.json at /home/anandhu/MLC/repos/repos.json
+
+    Note:
+      - repo_uid is not supported in the add action for repo target since uid for the repo is assigned automatically while 
+        creating the repository.
+
+        """
         if not run_args['repo']:
             logger.error("The repository to be added is not specified")
             return {"return": 1, "error": "The repository to be added is not specified"}
@@ -99,77 +149,95 @@ class RepoAction(Action):
 
 
     def find(self, run_args):
-            # Get repos_list using the existing method
-            repos_list = self.load_repos_and_meta()
-            if(run_args.get('item', run_args.get('artifact'))):
-                repo = run_args.get('item', run_args.get('artifact'))
-            else:
-                repo = run_args.get('repo', run_args.get('item', run_args.get('artifact')))
+        """
+    ####################################################################################################################
+    Target: Repo
+    Action: Find
+    ####################################################################################################################
 
-            # Check if repo is None or empty
-            if not repo:
-                return {"return": 1, "error": "Please enter a Repo Alias, Repo UID, or Repo URL in one of the following formats:\n"
+    find action retrieves the path of a specific repository registered in MLCFlow.
+
+    Example Command:
+
+    mlc find repo mlcommons@script-automations
+
+    Example Output:
+
+      anandhu@anandhu-VivoBook-ASUSLaptop-X515UA-M515UA:~$ mlc find repo mlcommons@mlperf-automations
+      [2025-02-19 15:32:18,352 main.py:1737 INFO] - Item path: /home/anandhu/MLC/repos/mlcommons@mlperf-automations
+
+        """
+        # Get repos_list using the existing method
+        repos_list = self.load_repos_and_meta()
+        if(run_args.get('item', run_args.get('artifact'))):
+            repo = run_args.get('item', run_args.get('artifact'))
+        else:
+            repo = run_args.get('repo', run_args.get('item', run_args.get('artifact')))
+
+        # Check if repo is None or empty
+        if not repo:
+            return {"return": 1, "error": "Please enter a Repo Alias, Repo UID, or Repo URL in one of the following formats:\n"
                                          "- <repo_owner>@<repos_name>\n"
                                          "- <repo_url>\n"
                                          "- <repo_uid>\n"
                                          "- <repo_alias>\n"
                                          "- <repo_alias>,<repo_uid>"}
 
-            # Handle the different repo input formats
-            repo_name = None
-            repo_uid = None
+        # Handle the different repo input formats
+        repo_name = None
+        repo_uid = None
 
-            # Check if the repo is in the format of a repo UID (alphanumeric string)
-            if self.is_uid(repo):
-                repo_uid = repo
-            if "," in repo:
-                repo_split = repo.split(",")
-                repo_name = repo_split[0]
-                if len(repo_split) > 1:
-                    repo_uid = repo_split[1]
-            elif "@" in repo:
-                repo_name = repo
-            elif "github.com" in repo:
-                result = self.github_url_to_user_repo_format(repo)
-                if result["return"] == 0:
-                    repo_name = result["value"]
-                else:
-                    return result
+        # Check if the repo is in the format of a repo UID (alphanumeric string)
+        if self.is_uid(repo):
+            repo_uid = repo
+        if "," in repo:
+            repo_split = repo.split(",")
+            repo_name = repo_split[0]
+            if len(repo_split) > 1:
+                repo_uid = repo_split[1]
+        elif "@" in repo:
+            repo_name = repo
+        elif "github.com" in repo:
+            result = self.github_url_to_user_repo_format(repo)
+            if result["return"] == 0:
+                repo_name = result["value"]
+            else:
+                return result
 
-            # Check if repo_name exists in repos.json
-            matched_repo_path = None
-            for repo_obj in repos_list:
-                if repo_name and repo_name == os.path.basename(repo_obj.path) :
-                    matched_repo_path = repo_obj
-                    break
+        # Check if repo_name exists in repos.json
+        matched_repo_path = None
+        for repo_obj in repos_list:
+            if repo_name and repo_name == os.path.basename(repo_obj.path) :
+                matched_repo_path = repo_obj
+                break
 
-            # Search through self.repos for matching repos
-            lst = []
-            for i in self.repos:
-                if repo_uid and i.meta['uid'] == repo_uid:
-                    lst.append(i)
-                elif repo_name == i.meta['alias']:
-                    lst.append(i)
-                elif self.is_uid(repo) and not any(i.meta['uid'] == repo_uid for i in self.repos):
-                    return {"return": 1, "error": f"No repository with UID: '{repo_uid}' was found"}
-                elif "," in repo and not matched_repo_path and not any(i.meta['uid'] == repo_uid for i in self.repos) and not any(i.meta['alias'] == repo_name for i in self.repos):
-                    return {"return": 1, "error": f"No repository with alias: '{repo_name}' and UID: '{repo_uid}' was found"}
-                elif not matched_repo_path and not any(i.meta['alias'] == repo_name for i in self.repos) and not any(i.meta['uid'] == repo_uid for i in self.repos ):
-                    return {"return": 1, "error": f"No repository with alias: '{repo_name}' was found"}
+        # Search through self.repos for matching repos
+        lst = []
+        for i in self.repos:
+            if repo_uid and i.meta['uid'] == repo_uid:
+                lst.append(i)
+            elif repo_name == i.meta['alias']:
+                lst.append(i)
+            elif self.is_uid(repo) and not any(i.meta['uid'] == repo_uid for i in self.repos):
+                return {"return": 1, "error": f"No repository with UID: '{repo_uid}' was found"}
+            elif "," in repo and not matched_repo_path and not any(i.meta['uid'] == repo_uid for i in self.repos) and not any(i.meta['alias'] == repo_name for i in self.repos):
+                return {"return": 1, "error": f"No repository with alias: '{repo_name}' and UID: '{repo_uid}' was found"}
+            elif not matched_repo_path and not any(i.meta['alias'] == repo_name for i in self.repos) and not any(i.meta['uid'] == repo_uid for i in self.repos ):
+                return {"return": 1, "error": f"No repository with alias: '{repo_name}' was found"}
                 
-            # Append the matched repo path
-            if(len(lst)==0):
-                lst.append(matched_repo_path)
+        # Append the matched repo path
+        if(len(lst)==0):
+            lst.append(matched_repo_path)
             
-            return {'return': 0, 'list': lst}
+        return {'return': 0, 'list': lst}
 
     def github_url_to_user_repo_format(self, url):
-        """
-        Converts a GitHub repo URL to user@repo_name format.
+        # """
+        # Converts a GitHub repo URL to user@repo_name format.
 
-        :param url: str, GitHub repository URL (e.g., https://github.com/user/repo_name.git)
-        :return: str, formatted as user@repo_name
-        """
+        # :param url: str, GitHub repository URL (e.g., https://github.com/user/repo_name.git)
+        # :return: str, formatted as user@repo_name
+        # """
         # Regex to match GitHub URLs
         pattern = r"(?:https?://)?(?:www\.)?github\.com/([^/]+)/([^/.]+)(?:\.git)?"
         
@@ -293,6 +361,54 @@ class RepoAction(Action):
             return {'return': 1, 'error': f"Error pulling repository: {str(e)}"}
 
     def pull(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Repo
+    Action: Pull
+    ####################################################################################################################
+
+    pull action clones an MLC repository and registers it in MLC.
+
+    If the repository already exists locally in MLC repos directory, it fetches the latest changes if there are no 
+    uncommited modifications(does not include untracked files/folders). The pull action could be also used to checkout 
+    to a particular branch or release tag with flags --checkout and --tag.
+
+    Example Command:
+
+    mlc pull repo mlcommons@script-automations
+
+
+    - The --checkout flag can be used if a user needs to check out a specific commit or branch after cloning. 
+      The user must provide the commit SHA if they want to check out a specific commit. This flag can be used in cases 
+      where the repository exists locally.
+    - The --branch flag can be used if a user needs to check out a specific branch after cloning. The user must provide 
+      the branch name. This flag will only work when cloning a new repository.
+    - The --tag flag can be used to check out a particular release tag.
+    - --pat=<access_token> or --ssh flag can be used to clone a private repository.
+
+
+    Example Output:
+
+      anandhu@anandhu-VivoBook-ASUSLaptop-X515UA-M515UA:~$ mlc pull repo mlcommons@mlperf-automations
+      [2025-02-19 16:46:27,208 main.py:1260 INFO] - Cloning repository https://github.com/mlcommons/mlperf-automations.git 
+      to /home/anandhu/MLC/repos/mlcommons@mlperf-automations...
+      Cloning into '/home/anandhu/MLC/repos/mlcommons@mlperf-automations'...
+      remote: Enumerating objects: 77610, done.
+      remote: Counting objects: 100% (2199/2199), done.
+      remote: Compressing objects: 100% (1103/1103), done.
+      remote: Total 77610 (delta 1616), reused 1109 (delta 1095), pack-reused 75411 (from 2)
+      Receiving objects: 100% (77610/77610), 18.36 MiB | 672.00 KiB/s, done.
+      Resolving deltas: 100% (53818/53818), done.
+      [2025-02-19 16:46:57,604 main.py:1288 INFO] - Repository successfully pulled.
+      [2025-02-19 16:46:57,605 main.py:1289 INFO] - Registering the repo in repos.json
+      [2025-02-19 16:46:57,605 main.py:1126 INFO] - Added new repo path: /home/anandhu/MLC/repos/mlcommons@mlperf-automations
+      [2025-02-19 16:46:57,606 main.py:1130 INFO] - Updated repos.json at /home/anandhu/MLC/repos/repos.json
+
+        Note:  
+          - repo_uid and repo_alias are not supported in the pull action for the repo target.
+          - Only one of --checkout, --branch, or --tag should be specified when using this action.
+
+        """
         repo_url = run_args.get('repo', run_args.get('url', 'repo'))
         if not repo_url or repo_url == "repo":
             for repo_object in self.repos:
@@ -320,6 +436,34 @@ class RepoAction(Action):
 
             
     def list(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Repo
+    Action: Pull
+    ####################################################################################################################
+
+    list action displays all registered MLC repositories along with their aliases and paths.
+
+    Example Command:
+
+    mlc list repo
+
+    Example Output:
+
+      anandhu@anandhu-VivoBook-ASUSLaptop-X515UA-M515UA:~$ mlc list repo
+      [2025-02-19 16:56:31,847 main.py:1349 INFO] - Listing all repositories.
+
+      Repositories:
+      -------------
+      - Alias: local
+        Path:  /home/anandhu/MLC/repos/local
+
+      - Alias: mlcommons@mlperf-automations
+        Path:  /home/anandhu/MLC/repos/mlcommons@mlperf-automations
+      -------------
+      [2025-02-19 16:56:31,850 main.py:1356 INFO] - Repository listing ended
+
+        """
         logger.info("Listing all repositories.")
         print("\nRepositories:")
         print("-------------")
@@ -331,7 +475,31 @@ class RepoAction(Action):
         return {"return": 0}
     
     def rm(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Repo
+    Action: rm
+    ####################################################################################################################
 
+    rm action removes a specified repository from MLCFlow, deleting both the repo folder and its registration. 
+    If there are any modified local changes, the user will be prompted for confirmation unless the -f flag is used for
+    force removal.
+ 
+    Example Command:
+
+    mlc rm repo mlcommons@mlperf-automations
+
+    Example Output:
+
+      anandhu@anandhu-VivoBook-ASUSLaptop-X515UA-M515UA:~$ mlc rm repo mlcommons@mlperf-automations
+      [2025-02-19 17:01:59,483 main.py:1360 INFO] - rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json
+      [2025-02-19 17:01:59,521 main.py:1380 INFO] - No local changes detected. Removing repo...
+      [2025-02-19 17:01:59,581 main.py:1384 INFO] - Repo mlcommons@mlperf-automations residing in path /home/anandhu/MLC/repos/mlcommons@mlperf-automations has been successfully removed
+      [2025-02-19 17:01:59,581 main.py:1385 INFO] - Checking whether the repo was registered in repos.json
+      [2025-02-19 17:01:59,581 main.py:1134 INFO] - Unregistering the repo in path /home/anandhu/MLC/repos/mlcommons@mlperf-automations
+      [2025-02-19 17:01:59,581 main.py:1144 INFO] - Path: /home/anandhu/MLC/repos/mlcommons@mlperf-automations has been removed.
+
+        """
         if not run_args['repo']:
             logger.error("The repository to be removed is not specified")
             return {"return": 1, "error": "The repository to be removed is not specified"}
