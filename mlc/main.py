@@ -221,7 +221,7 @@ def main():
             run_args['target'] = 'script' #allowing run to be used for docker run instead of docker script
             args.target = "script"
 
-    if hasattr(args, 'details') and args.details and "," in args.details and not run_args.get("tags") and args.target in ["script", "cache"]:
+    if hasattr(args, 'details') and args.details and not run_args.get("tags") and args.target in ["script", "cache"]:
         run_args['tags'] = args.details
 
     if not run_args.get('details') and args.details:
