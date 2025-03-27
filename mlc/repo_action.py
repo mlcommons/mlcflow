@@ -188,7 +188,7 @@ class RepoAction(Action):
         repo_uid = None
 
         # Check if the repo is in the format of a repo UID (alphanumeric string)
-        if self.is_uid(repo):
+        if utils.is_uid(repo):
             repo_uid = repo
         if "," in repo:
             repo_split = repo.split(",")
@@ -218,7 +218,7 @@ class RepoAction(Action):
                 lst.append(i)
             elif repo_name == i.meta['alias']:
                 lst.append(i)
-            elif self.is_uid(repo) and not any(i.meta['uid'] == repo_uid for i in self.repos):
+            elif utils.is_uid(repo) and not any(i.meta['uid'] == repo_uid for i in self.repos):
                 return {"return": 1, "error": f"No repository with UID: '{repo_uid}' was found"}
             elif "," in repo and not matched_repo_path and not any(i.meta['uid'] == repo_uid for i in self.repos) and not any(i.meta['alias'] == repo_name for i in self.repos):
                 return {"return": 1, "error": f"No repository with alias: '{repo_name}' and UID: '{repo_uid}' was found"}
