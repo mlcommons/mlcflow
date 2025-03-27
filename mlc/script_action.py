@@ -320,6 +320,9 @@ Main Script Meta:""")
         """
         return self.call_script_module_function("test", run_args)
 
+    def help(self, run_args):
+        # Internal function to call the help function in script automation module.py
+        return self.call_script_module_function("help", run_args)
 
     def list(self, args):
         """

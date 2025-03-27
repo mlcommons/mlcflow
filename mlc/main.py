@@ -163,52 +163,59 @@ def main():
         action_parser = subparsers.add_parser(action, help=f'{action.capitalize()} a target.')
         action_parser.add_argument('action', help='action type (run).', nargs='?', default=None)
         action_parser.add_argument('target', choices=['script', 'cache', 'repo'], help='Target type (script).', nargs='?', default=None)
-    
+        action_parser.add_argument('extra', nargs=argparse.REMAINDER, help='Extra options (e.g.,  -v)')
     
     # Parse arguments
     args = parser.parse_args()
-
-    # handle help in mlcflow
-    if args.command in ['help']:
-        help_text = ""
-        if not args.action and not args.target:
-            print(main.__doc__)
-            sys.exit(0)
-        elif args.action and not args.target:
-            if args.action not in ['script', 'cache', 'repo']:
-                logger.error(f"Invalid target {args.action}")
-                raise Exception(f"""Invalid target {args.action}""")
-            else:
-                args.target = args.action
-                args.action = None
-            actions = get_action(args.target, default_parent)
-            help_text += actions.__doc__
-
-            # iterate through every method
-            for method_name, method in inspect.getmembers(actions.__class__, inspect.isfunction):
-                method = getattr(actions, method_name)
-                if method.__doc__ and not method.__doc__.startswith("_"):
-                    help_text += method.__doc__
-            print(help_text)
-            sys.exit(0)
-        else:
-            actions = get_action(args.target, default_parent)
-            try:
-                method = getattr(actions, args.action)
-                help_text += actions.__doc__
-                help_text += method.__doc__
-                print(help_text)
-            except:
-                logger.error(f"Error: '{args.action}' is not supported for {args.target}.")
-            sys.exit(0)
-                
+            
     #logger.info(f"Args = {args}")
 
     res = utils.convert_args_to_dictionary(args.extra)
     if res['return'] > 0:
         return res
-
+    
     run_args = res['args_dict']
+
+    # handle help in mlcflow
+    if args.command in ['help']:
+        help_text = ""
+        if not args.action and not args.target:
+            help_text += main.__doc__
+        elif args.action and not args.target:
+            if args.action not in ['script', 'cache', 'repo']:
+                logger.error(f"Invalid target {args.action}")
+                raise Exception(f"""Invalid target {args.action}""")
+            else:
+                args.target, args.action = args.action, None
+            actions = get_action(args.target, default_parent)
+            help_text += actions.__doc__
+            # iterate through every method
+            for method_name, method in inspect.getmembers(actions.__class__, inspect.isfunction):
+                method = getattr(actions, method_name)
+                if method.__doc__ and not method.__doc__.startswith("_"):
+                    help_text += method.__doc__
+        elif args.action and args.target and run_args.get('tags'):
+            actions = get_action(args.target, default_parent)
+            if actions and hasattr(actions, args.command):
+                method = getattr(actions, args.command)
+                res = method(run_args)
+                if res['return'] > 0:
+                    logger.error(res.get('error', f"Error in {action}"))
+                    raise Exception(f"""An error occurred {res}""")
+            else:
+                logger.error(f"Error: '{args.command}' is not supported for {args.target}.")
+        elif args.action and args.target:
+            actions = get_action(args.target, default_parent)
+            try:
+                method = getattr(actions, args.action)
+                help_text += actions.__doc__
+                help_text += method.__doc__
+            except:
+                logger.error(f"Error: '{args.action}' is not supported for {args.target}.")
+        if help_text != "":
+            print(help_text)
+        sys.exit(0)
+
     if hasattr(args, 'repo') and args.repo:
         run_args['repo'] = args.repo
         
