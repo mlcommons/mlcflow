@@ -173,7 +173,7 @@ def main():
     # set log level for MLCFlow if -v/--verbose or -s/--silent is specified
     log_levels = {
         '-v': logging.DEBUG,
-        '-verbose': logging.DEBUG,
+        '--verbose': logging.DEBUG,
         '-s': logging.ERROR,
         '--silent': logging.ERROR
         }
@@ -181,7 +181,8 @@ def main():
     for flag, level in log_levels.items():
         if flag in args.extra:
             logger.setLevel(level)
-            args.extra.remove(flag)
+            if args.command not in ['docker']:
+                args.extra.remove(flag)
 
     res = utils.convert_args_to_dictionary(args.extra)
     if res['return'] > 0:
