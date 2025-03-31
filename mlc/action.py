@@ -323,7 +323,7 @@ class Action:
         if item_name:
             inp['alias'] = item_name
             inp['folder_name'] = item_name #we dont know if the user gave the alias or the folder name, we first check for alias and then the folder name
-            if self.is_uid(item_name):
+            if utils.is_uid(item_name):
                 inp['uid'] = item_name
         elif item_id:
             inp['uid'] = item_id
@@ -338,7 +338,7 @@ class Action:
 
         if len(res['list']) == 0:
             # Do not error out if fetch_all is used
-            if inp["fetch_all"] == True:
+            if inp.get("fetch_all", False) == True:
                 logger.warning(f"{target_name} is empty! nothing to be cleared!")
                 return {"return": 0}
             else:
@@ -479,21 +479,6 @@ class Action:
 
         return {'return': 0, 'message': f"Tags updated successfully for {len(found_items)} item(s).", 'list': found_items }
 
-    def is_uid(self, name):
-        """
-        Checks if the given name is a 16-digit hexadecimal UID.
-
-        Args:
-            name (str): The string to check.
-
-        Returns:
-            bool: True if the name is a 16-digit hexadecimal UID, False otherwise.
-        """
-        # Define a regex pattern for a 16-digit hexadecimal UID
-        hex_uid_pattern = r"^[0-9a-fA-F]{16}$"
-
-        # Check if the name matches the pattern
-        return bool(re.fullmatch(hex_uid_pattern, name))
 
 
     def cp(self, run_args):
@@ -503,17 +488,23 @@ class Action:
         inp = {}
         src_item = run_args.get('src')
         src_tags = None
+        
         if src_item:
+            # remove backslash if there in src item
+            if src_item.endswith('/'):
+                src_item = src_item[:-1]
+                
             src_split = src_item.split(":")
             if len(src_split) > 1:
                 src_repo = src_split[0].strip()
                 src_item = src_split[1].strip()
             else:
                 src_item = src_split[0].strip()
+
             inp['alias'] = src_item
             inp['folder_name'] = src_item #we dont know if the user gave the alias or the folder name, we first check for alias and then the folder name
         
-            if self.is_uid(src_item):
+            if utils.is_uid(src_item):
                 inp['uid'] = src_item
             src_id = src_item
         else:
@@ -672,7 +663,7 @@ class Action:
                 alias = details_split[0]
                 uid = details_split[1]
             else:
-                if self.is_uid(details_split[0]):
+                if utils.is_uid(details_split[0]):
                     uid = details_split[0]
                 else:
                     alias = details_split[0]

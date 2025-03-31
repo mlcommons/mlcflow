@@ -425,6 +425,23 @@ def convert_args_to_dictionary(inp):
 
     return {'return': 0, 'args_dict': args_dict}
 
+def is_uid(name):
+        """
+        Checks if the given name is a 16-digit hexadecimal UID.
+
+        Args:
+            name (str): The string to check.
+
+        Returns:
+            bool: True if the name is a 16-digit hexadecimal UID, False otherwise.
+        """
+        # Define a regex pattern for a 16-digit hexadecimal UID
+        hex_uid_pattern = r"^[0-9a-fA-F]{16}$"
+
+        # Check if the name matches the pattern
+        return bool(re.fullmatch(hex_uid_pattern, name))
+
+
 def is_valid_url(url):
     pattern = re.compile(
         r"^(https?|ftp)://"  # Protocol (http, https, ftp)
