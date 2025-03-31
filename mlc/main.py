@@ -174,15 +174,14 @@ def main():
     log_levels = {
         '-v': logging.DEBUG,
         '--verbose': logging.DEBUG,
-        '-s': logging.ERROR,
-        '--silent': logging.ERROR
+        '-s': logging.WARNING,
+        '--silent': logging.WARNING
         }
     # Set log level based on the first matching flag
     for flag, level in log_levels.items():
         if flag in args.extra:
             logger.setLevel(level)
-            if args.command not in ['docker']:
-                args.extra.remove(flag)
+            args.extra.remove(flag)
 
     res = utils.convert_args_to_dictionary(args.extra)
     if res['return'] > 0:
