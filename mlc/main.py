@@ -171,12 +171,19 @@ def main():
     #logger.info(f"Args = {args}")
 
     # set log level for MLCFlow if -v/--verbose or -s/--silent is specified
+    log_flag_aliases = {
+        '-v': '--verbose',
+        '-s': '--silent'
+        }
+    
     log_levels = {
-        '-v': logging.DEBUG,
         '--verbose': logging.DEBUG,
-        '-s': logging.WARNING,
         '--silent': logging.WARNING
         }
+
+    # Modify args.extra in place
+    args.extra[:] = [log_flag_aliases.get(arg, arg) for arg in args.extra]
+
     # Set log level based on the first matching flag
     for flag, level in log_levels.items():
         if flag in args.extra:
