@@ -342,7 +342,8 @@ class Action:
                 logger.warning(f"{target_name} is empty! nothing to be cleared!")
                 return {"return": 0}
             else:
-                return {'return': 16, 'error': f'No {target_name} found for {inp}'}
+                logger.warning(f"No {target_name} found for {inp}")
+                return {'return': 0}
         elif len(res['list']) > 1:
             logger.info(f"More than 1 {target_name} found for {inp}:")
             if not i.get('all'):
