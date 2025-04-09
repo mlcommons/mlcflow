@@ -223,7 +223,6 @@ Main Script Meta:""")
         module_path = os.path.join(script_path, "module.py")
         module = self.dynamic_import_module(module_path)
 
-
         # Check if ScriptAutomation is defined in the module
         if hasattr(module, 'ScriptAutomation'):
             automation_instance = module.ScriptAutomation(self, module_path)
