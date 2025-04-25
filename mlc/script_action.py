@@ -12,15 +12,16 @@ class ScriptAction(Action):
     ####################################################################################################################
 
     The following actions are currently supported for scripts:
-    1. add
-    2. find
-    3. show
-    3. Move(mv)
-    5. Remove(rm)
-    6. Copy(cp)
-    7. Run
-    8. Docker
-    9. Test
+    1.  Add
+    2.  Find
+    3.  Show
+    4.  Move(mv)
+    5.  Remove(rm)
+    6.  Copy(cp)
+    7.  Run
+    8.  Docker
+    9.  Test
+    10. Experiment
 
     Scripts in MLCFlow can be identified using different methods:
 
@@ -233,6 +234,8 @@ Main Script Meta:""")
                 result = automation_instance.docker(run_args)  # Pass args to the run method
             elif function_name == "test":
                 result = automation_instance.test(run_args)  # Pass args to the run method
+            elif function_name == "experiment":
+                result = automation_instance.experiment(run_args)  # Pass args to the experiment method
             else:
                 return {'return': 1, 'error': f'Function {function_name} is not supported'}
             
@@ -354,6 +357,22 @@ Main Script Meta:""")
 
         return {"return": 0}
 
+    def experiment(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Script
+    Action: Experiment
+    ####################################################################################################################
+
+    The `experiment` action currently does the function same as of run script, proper workflow will be added in future.
+    experiment-specific functionality.
+
+    Example Command:
+
+    mlc experiment script --tags=detect,os -j
+
+        """
+        return self.call_script_module_function("experiment", run_args)
 
 class ScriptExecutionError(Exception):
     # """Custom error for configuration issues."""

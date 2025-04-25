@@ -147,8 +147,8 @@ def main():
         action_parser.add_argument('details', nargs='?', help='Details or identifier (optional for list).')
         action_parser.add_argument('extra', nargs=argparse.REMAINDER, help='Extra options (e.g.,  -v)')
 
-    # Script and specific subcommands
-    for action in ['docker']:
+    # Script specific subcommands
+    for action in ['docker', 'experiment']:
         action_parser = subparsers.add_parser(action, help=f'{action.capitalize()} a target.')
         action_parser.add_argument('target', choices=['script', 'run'], help='Target type (script).')
         # the argument given after target and before any extra options like --tags will be stored in "details"
@@ -243,7 +243,7 @@ def main():
         if args.target == "repo":
             run_args['repo'] = args.details
   
-    if args.command in ['docker']:
+    if args.command in ['docker', 'experiment']:
         if args.target == "run":
             run_args['target'] = 'script' #allowing run to be used for docker run instead of docker script
             args.target = "script"
