@@ -6,9 +6,9 @@ MLCFlow uses a standardized system for error and warning codes to provide consis
 
 The error code system consists of two main components:
 
-1. **ErrorCode(1000-1399)**: Enum class for error codes (return > 0)
-2. **WarningCode(2000-2399)**: Enum class for warning codes (return = 0, with warning_code field)
-
+1. **WarningCode(1000-1007)**: Enum class for warning codes (return = 0, with warning_code field)
+2. **ErrorCode(2000-2007)**: Enum class for error codes (return > 0)
+<!-- 
 ## Error Code Structure
 
 Error codes are organized by category:
@@ -25,7 +25,7 @@ Warning codes follow a similar structure:
 - **General warnings (2000-99)**: Common warnings that can occur in any part of the system
 - **Script warnings (2100-2199)**: Warnings specific to script execution and management
 - **Repository warnings (2200-2299)**: Warnings related to repository operations
-- **Cache warnings (2300-2399)**: Warnings related to cache operations
+- **Cache warnings (2300-2399)**: Warnings related to cache operations -->
 
 ## Usage
 
@@ -36,7 +36,7 @@ When returning an error:
 ```python
 from mlc.error_codes import ErrorCode, get_error_message
 
-return {'return': ErrorCode.INVALID_ARGUMENT.code, 'error': get_error_message(ErrorCode.INVALID_ARGUMENT.code)}
+return {'return': ErrorCode.UNSUPPORTED_OS.code, 'error': get_error_message(ErrorCode.UNSUPPORTED_OS.description)}
 ```
 
 When returning a warning:
@@ -44,7 +44,7 @@ When returning a warning:
 ```python
 from mlc.error_codes import WarningCode, get_warning_message
 
-return {'return': 0, 'warning_code': WarningCode.EMPTY_RESULT.code, 'warning': get_warning_message(WarningCode.EMPTY_RESULT.code)}
+return {'return': 0, 'warning_code': WarningCode.ELEVATED_PERMISSION_NEEDED.code, 'warning': get_warning_message(WarningCode.ELEVATED_PERMISSION_NEEDED.description)}
 ```
 
 ### In Scripts
@@ -76,10 +76,10 @@ To add a new error or warning code, update the appropriate enum class in `mlc/er
 
 ```python
 # For a new error code
-NEW_ERROR = (105, "Description of the new error")
+NEW_ERROR = (2008, "Description of the new error")
 
 # For a new warning code
-NEW_WARNING = (103, "Description of the new warning")
+NEW_WARNING = (1007, "Description of the new warning")
 ```
 
 Make sure to follow the category structure and use the next available code in the appropriate range. 

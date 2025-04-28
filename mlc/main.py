@@ -97,6 +97,10 @@ def process_console_output(res, target, action, run_args):
         else:
             for item in res['list']:
                 logger.info(f"""Item path: {item.path}""")
+    if "warnings" in res:
+        for warning in res["warnings"]:
+            logger.warning(f"{len(res["warnings"])} warning(s) found during the execution of the mlc command.")
+            logger.warning(f"Warning code: {warning['code']}, Discription: {warning['description']}")
 
 if default_parent is None:
     default_parent = Action()
@@ -270,6 +274,7 @@ def main():
         if res['return'] > 0:
             logger.error(res.get('error', f"Error in {action}"))
             raise Exception(f"""An error occurred {res}""")
+        print("hi")
         process_console_output(res, args.target, args.command, run_args)
     else:
         logger.error(f"Error: '{args.command}' is not supported for {args.target}.")

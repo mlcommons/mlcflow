@@ -341,10 +341,10 @@ class Action:
             # Do not error out if fetch_all is used
             if inp.get("fetch_all", False) == True:
                 logger.warning(f"{target_name} is empty! nothing to be cleared!")
-                return {"return": 0, "warning_code": WarningCode.CACHE_EMPTY.code, "warning": f"{target_name} is empty! nothing to be cleared!"}
+                return {"return": 0, "warnings": [{"code": WarningCode.EMPTY_TARGET.code, "description": f"{target_name} is empty! nothing to be cleared!"}]}
             else:
                 logger.warning(f"No {target_name} found for {inp}")
-                return {'return': 0, "warning_code": WarningCode.EMPTY_RESULT.code, "warning": f"No {target_name} found for {inp}"}
+                return {'return': 0, "warnings": [{"code": WarningCode.EMPTY_TARGET.code, "description": f"No {target_name} found for {inp}"}]}
         elif len(res['list']) > 1:
             logger.info(f"More than 1 {target_name} found for {inp}:")
             if not i.get('all'):

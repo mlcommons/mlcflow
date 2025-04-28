@@ -2,31 +2,15 @@ from enum import Enum, auto
 
 class ErrorCode(Enum):
     """Enum class for error codes in MLCFlow"""
-    # General errors (1000-1099)
-    UNKNOWN_ERROR = (1000, "An unknown error occurred")
-    INVALID_ARGUMENT = (1001, "Invalid argument provided")
-    FILE_NOT_FOUND = (1002, "File not found")
-    PERMISSION_DENIED = (1003, "Permission denied")
-    INVALID_ACTION = (1004, "Invalid action specified")
-    INVALID_TARGET = (1005, "Invalid target specified")
-    REPO_NOT_FOUND = (1006, "Repository not found")
-    ITEM_NOT_FOUND = (1007, "Item not found")
-    INVALID_META = (1008, "Invalid metadata")
-    INVALID_YAML = (1009, "Invalid YAML format")
-    INVALID_JSON = (1010, "Invalid JSON format")
-    
-    # Script errors (1100-1199)
-    SCRIPT_NOT_FOUND = (1100, "Script not found")
-    SCRIPT_EXECUTION_FAILED = (1101, "Script execution failed")
-    SCRIPT_AUTOMATION_NOT_FOUND = (1102, "Script automation not found")
-    SCRIPT_MODULE_NOT_FOUND = (1103, "Script module not found")
-    SCRIPT_FUNCTION_NOT_FOUND = (1104, "Script function not found")
-    
-    # Repository errors (1200-1299)
-    REPO_META_MISSING = (1200, "Repository metadata missing")
-    
-    # Cache errors (1300-1399)
-    CACHE_CORRUPT = (1300, "Cache is corrupt")
+    # General errors (2000-2007)
+    AUTOMATION_SCRIPT_NOT_FOUND = (2000, "The specified automation script was not found")
+    PATH_DOES_NOT_EXIST = (2001, "Provided path does not exists")
+    FILE_NOT_FOUND = (2002, "Required file was not found")
+    PERMISSION_DENIED = (2003, "Insufficient permission to execute the script")
+    IO_Error = (2004, "File I/O operation failed")
+    AUTOMATION_CUSTOM_ERROR = (2005, "Custom error triggered by the script")
+    UNSUPPORTED_OS = (2006, "The Operating System is not supported by the script")
+    MISSING_ENV_VARIABLE = (2007, "Required environment variables are missing")
     
     def __init__(self, code, description):
         self.code = code
@@ -34,24 +18,14 @@ class ErrorCode(Enum):
 
 class WarningCode(Enum):
     """Enum class for warning codes in MLCFlow"""
-    # General warnings (2000-2099)
-    UNKNOWN_WARNING = (2000, "An unknown warning occurred")
-    EMPTY_RESULT = (2001, "No results found")
-    MULTIPLE_RESULTS = (2002, "Multiple results found")
-    INCOMPLETE_OPERATION = (2003, "Operation completed with warnings")
-    
-    # Script warnings (2100-2199)
-    SCRIPT_DEPRECATED = (2100, "Script is deprecated")
-    SCRIPT_VERSION_MISMATCH = (2101, "Script version mismatch")
-    
-    # Repository warnings (2200-2299)
-    REPO_OUT_OF_DATE = (2200, "Repository is out of date")
-    REPO_META_OUT_OF_DATE = (2201, "Repository metadata is out of date")
-    
-    # Cache warnings (2300-2399)
-    CACHE_OUT_OF_DATE = (2300, "Cache is out of date")
-    CACHE_PARTIAL = (2301, "Cache is partially complete")
-    CACHE_EMPTY = (2302, "Cache is empty")
+    # General warnings (1000-1007)
+    IO_WARNING = (1000, "File I/O operation warning")
+    AUTOMATION_SCRIPT_NOT_TESTED = (1001, "the script is not tested on the current operatinig system or is in a development state")
+    AUTOMATION_SCRIPT_SKIPPED = (1002, "The script has been skipped during execution")
+    AUTOMATION_CUSTOM_ERROR = (1003, "Custom warning triggered by the script")
+    NON_INTERACTIVE_ENV = (1004, "Non interactive environment detected")
+    ELEVATED_PERMISSION_NEEDED = (1005, "Elevated permission needed")
+    EMPTY_TARGET = (1006, "The specified target is empty")
     
     def __init__(self, code, description):
         self.code = code
