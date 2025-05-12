@@ -306,8 +306,9 @@ class RepoAction(Action):
                     print(local_changes.stdout.strip())
                     return {"return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
                 else:
-                    logger.info("No local changes detected. Fetching latest changes...")
-                    subprocess.run(['git', '-C', repo_path, 'fetch'], check=True)
+                    logger.info("No local changes detected. Pulling latest changes...")
+                    subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
+                    logger.info("Repository successfully pulled.")
 
             if tag:
                 checkout = "tags/"+tag
@@ -317,9 +318,9 @@ class RepoAction(Action):
                 logger.info(f"Checking out to {checkout} in {repo_path}...")
                 subprocess.run(['git', '-C', repo_path, 'checkout', checkout], check=True)
             
-            if not tag:
-                subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
-                logger.info("Repository successfully pulled.")
+            #if not tag:
+            #    subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
+            #    logger.info("Repository successfully pulled.")
 
             logger.info("Registering the repo in repos.json")
 
