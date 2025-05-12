@@ -13,6 +13,7 @@ from . import utils
 from .index import Index
 from .repo import Repo
 from .item import Item
+from .error_codes import WarningCode
 
 # Base class for actions
 class Action:
@@ -340,9 +341,10 @@ class Action:
             # Do not error out if fetch_all is used
             if inp.get("fetch_all", False) == True:
                 logger.warning(f"{target_name} is empty! nothing to be cleared!")
-                return {"return": 0}
+                return {"return": 0, "warnings": [{"code": WarningCode.EMPTY_TARGET.code, "description": f"{target_name} is empty! nothing to be cleared!"}]}
             else:
-                return {'return': 16, 'error': f'No {target_name} found for {inp}'}
+                logger.warning(f"No {target_name} found for {inp}")
+                return {'return': 0, "warnings": [{"code": WarningCode.EMPTY_TARGET.code, "description": f"No {target_name} found for {inp}"}]}
         elif len(res['list']) > 1:
             logger.info(f"More than 1 {target_name} found for {inp}:")
             if not i.get('all'):

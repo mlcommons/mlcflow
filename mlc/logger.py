@@ -25,6 +25,7 @@ def setup_logging(log_path = os.getcwd(),log_file = 'mlc-log.txt'):
     
     if not logger.hasHandlers():
         logFormatter = ColoredFormatter('[%(asctime)s %(filename)s:%(lineno)d %(levelname)s] - %(message)s')
+        # by default logging level is set to INFO is being set
         logger.setLevel(logging.INFO)
    
 

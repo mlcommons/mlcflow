@@ -6,7 +6,7 @@ import inspect
 
 from . import utils
 
-from .action import Action, logger, default_parent
+from .action import Action, default_parent
 from .repo_action import RepoAction
 from .script_action import ScriptAction
 from .cache_action import CacheAction
@@ -15,7 +15,7 @@ from .experiment_action import ExperimentAction
 
 from .item import Item
 from .action_factory import get_action
-from .logger import logger
+from .logger import logger, logging
 
 
 class Automation:
@@ -97,6 +97,10 @@ def process_console_output(res, target, action, run_args):
         else:
             for item in res['list']:
                 logger.info(f"""Item path: {item.path}""")
+    if "warnings" in res:
+        logger.warning(f"{len(res['warnings'])} warning(s) found during the execution of the mlc command.")
+        for warning in res["warnings"]:
+            logger.warning(f"Warning code: {warning['code']}, Discription: {warning['description']}")
 
 if default_parent is None:
     default_parent = Action()
@@ -147,8 +151,8 @@ def main():
         action_parser.add_argument('details', nargs='?', help='Details or identifier (optional for list).')
         action_parser.add_argument('extra', nargs=argparse.REMAINDER, help='Extra options (e.g.,  -v)')
 
-    # Script and specific subcommands
-    for action in ['docker']:
+    # Script specific subcommands
+    for action in ['docker', 'experiment']:
         action_parser = subparsers.add_parser(action, help=f'{action.capitalize()} a target.')
         action_parser.add_argument('target', choices=['script', 'run'], help='Target type (script).')
         # the argument given after target and before any extra options like --tags will be stored in "details"
@@ -167,8 +171,28 @@ def main():
     
     # Parse arguments
     args = parser.parse_args()
-            
+
     #logger.info(f"Args = {args}")
+
+    # set log level for MLCFlow if -v/--verbose or -s/--silent is specified
+    log_flag_aliases = {
+        '-v': '--verbose',
+        '-s': '--silent'
+        }
+    
+    log_levels = {
+        '--verbose': logging.DEBUG,
+        '--silent': logging.WARNING
+        }
+
+    # Modify args.extra in place
+    args.extra[:] = [log_flag_aliases.get(arg, arg) for arg in args.extra]
+
+    # Set log level based on the first matching flag
+    for flag, level in log_levels.items():
+        if flag in args.extra:
+            logger.setLevel(level)
+            args.extra.remove(flag)
 
     res = utils.convert_args_to_dictionary(args.extra)
     if res['return'] > 0:
@@ -215,7 +239,7 @@ def main():
         if help_text != "":
             print(help_text)
         sys.exit(0)
-
+    
     if hasattr(args, 'repo') and args.repo:
         run_args['repo'] = args.repo
         
@@ -223,7 +247,7 @@ def main():
         if args.target == "repo":
             run_args['repo'] = args.details
   
-    if args.command in ['docker']:
+    if args.command in ['docker', 'experiment']:
         if args.target == "run":
             run_args['target'] = 'script' #allowing run to be used for docker run instead of docker script
             args.target = "script"
