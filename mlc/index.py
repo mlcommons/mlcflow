@@ -38,6 +38,10 @@ class Index:
         self.build_index()
 
     def add(self, meta, folder_type, path, repo):
+        if not repo:
+            logger.error(f"Repo for index add for {path} is none")
+            return
+
         unique_id = meta['uid']
         alias = meta['alias']
         tags = meta['tags']
