@@ -126,7 +126,7 @@ class RepoAction(Action):
     
         if repo_meta.get('deps'):
             for dep in repo_meta['deps']:
-                self.pull_repo(dep['url'], branch=dep.get('branch'), checkout=dep.get('checkout'))
+                self.pull_repo(dep['url'], branch=dep.get('branch'), checkout=dep.get('checkout'), ignore_on_conflict=dep.get('is_alias_okay', True))
 
         # Get the path to the repos.json file in $HOME/MLC
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
@@ -248,7 +248,7 @@ class RepoAction(Action):
         else:
             return {"return": 0, "value": os.path.basename(url).replace(".git", "")}
 
-    def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None):
+    def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None, ignore_on_conflict = False):
         
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path # either the value will be from 'MLC_REPOS'
@@ -269,7 +269,6 @@ class RepoAction(Action):
             if res["return"] > 0:
                 return res
             else:
-                print(res)
                 repo_url = res["url"]
 
 
@@ -342,9 +341,13 @@ class RepoAction(Action):
                     return {"return": 0}
                 elif "already registered" in is_conflict["error"]:
                     #logger.warning(is_conflict["error"])
-                    logger.info("No changes made to repos.json.")
+                    logger.debug("No changes made to repos.json.")
                     return {"return": 0}
                 else:
+                    if ignore_on_conflict:
+                        logger.debug("Repo alias existing. Ignoring the repo pull")
+                        return {"return": 0}
+
                     logger.warning(f"The repo to be cloned has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
                     self.unregister_repo(is_conflict['conflicting_path'])
                     self.register_repo(repo_path, meta_data)
