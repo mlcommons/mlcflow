@@ -1,6 +1,7 @@
 from .repo_action import RepoAction
 from .script_action import ScriptAction
 from .cache_action import CacheAction
+from .experiment_action import ExperimentAction
 
 
 # Factory to get the appropriate action class
@@ -11,5 +12,6 @@ def get_action(target, parent):
 actions = {
         'repo': RepoAction,
         'script': ScriptAction,
-        'cache': CacheAction
+        'cache': CacheAction,
+        'experiment': ExperimentAction
     }

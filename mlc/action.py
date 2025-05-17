@@ -261,7 +261,7 @@ class Action:
         
         target_name = i.get('target_name', self.action_type)
         target_path = os.path.join(repo_path, target_name)
-        if target_name == "cache":
+        if target_name in ["cache", "experiment"]:
             folder_name = f"""{i["script_alias"]}_{item_name or item_id[:8]}""" if i.get("script_alias") else item_name or item_id
         else:
             folder_name = item_name or item_id
@@ -424,7 +424,7 @@ class Action:
             dict: Return code and message.
         """
         # Step 1: Search for items based on input tags
-        target_name = i.get('target_name',"cache")
+        target_name = i.get('target_name', i.get('target', "cache"))
         i['target_name'] = target_name
         ii = i.copy()
 
@@ -712,7 +712,7 @@ class Action:
                 if target == "script":
                     non_variation_tags = [t for t in tags_split if not t.startswith("_")]
                     tags_to_match = non_variation_tags
-                elif target =="cache":
+                elif target in ["cache", "experiment"]:
                     tags_to_match = tags_split
                 else:
                     return {'return': 1, 'error': f"""Target {target} not handled in mlc yet"""}
