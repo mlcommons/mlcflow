@@ -262,7 +262,12 @@ class Action:
         target_name = i.get('target_name', self.action_type)
         target_path = os.path.join(repo_path, target_name)
         if target_name in ["cache", "experiment"]:
-            folder_name = f"""{i["script_alias"]}_{item_name or item_id[:8]}""" if i.get("script_alias") else item_name or item_id
+            extra_tags_suffix=i.get('extra_tags', '').replace(",", "-")[:15]
+            if extra_tags_suffix != '':
+                suffix = f"_{extra_tags_suffix}"
+            else:
+                suffix = ''
+            folder_name = f"""{i["script_alias"]}{suffix}_{item_name or item_id[:8]}""" if i.get("script_alias") else item_name or item_id
         else:
             folder_name = item_name or item_id
 
