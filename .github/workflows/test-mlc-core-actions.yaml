@@ -200,6 +200,12 @@ jobs:
       run: |
         mlc rm repo mlcommons@mlperf-automations -f
         mlc pull repo mlcommons@mlperf-automations --tag=mlperf-automations-v1.0.0
+        
+    - name: Test 22 - Test recursive mlc pull repo
+      run: |
+        export MLC_REPOS=$HOME/test
+        mlc pull repo https://github.com/GATEOverflow/GO-PDFs
+        mlcr detect,os -j
 
   test_mlc_access_core_actions:
 
