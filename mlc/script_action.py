@@ -53,7 +53,6 @@ class ScriptAction(Action):
         if not i.get('target_name'):
             i['target_name'] = "script"
         res = self.parent.search(i)
-        #print(res)
         return res
 
     find = search
@@ -235,6 +234,8 @@ Main Script Meta:""")
                 result = automation_instance.test(run_args)  # Pass args to the run method
             elif function_name == "experiment":
                 result = automation_instance.experiment(run_args)  # Pass args to the experiment method
+            elif function_name == "doc":
+                result = automation_instance.doc(run_args)  # Pass args to the doc method
             else:
                 return {'return': 1, 'error': f'Function {function_name} is not supported'}
             
@@ -284,6 +285,7 @@ Main Script Meta:""")
         """
         return self.call_script_module_function("docker", run_args)
 
+
     def run(self, run_args):
         """
     ####################################################################################################################
@@ -306,11 +308,12 @@ Main Script Meta:""")
         """
         return self.call_script_module_function("run", run_args)
 
+
     def test(self, run_args):
         """
     ####################################################################################################################
     Target: Script
-    Action: Run
+    Action: test
     ####################################################################################################################
 
     The `test` action validates scripts that are configured with a `tests` section in `meta.yaml`.  
@@ -322,9 +325,28 @@ Main Script Meta:""")
         """
         return self.call_script_module_function("test", run_args)
 
+
+    def doc(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Script
+    Action: doc
+    ####################################################################################################################
+
+    The `doc` action creates automatic README for scripts from the contents in `meta.yaml`.  
+
+    Example Command:
+
+    mlc doc script --tags=detect,os
+
+        """
+        return self.call_script_module_function("doc", run_args)
+
+
     def help(self, run_args):
         # Internal function to call the help function in script automation module.py
         return self.call_script_module_function("help", run_args)
+
 
     def list(self, args):
         """
