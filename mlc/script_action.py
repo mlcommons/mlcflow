@@ -236,6 +236,8 @@ Main Script Meta:""")
                 result = automation_instance.experiment(run_args)  # Pass args to the experiment method
             elif function_name == "doc":
                 result = automation_instance.doc(run_args)  # Pass args to the doc method
+            elif function_name == "lint":
+                result = automation_instance.lint(run_args)  # Pass args to the lint method
             else:
                 return {'return': 1, 'error': f'Function {function_name} is not supported'}
             
@@ -341,6 +343,22 @@ Main Script Meta:""")
 
         """
         return self.call_script_module_function("doc", run_args)
+
+    def lint(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Script
+    Action: lint
+    ####################################################################################################################
+
+    The `lint` action automatically formats the contents in `meta.yaml`.  
+
+    Example Command:
+
+    mlc lint script --tags=detect,os
+
+        """
+        return self.call_script_module_function("lint", run_args)
 
 
     def help(self, run_args):
