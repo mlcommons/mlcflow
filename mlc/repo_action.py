@@ -72,7 +72,7 @@ class RepoAction(Action):
             return {"return": 1, "error": "The repository to be added is not specified"}
 
         i_repo_path = run_args['repo'] #can be a path, forder_name or URL
-        repo_folder_name = os.path.basename(i_repo_path)
+        repo_folder_name = os.path.basename(i_repo_path.rstrip('/'))
 
         repo_path = os.path.join(self.repos_path, repo_folder_name)
 
