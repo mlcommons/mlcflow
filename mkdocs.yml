@@ -1,5 +1,6 @@
 site_name: MLCFlow Documentation
 repo_url: https://github.com/mlcommons/mlcflow
+site_url: https://docs.mlcommons.org/mlcflow
 theme:
   name: material
   logo: img/logo_v2.svg
