@@ -48,8 +48,11 @@ This step is not mandatory. But the latest `pip` install requires this or else w
     
 === "Windows"
     ```bash
-    python3 -m venv mlcflow
+    python -m venv mlcflow
     mlcflow\Scripts\activate.bat
+    ```
+    Run as Administrator
+    ```bash
     git config --system core.longpaths true
     ```
 
@@ -60,9 +63,14 @@ If you are not using virtual ENV for installation, the latest `pip` install requ
 ```bash
 pip install mlcflow
 ```
-
+## Pull the Automation Repo
+```bash
+mlc pull repo mlcommons@mlperf-automations
+```
+* If you are forking https://github.com/mlcommons/mlperf-automations you can substitute the above command by `mlc pull repo <your_github_username>@mlperf-automations`.
+   
 !!! tip
-    If you want to pull the latest changes (recommended), please do `mlc pull repo` after the installation.
+    If you want to pull the latest changes (recommended), please do `mlc pull repo` periodically.
 
 
 Now, you are ready to use the `mlc` commands. Currently, `mlc` is being used to automate the benchmark runs for:
