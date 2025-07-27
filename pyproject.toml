@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mlcflow"
 version = "1.0.20"
+
 
 
 description = "An automation interface for ML applications"
