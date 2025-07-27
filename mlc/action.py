@@ -653,6 +653,7 @@ class Action:
         uid = i.get("uid")
         alias = i.get("alias")
         item_repo = i.get('item_repo')
+        exact_tags_match = i.get('exact_tags_match', False)
         fetch_all = True if i.get('fetch_all') else False
 
         # For targets like cache, sometimes user would need to clear the entire cache folder present in the system
@@ -725,7 +726,7 @@ class Action:
                 p_tags = list(set(tags_to_match) - set(n_tags_))
                 for res in target_index:
                     c_tags = res["tags"]
-                    if set(p_tags).issubset(set(c_tags)) and set(n_tags).isdisjoint(set(c_tags)):
+                    if (exact_tags_match and set(p_tags) == set(c_tags)) or (not exact_tags_match and set(p_tags).issubset(set(c_tags)) and set(n_tags).isdisjoint(set(c_tags))):
                         it = Item(res['path'], res['repo'])
                         result.append(it)
         return {'return': 0, 'list': result}
