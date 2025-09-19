@@ -81,7 +81,7 @@ class RepoAction(Action):
             return {'return': 1, "error": f"""Repo {run_args['repo']} already exists at {repo_path}"""}
         for repo in self.repos:
             if repo.path == i_repo_path:
-                return {'return': 1, "error": f"""Repo {run_args['repo']} already exists at {repo_path}"""}
+                return {'return': 1, "error": f"""Repo already exists at {repo.path}"""}
 
         if not os.path.exists(i_repo_path):
             #check if its an URL
