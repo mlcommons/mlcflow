@@ -235,7 +235,8 @@ def main():
 
     parser = build_parser(pre_args)
     args = parser.parse_args() if remaining_args or pre_args.target else pre_args
-    if args.command:
+    
+    if hasattr(args, 'command'):
         args.command = args.command.replace("-", "_")
 
     configure_logging(args)
