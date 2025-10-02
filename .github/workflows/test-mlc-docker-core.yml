@@ -60,7 +60,7 @@ jobs:
 
     - name: Test --docker_rebuild
       run: |
-        mlc docker-run --tags=detect,os --docker_dt --docker_cache=no --docker_rebuild
+        mlc docker run --tags=detect,os --docker_dt --docker_cache=no --docker_rebuild
 
     - name: Test --dockerfile_recreate
       run: |
