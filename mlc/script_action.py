@@ -253,7 +253,7 @@ Main Script Meta:""")
             return {'return': 1, 'error': 'ScriptAutomation class not found in the script.'}
 
     def docker(self, run_args):
-        self.docker_run(run_args)
+        return self.docker_run(run_args)
 
     def docker_run(self, run_args):
         """
