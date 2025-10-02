@@ -256,7 +256,7 @@ class RepoAction(Action):
         else:
             return {"return": 0, "value": os.path.basename(url).replace(".git", "")}
 
-    def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None, ignore_on_conflict = False):
+    def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None, ignore_on_conflict = False, repo_path = None):
         
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path # either the value will be from 'MLC_REPOS'
@@ -287,7 +287,8 @@ class RepoAction(Action):
             return res
         else:
             repo_download_name = res["value"]
-            repo_path = os.path.join(repo_base_path, repo_download_name)
+            if not repo_path:
+                repo_path = os.path.join(repo_base_path, repo_download_name)
 
         try:
             # If the directory doesn't exist, clone it
@@ -420,9 +421,9 @@ class RepoAction(Action):
         repo_url = run_args.get('repo', run_args.get('url', 'repo'))
         if not repo_url or repo_url == "repo":
             for repo_object in self.repos:
-                if os.path.exists(os.path.join(repo_object.path, ".git")):
+                if os.path.exists(os.path.join(repo_object.path, ".git")) and os.access(repo_object.path, os.W_OK):
                     repo_folder_name = os.path.basename(repo_object.path)
-                    res = self.pull_repo(repo_folder_name)
+                    res = self.pull_repo(repo_folder_name, repo_path = repo_object.path)
                     if res['return'] > 0:
                         return res
         else:
