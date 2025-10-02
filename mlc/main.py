@@ -140,7 +140,7 @@ def build_parser(pre_args):
         p.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Script-only
-    for action in ['docker', 'experiment', 'doc', 'lint']:
+    for action in ['docker', 'docker-run', 'experiment', 'doc', 'lint']:
         p = subparsers.add_parser(action, add_help=False)
         p.add_argument('target', choices=['script', 'run'])
         p.add_argument('details', nargs='?', help='Details or identifier (optional)')
@@ -172,7 +172,7 @@ def build_run_args(args):
     if args.command in ['pull', 'rm', 'add', 'find'] and args.target == "repo":
         run_args['repo'] = args.details
 
-    if args.command in ['docker', 'experiment', 'doc', 'lint'] and args.target == "run":
+    if args.command in ['docker', 'docker-run', 'experiment', 'doc', 'lint'] and args.target == "run":
         run_args['target'] = 'script'
         args.target = "script"
 
@@ -208,7 +208,7 @@ def main():
     
     | Target  | Actions                                               |
     |---------|-------------------------------------------------------|
-    | script  | run, find/search, rm, mv, cp, add, test, docker, show |
+    | script  | run, find/search, rm, mv, cp, add, test, docker-run, show |
     | cache   | find/search, rm, show                                 |
     | repo    | pull, search, rm, list, find/search                   |
     
@@ -242,7 +242,7 @@ def main():
     if pre_args.help and not "tags" in run_args:
         help_text = ""
         if pre_args.target == "run":
-            if pre_args.action == "docker":
+            if pre_args.action.startswith("docker"):
                 pre_args.target = "script"
             else:
                 logger.error(f"Invalid action-target {pre_args.action} - {pre_args.target} combination")
