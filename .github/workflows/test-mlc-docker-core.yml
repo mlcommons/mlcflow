@@ -46,7 +46,7 @@ jobs:
 
     - name: Test --docker_dt for running in detached mode
       run: |
-        mlc docker_run script --tags=detect,os --docker_dt
+        mlc docker-run script --tags=detect,os --docker_dt
         docker stop $(docker ps -aq)
 
     - name: Test --docker_detached for running in detached mode
@@ -60,8 +60,8 @@ jobs:
 
     - name: Test --docker_rebuild
       run: |
-        mlc docker_run --tags=detect,os --docker_dt --docker_cache=no --docker_rebuild
+        mlc docker-run --tags=detect,os --docker_dt --docker_cache=no --docker_rebuild
 
     - name: Test --dockerfile_recreate
       run: |
-        mlc docker_run script --tags=detect,os --docker_dt --docker_cache=no --docker_rebuild --dockerfile_recreate
+        mlc docker-run script --tags=detect,os --docker_dt --docker_cache=no --docker_rebuild --dockerfile_recreate
