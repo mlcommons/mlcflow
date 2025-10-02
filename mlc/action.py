@@ -42,6 +42,8 @@ class Action:
             return {'return': 1, 'error': "'action' key is required in options"}
         #logger.info(f"options = {options}")
 
+        action_name = action_name.replace("-", "_")
+
         action_target = options.get('target')
         if not action_target:
             action_target = options.get('automation', 'script')  # Default to script if not provided
