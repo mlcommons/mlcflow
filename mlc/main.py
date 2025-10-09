@@ -88,6 +88,10 @@ def mlcr():
     mlc_expand_short("run")
 def mlcd():
     mlc_expand_short("docker")
+def mlcdr():
+    mlc_expand_short("docker")
+def mlcrr():
+    mlc_expand_short("remote-run")
 def mlce():
     mlc_expand_short("experiment")
 def mlct():

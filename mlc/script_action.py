@@ -293,6 +293,30 @@ Main Script Meta:""")
         """
         return self.call_script_module_function("docker", run_args)
 
+    def remote_run(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Script
+    Action: remote-run
+    ####################################################################################################################
+
+    The `remote-run` action runs a shell command on a remote machine via ssh connection.  
+
+
+    Flags Available:
+
+    1. --remote_host:
+        IP or hostnanme for the remote machine
+    2. --remote_port:
+        ssh port for the remote machineIP or hostnanme for the remote machine
+
+    Example Command:
+
+    mlc remote-run script --tags=detect,os -j
+
+        """
+        return self.call_script_module_function("remote_run", run_args)
+
 
     def run(self, run_args):
         """
