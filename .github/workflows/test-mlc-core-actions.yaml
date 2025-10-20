@@ -202,8 +202,18 @@ jobs:
       run: |
         mlc rm repo mlcommons@mlperf-automations -f
         mlc pull repo mlcommons@mlperf-automations --tag=mlperf-automations-v1.0.0
+
+    - name: Test 22 - Test silent mode
+      run: |
+        mlcr detect,cpu -j -s
+        mlcr detect,cpu -j --silent
+
+    - name: Test 23 - Test verbose mode
+      run: |
+        mlcr detect,cpu -j -v
+        mlcr detect,cpu -j --verbose
         
-    - name: Test 22 - Test recursive mlc pull repo
+    - name: Test 24 - Test recursive mlc pull repo
       run: |
         export MLC_REPOS=$HOME/test
         mlcp https://github.com/GATEOverflow/GO-PDFs
