@@ -235,6 +235,8 @@ Main Script Meta:""")
                 result = automation_instance.test(run_args)  # Pass args to the run method
             elif function_name == "experiment":
                 result = automation_instance.experiment(run_args)  # Pass args to the experiment method
+            elif function_name == "remote_run":
+                result = automation_instance.remote_run(run_args)  # Pass args to the experiment method
             elif function_name == "help":
                 result = automation_instance.help(run_args)  # Pass args to the help method
             elif function_name == "doc":
