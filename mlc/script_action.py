@@ -219,7 +219,25 @@ Main Script Meta:""")
         # Import script submodule 
         script_path = self.find_target_folder("script")
         if not script_path:
-            return {'return': 1, 'error': f"""Script automation not found. Have you done "mlc pull repo mlcommons@mlperf-automations --branch=dev"?"""}
+            logger.warning("Script automation not found. Automatically pulling mlcommons@mlperf-automations repository...")
+            
+            # Use the access method to pull the required repository
+            result = self.access({
+                "automation": "repo",
+                "action": "pull",
+                "repo": "mlcommons@mlperf-automations",
+                "branch": "dev"
+            })
+            
+            if result['return'] == 0:
+                # Try to find the script path again after pulling
+                script_path = self.find_target_folder("script")
+                if not script_path:
+                    return {'return': 1, 'error': f"""Script automation still not found after pulling mlcommons@mlperf-automations --branch=dev."""}
+            else:
+                # If pull failed, return the original error with additional info
+                logger.error(f"Failed to pull mlcommons@mlperf-automations repository: {result.get('error', 'Unknown error')}")
+                return {'return': 1, 'error': f"""Script automation not found and failed to automatically pull mlcommons@mlperf-automations --branch=dev. Please run "mlc pull repo mlcommons@mlperf-automations --branch=dev" manually: {result.get('error', 'Unknown error')}"""}
 
         module_path = os.path.join(script_path, "module.py")
         module = self.dynamic_import_module(module_path)
