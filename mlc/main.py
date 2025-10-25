@@ -74,9 +74,11 @@ class Automation:
         return {'return': 0, 'list': result}
         #indices
 
+mlc_run_cmd = None
 
 def mlc_expand_short(action, target = "script"):
-
+    global mlc_run_cmd
+    mlc_run_cmd = shlex.join(sys.argv)
     # Insert the positional argument into sys.argv for the main function
     sys.argv.insert(1, action)
     sys.argv.insert(2, target)
@@ -166,18 +168,21 @@ def configure_logging(args):
 
 
 def build_run_args(args):
+    global mlc_run_cmd
     res = utils.convert_args_to_dictionary(getattr(args, 'extra', []))
     if res['return'] > 0:
         return res
 
     run_args = res['args_dict']
-    run_args['mlc_run_cmd'] = shlex.join(sys.argv)
+    if not mlc_run_cmd:
+        mlc_run_cmd = shlex.join(sys.argv)
+    run_args['mlc_run_cmd'] = mlc_run_cmd
 
     if args.command in ['pull', 'rm', 'add', 'find'] and args.target == "repo":
         run_args['repo'] = args.details
 
     if args.command in ['docker', 'docker-run', 'experiment', 'remote-run', 'doc', 'lint'] and args.target == "run":
-        run_args['target'] = 'script'
+        #run_args['target'] = 'script' #dont modify this as script might have target as in input
         args.target = "script"
 
     if args.details and not utils.is_uid(args.details) and not run_args.get("tags") and args.target in ["script", "cache"]:
