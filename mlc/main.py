@@ -129,7 +129,7 @@ log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING}
 def build_pre_parser():
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("action", nargs="?", help="Top-level action (run, build, help, etc.)")
-    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo'], nargs="?", help="Target (repo, script, cache, ...)")
+    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos'], nargs="?", help="Target (repo, script, cache, ...)")
     pre_parser.add_argument("-h", "--help", action="store_true")
     return pre_parser
 
@@ -141,7 +141,7 @@ def build_parser(pre_args):
     # General commands
     for action in ['run', 'pull', 'test', 'add', 'show', 'list', 'find', 'search', 'rm', 'cp', 'mv', 'help']:
         p = subparsers.add_parser(action, add_help=False)
-        p.add_argument('target', choices=['repo', 'script', 'cache'])
+        p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
         p.add_argument('details', nargs='?', help='Details or identifier (optional)')
         p.add_argument('extra', nargs=argparse.REMAINDER)
 
@@ -215,11 +215,11 @@ def main():
 
     Each target has a specific set of actions to tailor automation workflows, as shown below:
     
-    | Target  | Actions                                               |
-    |---------|-------------------------------------------------------|
+    | Target  | Actions                                                   |
+    |---------|-----------------------------------------------------------|
     | script  | run, find/search, rm, mv, cp, add, test, docker-run, show |
-    | cache   | find/search, rm, show                                 |
-    | repo    | pull, search, rm, list, find/search                   |
+    | cache   | find/search, rm, show                                     |
+    | repo    | pull, search, rm, list, find/search                       |
     
     Example:
       mlc run script detect-os
@@ -286,6 +286,12 @@ def main():
             print(help_text)
         sys.exit(0)
 
+    # show repos alias list repo
+    if args.command in ("show"):
+        args.command = "list"
+    if args.target == "repos":
+        args.target = "repo"
+        
     action = get_action(args.target, default_parent)
 
     if not action or not hasattr(action, args.command):
