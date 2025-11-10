@@ -187,7 +187,7 @@ class Index:
                                 continue
 
                             # update mtime
-                            logger.info("Script is modified, index getting updated")
+                            logger.debug("Script is modified, index getting updated")
 
                             self.modified_times[key] = {
                                 "mtime": mtime,
@@ -214,7 +214,7 @@ class Index:
             logger.debug("Index unchanged (no changes detected).")
 
     def _remove_index_entry(self, key):
-        logger.info(f"Removing index entry for {key}")
+        logger.debug(f"Removing index entry for {key}")
         for ft in self.indices:
             self.indices[ft] = [
                 item for item in self.indices[ft]
@@ -225,7 +225,7 @@ class Index:
         """
         Delete old index entry using UID (prevents duplicates).
         """
-        logger.info(f"Deleting and updating index entry for the script {alias} with UID {uid}")
+        logger.debug(f"Deleting and updating index entry for the script {alias} with UID {uid}")
         self.indices[folder_type] = [
             item for item in self.indices[folder_type]
             if item["uid"] != uid
