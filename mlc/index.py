@@ -203,6 +203,7 @@ class Index:
         deleted_keys = old_keys - current_script_keys
         for key in deleted_keys:
             del self.modified_times[key]
+            self._remove_index_entry(key)
             changed = True
 
         if changed:
@@ -212,6 +213,13 @@ class Index:
         else:
             logger.debug("Index unchanged (no changes detected).")
 
+    def _remove_index_entry(self, key):
+        logger.info(f"Removing index entry for {key}")
+        for ft in self.indices:
+            self.indices[ft] = [
+                item for item in self.indices[ft]
+                if key not in item["path"]
+            ]
 
     def _delete_by_uid(self, folder_type, uid, alias):
         """
