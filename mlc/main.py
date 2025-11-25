@@ -126,8 +126,17 @@ log_flag_aliases = {'-v': '--verbose', '-s': '--silent'}
 log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING}
 
 
+class UnderscoreOptionParser(argparse.ArgumentParser):
+    def add_argument(self, *args, **kwargs):
+        new_args = []
+        for a in args:
+            if a.startswith("--"):
+                a = a.replace("-", "_", 1)   # only replace first "-" after "--"
+            new_args.append(a)
+        super().add_argument(*new_args, **kwargs)
+
 def build_pre_parser():
-    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser = UnderscoreOptionParser(add_help=False)
     pre_parser.add_argument("action", nargs="?", help="Top-level action (run, build, help, etc.)")
     pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos'], nargs="?", help="Target (repo, script, cache, ...)")
     pre_parser.add_argument("-h", "--help", action="store_true")
@@ -135,7 +144,7 @@ def build_pre_parser():
 
 
 def build_parser(pre_args):
-    parser = argparse.ArgumentParser(prog="mlc", description="Manage repos, scripts, and caches.", add_help=False)
+    parser = UnderscoreOptionParser(prog="mlc", description="Manage repos, scripts, and caches.", add_help=False)
     subparsers = parser.add_subparsers(dest="command", required=not pre_args.help)
 
     # General commands

@@ -2,6 +2,7 @@ from .action import Action
 import os
 import sys
 import importlib
+import json
 from . import utils
 from .logger import logger
 
@@ -267,6 +268,15 @@ Main Script Meta:""")
             if result['return'] > 0:
                 error = result.get('error', "")
                 raise ScriptExecutionError(f"Script {function_name} execution failed. Error : {error}")
+
+            if str(run_args.get("mlc_output")).lower() in ["on", "true", "yes", "1"]:
+                with open("tmp-state.json", "w") as f:
+                    json.dump(result['new_state'], f, indent=2)
+
+                with open("tmp-run-env.out", "w") as f:
+                    for key,val in result['new_env'].items():
+                        f.write(f"""{key}="{val}"\n""")
+
             return result
         else:
             logger.info("ScriptAutomation class not found in the script.")
