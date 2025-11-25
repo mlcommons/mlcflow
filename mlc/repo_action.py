@@ -447,8 +447,8 @@ class RepoAction(Action):
     def list(self, run_args):
         """
     ####################################################################################################################
-    Target: Repo
-    Action: List
+    Target: Repo/Repos
+    Action: List/Show
     ####################################################################################################################
 
     The `list` action displays all registered MLC repositories along with their aliases and paths.
