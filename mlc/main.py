@@ -200,6 +200,30 @@ def build_run_args(args):
 
     return run_args
 
+def is_quoted(arg):
+    return (arg.startswith("'") and arg.endswith("'")) or \
+           (arg.startswith('"') and arg.endswith('"'))
+
+def check_raw_arguments_for_non_ascii():
+    bad_args = []
+
+    # Skip sys.argv[0] (script name)
+    for arg in sys.argv[1:]:
+        if is_quoted(arg):
+            continue  # allow non-ASCII inside quotes
+        for ch in arg:
+            if ord(ch) > 127:   # non-ASCII
+                bad_args.append((arg, ch, unicodedata.name(ch, "UNKNOWN")))
+                break  # report each arg once
+
+    if bad_args:
+        print("\n⚠️  ERROR: Non-ASCII characters detected in command-line arguments!\n")
+        for arg, ch, name in bad_args:
+            print(f"  → Argument: {arg}")
+            print(f"    Contains non-ASCII character: '{ch}' ({name})")
+        print("\nThis often happens due to copy-paste from PDFs or documents.\n"
+              "Please retype the arguments using plain ASCII.\n")
+        sys.exit(1)
 
 def main():
     """
@@ -239,6 +263,9 @@ def main():
       mlc run script --help
       mlc pull repo -h
     """
+    
+    check_raw_arguments_for_non_ascii()
+
     pre_parser = build_pre_parser()
     pre_args, remaining_args = pre_parser.parse_known_args()
 
