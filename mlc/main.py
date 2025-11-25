@@ -131,7 +131,10 @@ class UnderscoreOptionParser(argparse.ArgumentParser):
         new_args = []
         for a in args:
             if a.startswith("--"):
-                a = a.replace("-", "_", 1)   # only replace first "-" after "--"
+                # keep the leading "--", convert remaining "-" to "_"
+                prefix = "--"
+                rest = a[2:].replace("-", "_")
+                a = prefix + rest
             new_args.append(a)
         super().add_argument(*new_args, **kwargs)
 
