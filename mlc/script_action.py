@@ -3,6 +3,7 @@ import os
 import sys
 import importlib
 import json
+from .index import Index
 from . import utils
 from .logger import logger
 
@@ -229,8 +230,11 @@ Main Script Meta:""")
                 "repo": "mlcommons@mlperf-automations",
                 "branch": "dev"
             })
-            
+
             if result['return'] == 0:
+                self.repos = self.load_repos_and_meta()
+                self.index = Index(self.repos_path, self.repos)
+
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
                 if not script_path:

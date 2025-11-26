@@ -143,10 +143,13 @@ class RepoAction(Action):
         with open(repos_file_path, 'w') as f:
             json.dump(repos_list, f, indent=2)
             logger.info(f"Updated repos.json at {repos_file_path}")
+        
+        
         return {'return': 0}
 
     def unregister_repo(self, repo_path):
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
+        
         return unregister_repo(repo_path, repos_file_path)
 
 
@@ -366,6 +369,7 @@ class RepoAction(Action):
                 r = self.register_repo(repo_path, meta_data)
                 if r['return'] > 0:
                     return r
+
                 return {"return": 0}
 
         except subprocess.CalledProcessError as e:
@@ -440,6 +444,7 @@ class RepoAction(Action):
             res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh)
             if res['return'] > 0:
                 return res
+
 
         return {'return': 0}
 
@@ -546,6 +551,8 @@ def rm_repo(repo_path, repos_file_path, force_remove):
                 unregister_repo(repo_path, repos_file_path)
             else:
                 logger.info("rm repo ooperation cancelled by user!")
+        
+
         else:
             logger.warning(f"Repo {repo_name} was not found in the repo folder. repos.json will be checked for any corrupted entry. If any, that will be removed.")
             unregister_repo(repo_path, repos_file_path)
@@ -565,5 +572,6 @@ def unregister_repo(repo_path, repos_file_path):
             logger.info(f"Path: {repo_path} has been removed.")
         else:
             logger.info(f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
+                
         return {'return': 0}
 
