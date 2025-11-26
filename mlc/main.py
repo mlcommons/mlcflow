@@ -127,7 +127,7 @@ log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING}
 
 def convert_hyphen_to_underscore_in_args():
     for i, arg in enumerate(sys.argv):
-        if arg.startswith("--"):
+        if arg.startswith("--") and "=" not in arg:
             prefix = "--"
             rest = arg[2:].replace("-", "_")
             a = prefix + rest
