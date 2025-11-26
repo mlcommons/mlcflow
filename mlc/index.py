@@ -281,7 +281,6 @@ class Index:
                 })
             else:
                 logger.info(f"Skipping {config_file}: Missing 'uid' field.")
-                return
 
         except Exception as e:
             logger.error(f"Error processing {config_file}: {e}")
