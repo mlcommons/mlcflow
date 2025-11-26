@@ -219,6 +219,11 @@ jobs:
         mlcp https://github.com/GATEOverflow/GO-PDFs
         mlcr detect,os -j
 
+    - name: Test 25 - Test automatic repo pull
+      run: |
+        mlc rm repo mlcommons@mlperf-automations -f
+        mlcr detect,cpu -j
+
   test_mlc_access_core_actions:
 
     runs-on: ${{ matrix.os }}
