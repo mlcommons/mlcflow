@@ -77,8 +77,6 @@ class RepoAction(Action):
 
         repo_path = os.path.join(self.repos_path, repo_folder_name)
 
-        if os.path.exists(repo_path):
-            return {'return': 1, "error": f"""Repo {run_args['repo']} already exists at {repo_path}"""}
         for repo in self.repos:
             if repo.path == i_repo_path:
                 return {'return': 1, "error": f"""Repo already exists at {repo.path}"""}
