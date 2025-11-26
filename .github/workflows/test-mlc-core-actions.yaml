@@ -205,13 +205,13 @@ jobs:
 
     - name: Test 22 - Test silent mode
       run: |
-        mlcr detect,cpu -j -s
-        mlcr detect,cpu -j --silent
+        mlcr detect,cpu -j -s 2>&1 | grep -v INFO
+        mlcr detect,cpu -j --silent 2>&1 | grep -v INFO
 
     - name: Test 23 - Test verbose mode
       run: |
-        mlcr detect,cpu -j -v
-        mlcr detect,cpu -j --verbose
+        mlcr detect,cpu -j -v 2>&1 | grep DEBUG
+        mlcr detect,cpu -j --verbose 2>&1 | grep DEBUG
         
     - name: Test 24 - Test recursive mlc pull repo
       run: |
