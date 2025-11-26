@@ -44,6 +44,7 @@ jobs:
     - name: Test MLPerf inference ResNet50 on Windows (prebuilt loadgen)
       if: runner.os == 'Windows'
       run: |
+        git config --system core.longpaths true
         mlc run script --tags=run-mlperf,inference,_submission,_short --submitter="MLCommons" --hw_name=gh_action --model=resnet50 --implementation=${{ matrix.implementation }} --backend=${{ matrix.backend }} --device=cpu --scenario=Offline --test_query_count=100 --target_qps=1 -v --quiet --adr.loadgen.tags=_from-pip --pip_loadgen=yes
 
     - name: Test MLPerf inference ResNet50 on Unix systems

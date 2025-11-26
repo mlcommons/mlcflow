@@ -2,6 +2,8 @@ from .action import Action
 import os
 import sys
 import importlib
+import json
+from .index import Index
 from . import utils
 from .logger import logger
 
@@ -228,8 +230,11 @@ Main Script Meta:""")
                 "repo": "mlcommons@mlperf-automations",
                 "branch": "dev"
             })
-            
+
             if result['return'] == 0:
+                self.repos = self.load_repos_and_meta()
+                self.index = Index(self.repos_path, self.repos)
+
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
                 if not script_path:
@@ -267,6 +272,15 @@ Main Script Meta:""")
             if result['return'] > 0:
                 error = result.get('error', "")
                 raise ScriptExecutionError(f"Script {function_name} execution failed. Error : {error}")
+
+            if str(run_args.get("mlc_output")).lower() in ["on", "true", "yes", "1"]:
+                with open("tmp-state.json", "w") as f:
+                    json.dump(result['new_state'], f, indent=2)
+
+                with open("tmp-run-env.out", "w") as f:
+                    for key,val in result['new_env'].items():
+                        f.write(f"""{key}="{val}"\n""")
+
             return result
         else:
             logger.info("ScriptAutomation class not found in the script.")
