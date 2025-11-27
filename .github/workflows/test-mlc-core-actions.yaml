@@ -201,7 +201,7 @@ jobs:
     - name: Test 21 - Test mlc pull repo to checkout based on particular release tag
       run: |
         mlc rm repo mlcommons@mlperf-automations -f
-        mlc pull repo mlcommons@mlperf-automations --tag=mlperf-automations-v1.0.0
+        mlc pull repo mlcommons@mlperf-automations --tag=mlperf-automations-v1.2.0
 
     - name: Test 22 - Test silent mode
       run: |
