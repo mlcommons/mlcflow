@@ -205,6 +205,7 @@ jobs:
 
     - name: Test 22 - Test silent mode
       run: |
+        mlcr detcet,cpu -j -s --quiet 
         ! mlcr detect,cpu -j -s --quiet 2>&1 | grep -q INFO
         ! mlcr detect,cpu -j --silent --quiet 2>&1 | grep -q INFO
 
