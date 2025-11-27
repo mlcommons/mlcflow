@@ -130,7 +130,7 @@ class Index:
             del(self.indices[folder_type][index])
         self._save_indices()
 
-    def get_script_mtime(self,folder):
+    def get_item_mtime(self,folder):
         # logger.info(f"Getting latest modified time for folder: {folder}")
         latest = 0
         for root, _, files in os.walk(folder):
@@ -149,9 +149,38 @@ class Index:
             None
         """
 
-        # track all currently detected script paths
-        current_script_keys = set()
+        # track all currently detected item paths
+        current_item_keys = set()
         changed = False
+        
+        # load existing modified times
+        self.modified_times = self._load_modified_times()
+
+        repos_json_path = os.path.join(self.repos_path, "repos.json")
+        repos_mtime = os.path.getmtime(repos_json_path)
+
+        key = f"{repos_json_path}"
+        old = self.modified_times.get(key)
+        old_mtime = old["mtime"] if isinstance(old, dict) else old
+
+        logger.debug(f"Current repos.json mtime: {repos_mtime}")
+        logger.debug(f"Old repos.json mtime: {old_mtime}")
+
+        # record repo mtime
+        self.modified_times[key] = {
+            "mtime": repos_mtime,
+            "date_time": datetime.fromtimestamp(repos_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        }
+        current_item_keys.add(key)
+
+        # if changed, reset indexes
+        if old_mtime is None or old_mtime != repos_mtime:
+            logger.debug("repos.json modified. Clearing index ........")
+            # clear index
+            self.index_data = []
+            changed = True
+        else:
+            logger.debug("Repos.json not modified")
 
         #for repo in os.listdir(self.repos_path):
         for repo in self.repos:
@@ -176,8 +205,8 @@ class Index:
                         config_path = os.path.join(automation_path, config_file)
                         if os.path.isfile(config_path):   
                             key = f"{repo_path}/{folder_type}/{automation_dir}"
-                            current_script_keys.add(key)
-                            mtime = self.get_script_mtime(automation_path)
+                            current_item_keys.add(key)
+                            mtime = self.get_item_mtime(automation_path)
 
                             old = self.modified_times.get(key)
                             old_mtime = old["mtime"] if isinstance(old, dict) else old
@@ -187,7 +216,7 @@ class Index:
                                 continue
 
                             # update mtime
-                            logger.debug("Script is modified, index getting updated")
+                            logger.debug(f"{folder_type} is modified, index getting updated")
 
                             self.modified_times[key] = {
                                 "mtime": mtime,
@@ -200,7 +229,7 @@ class Index:
 
         # remove deleted scripts
         old_keys = set(self.modified_times.keys())
-        deleted_keys = old_keys - current_script_keys
+        deleted_keys = old_keys - current_item_keys
         for key in deleted_keys:
             del self.modified_times[key]
             self._remove_index_entry(key)
@@ -243,29 +272,37 @@ class Index:
         Returns:
             None
         """
+        config_file = None
         for cf in ("meta.yaml", "meta.json"):
             p = os.path.join(folder_path, cf)
             if os.path.isfile(p):
                 config_file = p
                 break
 
-        if not config_file:
+        if config_file is None:
+            logger.debug(f"No meta file in {folder_path}, skipping")
             return
 
         try:
             # Determine the file type based on the extension
             if config_file.endswith(".yaml") or config_file.endswith(".yml"):
                 with open(config_file, "r") as f:
-                    data = yaml.safe_load(f)
+                    data = yaml.safe_load(f) or {}
             elif config_file.endswith(".json"):
                 with open(config_file, "r") as f:
-                    data = json.load(f)
+                    data = json.load(f) or {}
             else:
                 logger.info(f"Skipping {config_file}: Unsupported file format.")
                 return
-
+            
+            if not isinstance(data, dict):
+                logger.warning(f"Skipping {config_file}: Invalid or empty meta")
+                return
             # Extract necessary fields
             unique_id = data.get("uid")
+            if not unique_id:
+                logger.warning(f"Skipping {config_file}: missing uid")
+                return
             tags = data.get("tags", [])
             alias = data.get("alias", None)
 
@@ -299,6 +336,6 @@ class Index:
             try:
                 with open(output_file, "w") as f:
                     json.dump(index_data, f, indent=4, cls=CustomJSONEncoder)
-                #logger.debug(f"Shared index for {folder_type} saved to {output_file}.")
+                logger.debug(f"Shared index for {folder_type} saved to {output_file}.")
             except Exception as e:
                 logger.error(f"Error saving shared index for {folder_type}: {e}")
