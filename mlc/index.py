@@ -152,6 +152,7 @@ class Index:
         # track all currently detected item paths
         current_item_keys = set()
         changed = False
+        repos_changed = False
         
         # load existing modified times
         self.modified_times = self._load_modified_times()
@@ -176,9 +177,7 @@ class Index:
         # if changed, reset indexes
         if old_mtime is None or old_mtime != repos_mtime:
             logger.debug("repos.json modified. Clearing index ........")
-            # clear index
-            self.index_data = []
-            changed = True
+            repos_changed = True
         else:
             logger.debug("Repos.json not modified")
 
@@ -212,7 +211,7 @@ class Index:
                             old_mtime = old["mtime"] if isinstance(old, dict) else old
 
                             # skip if unchanged
-                            if old_mtime == mtime:
+                            if old_mtime == mtime and repos_changed != 1:
                                 continue
 
                             # update mtime
@@ -301,7 +300,7 @@ class Index:
             # Extract necessary fields
             unique_id = data.get("uid")
             if not unique_id:
-                logger.warning(f"Skipping {config_file}: missing uid")
+                logger.debug(f"Skipping {config_file}: missing uid")
                 return
             tags = data.get("tags", [])
             alias = data.get("alias", None)
