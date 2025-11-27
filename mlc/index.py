@@ -58,7 +58,7 @@ class Index:
         """
         Save updated mtimes in modified_times json file.
         """
-        logger.info(f"Saving modified times to {self.modified_times_file}")
+        logger.debug(f"Saving modified times to {self.modified_times_file}")
         with open(self.modified_times_file, "w") as f:
             json.dump(self.modified_times, f, indent=4)
 
@@ -237,7 +237,7 @@ class Index:
         if changed:
             self._save_modified_times()
             self._save_indices()
-            logger.info("Index updated (changes detected).")
+            logger.debug("Index updated (changes detected).")
         else:
             logger.debug("Index unchanged (no changes detected).")
 
@@ -291,7 +291,7 @@ class Index:
                 with open(config_file, "r") as f:
                     data = json.load(f) or {}
             else:
-                logger.info(f"Skipping {config_file}: Unsupported file format.")
+                logger.warning(f"Skipping {config_file}: Unsupported file format.")
                 return
             
             if not isinstance(data, dict):
@@ -300,7 +300,7 @@ class Index:
             # Extract necessary fields
             unique_id = data.get("uid")
             if not unique_id:
-                logger.debug(f"Skipping {config_file}: missing uid")
+                logger.warning(f"Skipping {config_file}: missing uid")
                 return
             tags = data.get("tags", [])
             alias = data.get("alias", None)
@@ -316,7 +316,7 @@ class Index:
                     "repo": repo
                 })
             else:
-                logger.info(f"Skipping {config_file}: Missing 'uid' field.")
+                logger.warning(f"Skipping {config_file}: Missing 'uid' field.")
 
         except Exception as e:
             logger.error(f"Error processing {config_file}: {e}")
