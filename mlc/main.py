@@ -127,11 +127,18 @@ log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING}
 
 def convert_hyphen_to_underscore_in_args():
     for i, arg in enumerate(sys.argv):
-        if arg.startswith("--") and "=" not in arg:
-            prefix = "--"
-            rest = arg[2:].replace("-", "_")
-            a = prefix + rest
-            sys.argv[i] = a
+        if arg.startswith("--"):
+            # Split --option=value into ("option", "value")
+            if "=" in arg:
+                name, value = arg[2:].split("=", 1)
+                new_name = name.replace("-", "_")
+                sys.argv[i] = f"--{new_name}={value}"
+            else:
+                # No value: just convert the option name
+                name = arg[2:]
+                new_name = name.replace("-", "_")
+                sys.argv[i] = f"--{new_name}"
+
 
 
 def build_pre_parser():
