@@ -446,6 +446,8 @@ class RepoAction(Action):
 
         return {'return': 0}
 
+    def show(self, run_args):
+        return self.list(run_args)
             
     def list(self, run_args):
         """

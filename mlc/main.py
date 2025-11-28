@@ -329,9 +329,6 @@ def main():
             print(help_text)
         sys.exit(0)
 
-    # show repos alias list repo
-    if args.command in ("show"):
-        args.command = "list"
     if args.target == "repos":
         args.target = "repo"
         
