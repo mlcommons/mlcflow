@@ -130,15 +130,14 @@ class Index:
             del(self.indices[folder_type][index])
         self._save_indices()
 
-    def get_item_mtime(self,folder):
-        # logger.info(f"Getting latest modified time for folder: {folder}")
+    def get_item_mtime(self,file):
+        # logger.debug(f"Getting latest modified time for file: {file}")
         latest = 0
-        for root, _, files in os.walk(folder):
-            for f in files:
-                fp = os.path.join(root, f)
-                t = os.path.getmtime(fp)
-                if t > latest:
-                    latest = t
+        t = os.path.getmtime(file)
+        if t > latest:
+            latest = t
+            logger.debug(f"Latest modified time updated to: {latest}")
+        # logger.debug("No changes in modified time detected.")
         return latest
     
     def build_index(self):
@@ -196,7 +195,7 @@ class Index:
 
                 # Process each automation directory
                 for automation_dir in os.listdir(folder_path):
-                    logger.debug(f"Checking automation directory: {automation_dir}")
+                    # logger.debug(f"Checking automation directory: {automation_dir}")
                     automation_path = os.path.join(folder_path, automation_dir)
                     if not os.path.isdir(automation_path):
                         logger.debug(f"Skipping non-directory automation path: {automation_path}")
@@ -206,18 +205,18 @@ class Index:
                     json_path = os.path.join(automation_path, "meta.json")
 
                     if os.path.isfile(yaml_path):
+                        # logger.debug(f"Found YAML config file: {yaml_path}")
                         config_path = yaml_path
                     elif os.path.isfile(json_path):
+                        # logger.debug(f"Found JSON config file: {json_path}")
                         config_path = json_path
                     else:
+                        logger.debug(f"No config file found in {automation_path}, skipping")
                         continue
-                    logger.debug(f"Processing config file: {config_path}")
-                    
-                    key = f"{repo_path}/{folder_type}/{automation_dir}"
-                    current_item_keys.add(key)
-                    mtime = self.get_item_mtime(automation_path)
+                    current_item_keys.add(config_path)
+                    mtime = self.get_item_mtime(config_path)
 
-                    old = self.modified_times.get(key)
+                    old = self.modified_times.get(config_path)
                     old_mtime = old["mtime"] if isinstance(old, dict) else old
 
                     # skip if unchanged
@@ -225,14 +224,14 @@ class Index:
                         continue
 
                     # update mtime
-                    logger.debug(f"{key} is modified, index getting updated")
+                    logger.debug(f"{config_path} is modified, index getting updated")
 
-                    self.modified_times[key] = {
+                    self.modified_times[config_path] = {
                         "mtime": mtime,
                         "date_time": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
                     }
                     changed = True
-                    # script changed, so reindex
+                    # meta file changed, so reindex
                     self._process_config_file(config_path, folder_type, automation_path, repo)
 
         # remove deleted scripts
