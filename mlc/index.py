@@ -186,45 +186,54 @@ class Index:
             repo_path = repo.path #os.path.join(self.repos_path, repo)
             if not os.path.isdir(repo_path):
                 continue
-
+            logger.debug(f"Checking repository: {repo_path}")
             # Filter for relevant directories in the repo
             for folder_type in ["script", "cache", "experiment"]:
+                logger.debug(f"Checking folder type: {folder_type}")
                 folder_path = os.path.join(repo_path, folder_type)
                 if not os.path.isdir(folder_path):
                     continue
 
                 # Process each automation directory
                 for automation_dir in os.listdir(folder_path):
+                    logger.debug(f"Checking automation directory: {automation_dir}")
                     automation_path = os.path.join(folder_path, automation_dir)
                     if not os.path.isdir(automation_path):
+                        logger.debug(f"Skipping non-directory automation path: {automation_path}")
+                        continue
+                    
+                    yaml_path = os.path.join(automation_path, "meta.yaml")
+                    json_path = os.path.join(automation_path, "meta.json")
+
+                    if os.path.isfile(yaml_path):
+                        config_path = yaml_path
+                    elif os.path.isfile(json_path):
+                        config_path = json_path
+                    else:
+                        continue
+                    logger.debug(f"Processing config file: {config_path}")
+                    
+                    key = f"{repo_path}/{folder_type}/{automation_dir}"
+                    current_item_keys.add(key)
+                    mtime = self.get_item_mtime(automation_path)
+
+                    old = self.modified_times.get(key)
+                    old_mtime = old["mtime"] if isinstance(old, dict) else old
+
+                    # skip if unchanged
+                    if old_mtime == mtime and repos_changed != 1:
                         continue
 
-                    # Check for configuration files (meta.yaml or meta.json)
-                    for config_file in ["meta.yaml", "meta.json"]:
-                        config_path = os.path.join(automation_path, config_file)
-                        if os.path.isfile(config_path):   
-                            key = f"{repo_path}/{folder_type}/{automation_dir}"
-                            current_item_keys.add(key)
-                            mtime = self.get_item_mtime(automation_path)
+                    # update mtime
+                    logger.debug(f"{key} is modified, index getting updated")
 
-                            old = self.modified_times.get(key)
-                            old_mtime = old["mtime"] if isinstance(old, dict) else old
-
-                            # skip if unchanged
-                            if old_mtime == mtime and repos_changed != 1:
-                                continue
-
-                            # update mtime
-                            logger.debug(f"{folder_type} is modified, index getting updated")
-
-                            self.modified_times[key] = {
-                                "mtime": mtime,
-                                "date_time": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-                            }
-                            changed = True
-                            # script changed, so reindex
-                            self._process_config_file(config_path, folder_type, automation_path, repo)
-                            break  # Only process one config file per automation_dir
+                    self.modified_times[key] = {
+                        "mtime": mtime,
+                        "date_time": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    changed = True
+                    # script changed, so reindex
+                    self._process_config_file(config_path, folder_type, automation_path, repo)
 
         # remove deleted scripts
         old_keys = set(self.modified_times.keys())
@@ -237,9 +246,9 @@ class Index:
         if changed:
             self._save_modified_times()
             self._save_indices()
-            logger.debug("Index updated (changes detected).")
+            logger.debug("**************Index updated (changes detected).*************************")
         else:
-            logger.debug("Index unchanged (no changes detected).")
+            logger.debug("**************Index unchanged (no changes detected).********************")
 
     def _remove_index_entry(self, key):
         logger.debug(f"Removing index entry for {key}")
