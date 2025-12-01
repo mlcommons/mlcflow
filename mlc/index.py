@@ -176,6 +176,12 @@ class Index:
         # if changed, reset indexes
         if old_mtime is None or old_mtime != repos_mtime:
             logger.debug("repos.json modified. Clearing index ........")
+            # // reset indices
+            self.indices = {key: [] for key in self.index_files.keys()}
+            # clear modified times except for repos.json
+            self.modified_times = {key: self.modified_times[key]}
+            self._save_indices()
+            self._save_modified_times()
             repos_changed = True
         else:
             logger.debug("Repos.json not modified")
@@ -212,9 +218,12 @@ class Index:
                         config_path = json_path
                     else:
                         logger.debug(f"No config file found in {automation_path}, skipping")
-                        self._remove_index_entry(automation_path)
-                        logger.debug(f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
-                        changed = True
+                        if automation_dir in self.modified_times:
+                            del self.modified_times[automation_dir]
+                        if any(automation_dir in item["path"] for item in self.indices[folder_type]):
+                            logger.debug(f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
+                            self._remove_index_entry(automation_path)
+                        self._save_indices()
                         continue
                     current_item_keys.add(config_path)
                     mtime = self.get_item_mtime(config_path)
@@ -224,15 +233,20 @@ class Index:
 
                     # skip if unchanged
                     if old_mtime == mtime and repos_changed != 1:
+                        # logger.debug(f"No changes detected for {config_path}, skipping reindexing.")
                         continue
-
+                    if(old_mtime is None):
+                        logger.debug(f"New config file detected: {config_path}. Adding to index.")
                     # update mtime
                     logger.debug(f"{config_path} is modified, index getting updated")
+                    if config_path not in self.modified_times:
+                        logger.debug(f"*************{config_path} not found in modified_times; creating new entry***************")
 
                     self.modified_times[config_path] = {
                         "mtime": mtime,
                         "date_time": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
                     }
+                    logger.debug(f"Modified time for {config_path} updated to {mtime}")
                     changed = True
                     # meta file changed, so reindex
                     self._process_config_file(config_path, folder_type, automation_path, repo)
@@ -244,8 +258,10 @@ class Index:
             del self.modified_times[key]
             self._remove_index_entry(key)
             changed = True
+        logger.debug(f"Deleted keys removed from modified times and indices: {deleted_keys}")
 
         if changed:
+            logger.debug("Changes detected, saving updated index and modified times.")
             self._save_modified_times()
             self._save_indices()
             logger.debug("**************Index updated (changes detected).*************************")
@@ -282,13 +298,6 @@ class Index:
         Returns:
             None
         """
-        config_file = None
-        for cf in ("meta.yaml", "meta.json"):
-            p = os.path.join(folder_path, cf)
-            if os.path.isfile(p):
-                config_file = p
-                break
-
         if config_file is None:
             logger.debug(f"No meta file in {folder_path}, skipping")
             return
