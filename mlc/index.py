@@ -255,8 +255,11 @@ class Index:
         old_keys = set(self.modified_times.keys())
         deleted_keys = old_keys - current_item_keys
         for key in deleted_keys:
+            logger.info(f"Detected deleted item, removing entry form modified times: {key}")
             del self.modified_times[key]
-            self._remove_index_entry(key)
+            folder_key = os.path.dirname(key)
+            logger.info(f"Removing index entry for folder: {folder_key}")
+            self._remove_index_entry(folder_key)
             changed = True
         logger.debug(f"Deleted keys removed from modified times and indices: {deleted_keys}")
 
