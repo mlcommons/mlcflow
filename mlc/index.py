@@ -156,28 +156,63 @@ class Index:
         # load existing modified times
         self.modified_times = self._load_modified_times()
 
+        index_json_path = os.path.join(self.repos_path, "index_script.json")
+
+        rebuild_index = False
+
+        #file does not exist, rebuild
+        if not os.path.exists(index_json_path):
+            logger.warning("index_script.json missing. Forcing full index rebuild...")
+            rebuild_index = True
+
+        #file exists but is empty / invalid, rebuild
+        else:
+            try:
+                with open(index_json_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+
+                if content in ("", "[]", "{}"):
+                    logger.warning("index_script.json is empty. Forcing full index rebuild...")
+                    rebuild_index = True
+            except Exception as e:
+                logger.warning(f"index_script.json unreadable ({e}). Forcing full index rebuild...")
+                rebuild_index = True
+
+
+        #rebuild needed, wipe modified_times & reset indices
+        if rebuild_index:
+            logger.debug("Resetting indices and clearing modified_times...")
+
+            self.indices = {k: [] for k in self.index_files.keys()}
+            self.modified_times = {}
+
+            self._save_indices()
+            self._save_modified_times()
+        else:
+            logger.debug("index_script.json valid. Skipping forced rebuild.")
+
+        #check repos.json mtime
         repos_json_path = os.path.join(self.repos_path, "repos.json")
         repos_mtime = os.path.getmtime(repos_json_path)
 
         key = f"{repos_json_path}"
         old = self.modified_times.get(key)
-        old_mtime = old["mtime"] if isinstance(old, dict) else old
+        repo_old_mtime = old["mtime"] if isinstance(old, dict) else old
 
         logger.debug(f"Current repos.json mtime: {repos_mtime}")
-        logger.debug(f"Old repos.json mtime: {old_mtime}")
-
-        # record repo mtime
-        self.modified_times[key] = {
-            "mtime": repos_mtime,
-            "date_time": datetime.fromtimestamp(repos_mtime).strftime("%Y-%m-%d %H:%M:%S")
-        }
+        logger.debug(f"Old repos.json mtime: {repo_old_mtime}")
         current_item_keys.add(key)
 
         # if changed, reset indexes
-        if old_mtime is None or old_mtime != repos_mtime:
+        if repo_old_mtime is None or repo_old_mtime != repos_mtime:
             logger.debug("repos.json modified. Clearing index ........")
-            # // reset indices
+            # reset indices
             self.indices = {key: [] for key in self.index_files.keys()}
+            # record repo mtime
+            self.modified_times[key] = {
+                "mtime": repos_mtime,
+                "date_time": datetime.fromtimestamp(repos_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            }
             # clear modified times except for repos.json
             self.modified_times = {key: self.modified_times[key]}
             self._save_indices()
@@ -186,7 +221,6 @@ class Index:
         else:
             logger.debug("Repos.json not modified")
 
-        #for repo in os.listdir(self.repos_path):
         for repo in self.repos:
             repo_path = repo.path #os.path.join(self.repos_path, repo)
             if not os.path.isdir(repo_path):
@@ -255,10 +289,10 @@ class Index:
         old_keys = set(self.modified_times.keys())
         deleted_keys = old_keys - current_item_keys
         for key in deleted_keys:
-            logger.info(f"Detected deleted item, removing entry form modified times: {key}")
+            logger.warning(f"Detected deleted item, removing entry form modified times: {key}")
             del self.modified_times[key]
             folder_key = os.path.dirname(key)
-            logger.info(f"Removing index entry for folder: {folder_key}")
+            logger.warning(f"Removing index entry for folder: {folder_key}")
             self._remove_index_entry(folder_key)
             changed = True
         logger.debug(f"Deleted keys removed from modified times and indices: {deleted_keys}")
