@@ -163,33 +163,11 @@ class Index:
         #file does not exist, rebuild
         if not os.path.exists(index_json_path):
             logger.warning("index_script.json missing. Forcing full index rebuild...")
-            rebuild_index = True
-
-        #file exists but is empty / invalid, rebuild
-        else:
-            try:
-                with open(index_json_path, "r", encoding="utf-8") as f:
-                    content = f.read().strip()
-
-                if content in ("", "[]", "{}"):
-                    logger.warning("index_script.json is empty. Forcing full index rebuild...")
-                    rebuild_index = True
-            except Exception as e:
-                logger.warning(f"index_script.json unreadable ({e}). Forcing full index rebuild...")
-                rebuild_index = True
-
-
-        #rebuild needed, wipe modified_times & reset indices
-        if rebuild_index:
-            logger.debug("Resetting indices and clearing modified_times...")
-
-            self.indices = {k: [] for k in self.index_files.keys()}
+            logger.debug("Resetting modified_times...")
             self.modified_times = {}
-
-            self._save_indices()
             self._save_modified_times()
         else:
-            logger.debug("index_script.json valid. Skipping forced rebuild.")
+            logger.debug("index_script.json exists. Skipping forced rebuild.")
 
         #check repos.json mtime
         repos_json_path = os.path.join(self.repos_path, "repos.json")
