@@ -131,7 +131,7 @@ def convert_hyphen_to_underscore_in_args():
             # Split --option=value into ("option", "value")
             if "=" in arg:
                 name, value = arg[2:].split("=", 1)
-                new_name = name.replace("-", "_")
+                new_name = name.replace("-", "_") if "." not in name else name
                 sys.argv[i] = f"--{new_name}={value}"
             else:
                 # No value: just convert the option name
