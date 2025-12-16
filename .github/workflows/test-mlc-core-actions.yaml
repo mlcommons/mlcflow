@@ -151,13 +151,14 @@ jobs:
         mlc add repo my-new-repo
         mlc add repo https://github.com/mlcommons/inference
         mlc add repo https://mygit.com/myrepo
-      
+     
+    ' Disabled now as MLCFlow automatically deletes corrupted entries
     - name: Test 13 - rm repo where we have a corrupt entry 
       run: |
         rm -r $HOME/MLC/repos/mlcommons@mlperf-automations
         mlc rm repo mlcommons@mlperf-automations
         mlc pull repo mlcommons@mlperf-automations --branch=dev
-        
+    '   
     - name: Test 14 - add script - Add a new MLC script
       run: |
         mlc add script my-script-1 --tags=my,new-tags-1
