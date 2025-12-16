@@ -523,17 +523,21 @@ class RepoAction(Action):
         r = self.find(run_args)
         
 
-        if r['return'] > 0:
-            return r
+        if r['return'] == 0:
 
-        list_repos = r['list']
-        if len(list_repos) > 1:
-            return {"return": 1, "error": "Please select a unique repo by repo alias or repo UID to remove"}
+            list_repos = r['list']
+            if len(list_repos) > 1:
+                return {"return": 1, "error": "Please select a unique repo by repo alias or repo UID to remove"}
 
-        repo = list_repos[0]
-        print(repo.path)
+            repo = list_repos[0]
+            repo_path = repo.path
 
-        repo_path = repo.path
+        else:
+            if os.path.exists(run_args['repo']):
+                repo_path = run_args['repo']
+            else:
+                return r
+
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
         
         force_remove = True if run_args.get('f') else False
