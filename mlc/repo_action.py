@@ -222,6 +222,7 @@ class RepoAction(Action):
                 matched_repo_path = repo_obj
                 break
 
+
         # Search through self.repos for matching repos
         lst = []
         for i in self.repos:
@@ -539,8 +540,11 @@ class RepoAction(Action):
             repo_path = repo.path
 
         else:
-            if os.path.exists(run_args['repo']):
-                repo_path = run_args['repo']
+            repo = run_args['repo']
+            if os.path.exists(repo):
+                repo_path = repo
+            elif os.path.isdir(os.path.join(self.repos_path, repo)):
+                repo_path = os.path.join(self.repos_path, repo)
             else:
                 return r
 
