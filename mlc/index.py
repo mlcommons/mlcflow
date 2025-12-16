@@ -227,12 +227,15 @@ class Index:
                         config_path = json_path
                     else:
                         logger.debug(f"No config file found in {automation_path}, skipping")
+                        delete_flag = False
                         if automation_dir in self.modified_times:
                             del self.modified_times[automation_dir]
                         if any(automation_dir in item["path"] for item in self.indices[folder_type]):
                             logger.debug(f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
+                            delete_flag = True
                             self._remove_index_entry(automation_path)
-                        self._save_indices()
+                        if delete_flag:
+                            self._save_indices()
                         continue
                     current_item_keys.add(config_path)
                     mtime = self.get_item_mtime(config_path)
