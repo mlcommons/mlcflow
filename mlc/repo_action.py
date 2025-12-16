@@ -212,6 +212,8 @@ class RepoAction(Action):
                     repo_name = result["value"]
                 else:
                     return result
+            else:
+                repo_name = repo
 
         # Check if repo_name exists in repos.json
         matched_repo_path = None
@@ -518,8 +520,20 @@ class RepoAction(Action):
             logger.error("The repository to be removed is not specified")
             return {"return": 1, "error": "The repository to be removed is not specified"}
 
-        repo_folder_name = run_args['repo']
-        repo_path = os.path.join(self.repos_path, repo_folder_name)
+        r = self.find(run_args)
+        
+
+        if r['return'] > 0:
+            return r
+
+        list_repos = r['list']
+        if len(list_repos) > 1:
+            return {"return": 1, "error": "Please select a unique repo by repo alias or repo UID to remove"}
+
+        repo = list_repos[0]
+        print(repo.path)
+
+        repo_path = repo.path
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
         
         force_remove = True if run_args.get('f') else False
@@ -530,7 +544,10 @@ def rm_repo(repo_path, repos_file_path, force_remove):
         logger.info("rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json")
         
         repo_name = os.path.basename(repo_path)
-        if os.path.exists(repo_path):
+        mlc_repos_path = os.path.abspath(os.path.dirname(repos_file_path))
+        repo_parent_path = os.path.abspath(os.path.dirname(repo_path))
+
+        if os.path.isdir(repo_path) and os.path.samefile(mlc_repos_path, repo_parent_path):
             # Check for local changes
             status_command = ['git', '-C', repo_path, 'status', '--porcelain', '--untracked-files=no']
             local_changes = subprocess.run(status_command, capture_output=True, text=True)
@@ -554,7 +571,7 @@ def rm_repo(repo_path, repos_file_path, force_remove):
         
 
         else:
-            logger.warning(f"Repo {repo_name} was not found in the repo folder. repos.json will be checked for any corrupted entry. If any, that will be removed.")
+            logger.warning(f"Repo {repo_name} was not found in the repo folder. repos.json will be checked for external paths. If any, that will be removed.")
             unregister_repo(repo_path, repos_file_path)
 
         return {"return": 0}
