@@ -131,13 +131,10 @@ class Index:
         self._save_indices()
 
     def get_item_mtime(self,file):
-        # logger.debug(f"Getting latest modified time for file: {file}")
         latest = 0
         t = os.path.getmtime(file)
         if t > latest:
             latest = t
-            logger.debug(f"Latest modified time updated to: {latest}")
-        # logger.debug("No changes in modified time detected.")
         return latest
     
     def build_index(self):
@@ -203,7 +200,7 @@ class Index:
             repo_path = repo.path #os.path.join(self.repos_path, repo)
             if not os.path.isdir(repo_path):
                 continue
-            logger.debug(f"Checking repository: {repo_path}")
+            logger.debug(f"------------Checking repository: {repo_path}---------------")
             # Filter for relevant directories in the repo
             for folder_type in ["script", "cache", "experiment"]:
                 logger.debug(f"Checking folder type: {folder_type}")
