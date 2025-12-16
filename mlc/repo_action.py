@@ -229,15 +229,21 @@ class RepoAction(Action):
                 lst.append(i)
             elif repo_name == i.meta['alias']:
                 lst.append(i)
-            elif utils.is_uid(repo) and not any(i.meta['uid'] == repo_uid for i in self.repos):
+
+
+        # After loop, check if any match was found
+        if not lst and not matched_repo_path:
+            # Determine error message based on input
+            if utils.is_uid(repo):
                 return {"return": 1, "error": f"No repository with UID: '{repo_uid}' was found"}
-            elif "," in repo and not matched_repo_path and not any(i.meta['uid'] == repo_uid for i in self.repos) and not any(i.meta['alias'] == repo_name for i in self.repos):
+            elif "," in repo and not matched_repo_path:
                 return {"return": 1, "error": f"No repository with alias: '{repo_name}' and UID: '{repo_uid}' was found"}
-            elif not matched_repo_path and not any(i.meta['alias'] == repo_name for i in self.repos) and not any(i.meta['uid'] == repo_uid for i in self.repos ):
+            else:
                 return {"return": 1, "error": f"No repository with alias: '{repo_name}' was found"}
+
                 
         # Append the matched repo path
-        if(len(lst)==0):
+        if(len(lst)==0 and matched_repo_path):
             lst.append(matched_repo_path)
             
         return {'return': 0, 'list': lst}
