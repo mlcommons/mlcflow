@@ -5,9 +5,6 @@ import yaml
 import logging
 import re
 import shutil
-import unicodedata
-import sys
-import argparse
 from pathlib import Path
 
 from .logger import logger, setup_logging
@@ -17,87 +14,6 @@ from .index import Index
 from .repo import Repo
 from .item import Item
 from .error_codes import WarningCode
-
-def is_quoted(arg):
-    return (arg.startswith("'") and arg.endswith("'")) or \
-           (arg.startswith('"') and arg.endswith('"'))
-
-def check_raw_arguments_for_non_ascii():
-    bad_args = []
-
-    # Skip sys.argv[0] (script name)
-    for arg in sys.argv[1:]:
-        if is_quoted(arg):
-            continue  # allow non-ASCII inside quotes
-        for ch in arg:
-            if ord(ch) > 127:   # non-ASCII
-                bad_args.append((arg, ch, unicodedata.name(ch, "UNKNOWN")))
-                break  # report each arg once
-
-    if bad_args:
-        print("\n ERROR: Non-ASCII characters detected in command-line arguments!\n")
-        for arg, ch, name in bad_args:
-            print(f"  → Argument: {arg}")
-            print(f"    Contains non-ASCII character: '{ch}' ({name})")
-        print("\nThis often happens due to copy-paste from PDFs or documents.\n"
-              "Please retype the arguments using plain ASCII.\n")
-        sys.exit(1)
-
-def convert_hyphen_to_underscore_in_args():
-    for i, arg in enumerate(sys.argv):
-        if arg.startswith("--"):
-            # Split --option=value into ("option", "value")
-            if "=" in arg:
-                name, value = arg[2:].split("=", 1)
-                new_name = name.replace("-", "_") if "." not in name else name
-                sys.argv[i] = f"--{new_name}={value}"
-            else:
-                # No value: just convert the option name
-                name = arg[2:]
-                new_name = name.replace("-", "_")
-                sys.argv[i] = f"--{new_name}"
-
-def build_pre_parser():
-    pre_parser = argparse.ArgumentParser(add_help=False)
-    pre_parser.add_argument("action", nargs="?", help="Top-level action (run, build, help, etc.)")
-    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos'], nargs="?", help="Target (repo, script, cache, ...)")
-    pre_parser.add_argument("-h", "--help", action="store_true")
-    return pre_parser
-
-
-def build_parser(pre_args):
-    parser = argparse.ArgumentParser(prog="mlc", description="Manage repos, scripts, and caches.", add_help=False)
-    subparsers = parser.add_subparsers(dest="command", required=not pre_args.help)
-
-    # General commands
-    for action in ['run', 'pull', 'test', 'add', 'show', 'list', 'find', 'search', 'rm', 'cp', 'mv', 'help']:
-        p = subparsers.add_parser(action, add_help=False)
-        p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
-        p.add_argument('details', nargs='?', help='Details or identifier (optional)')
-        p.add_argument('extra', nargs=argparse.REMAINDER)
-
-    # Script-only
-    for action in ['docker', 'docker-run', 'experiment', 'remote-run', 'doc', 'lint']:
-        p = subparsers.add_parser(action, add_help=False)
-        p.add_argument('target', choices=['script', 'run'])
-        p.add_argument('details', nargs='?', help='Details or identifier (optional)')
-        p.add_argument('extra', nargs=argparse.REMAINDER)
-
-    # Load cfg
-    load_parser = subparsers.add_parser("load", add_help=False)
-    load_parser.add_argument("target", choices=["cfg"])
-    return parser
-
-
-def configure_logging(args):
-    log_flag_aliases = {'-v': '--verbose', '-s': '--silent'}
-    log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING}
-    if hasattr(args, 'extra') and args.extra:
-        args.extra[:] = [log_flag_aliases.get(a, a) for a in args.extra]
-        for flag, level in log_levels.items():
-            if flag in args.extra:
-                logger.setLevel(level)
-                args.extra.remove(flag)
 
 # Base class for actions
 class Action:
@@ -249,25 +165,13 @@ class Action:
             logger.error(f"Error reading file: {e}")
             return None
     
+    def get_index(self):
+        if self._index is None:
+            self._index = Index(self.repos_path, self.repos)
+        return self._index
 
     def __init__(self):        
         setup_logging(log_path=os.getcwd(), log_file='.mlc-log.txt')
-        check_raw_arguments_for_non_ascii()
-        convert_hyphen_to_underscore_in_args()
-
-        pre_parser = build_pre_parser()
-        pre_args, remaining_args = pre_parser.parse_known_args()
-
-        parser = build_parser(pre_args)
-        args = parser.parse_args() if remaining_args or pre_args.target else pre_args
-
-        if hasattr(args, 'command') and args.command:
-            args.command = args.command.replace("-", "_")
-
-        configure_logging(args)
-        Action.pre_args = pre_args
-        Action.args = args
-        logger.debug("logging configured")
         self.logger = logger
 
         temp_repo = os.environ.get('MLC_REPOS','').strip()
@@ -300,7 +204,7 @@ class Action:
 
         self.repos = self.load_repos_and_meta()
         #logger.info(f"In Action class: {self.repos_path}")
-        self.index = Index(self.repos_path, self.repos)
+        self._index = None
 
 
     def add(self, i):
@@ -480,7 +384,7 @@ class Action:
 
                 logger.info(f"{target_name} item: {item_path} has been successfully removed")
 
-            self.index.rm(item_meta, target_name, item_path)
+            self.get_index().rm(item_meta, target_name, item_path)
         
         return {
             "return": 0,
@@ -513,7 +417,7 @@ class Action:
         if save_result["return"] > 0:
             return save_result
    
-        self.index.add(item_meta, target_name, item_path, repo)
+        self.get_index().add(item_meta, target_name, item_path, repo)
         return {'return': 0}
 
     def update(self, i):
@@ -582,7 +486,7 @@ class Action:
             # Save the updated meta back to the item
             item.meta = meta
             save_result = utils.save_json(item_meta_path, meta=meta)
-            self.index.update(meta, target_name, item.path, item.repo)
+            self.get_index().update(meta, target_name, item.path, item.repo)
 
         return {'return': 0, 'message': f"Tags updated successfully for {len(found_items)} item(s).", 'list': found_items }
 
@@ -741,13 +645,13 @@ class Action:
         #Put the src uid to the destination path
         dest.meta['uid'] = src.meta['uid']
         dest._save_meta()
-        self.index.update(dest.meta, target_name, dest.path, dest.repo)
+        self.get_index().update(dest.meta, target_name, dest.path, dest.repo)
         logger.info(f"""Item with uid {dest.meta['uid']} successfully moved from {src.path} to {dest.path}""")
 
         return {'return': 0, 'src': src, 'dest': dest}
 
     def search(self, i):
-        indices = self.index.indices
+        indices = self.get_index().indices
         target = i.get('target_name', self.action_type)
         target_index = indices.get(target)
         result = []

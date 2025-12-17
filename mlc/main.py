@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 import inspect
 import shlex
+import unicodedata
 from . import utils
 
 from .action import Action, default_parent
@@ -122,6 +123,67 @@ if default_parent is None:
     default_parent = Action()
 
 
+log_flag_aliases = {'-v': '--verbose', '-s': '--silent', '-q': '--quiet'}
+log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING, '--quiet': logging.ERROR}
+
+def convert_hyphen_to_underscore_in_args():
+    for i, arg in enumerate(sys.argv):
+        if arg.startswith("--"):
+            # Split --option=value into ("option", "value")
+            if "=" in arg:
+                name, value = arg[2:].split("=", 1)
+                new_name = name.replace("-", "_") if "." not in name else name
+                sys.argv[i] = f"--{new_name}={value}"
+            else:
+                # No value: just convert the option name
+                name = arg[2:]
+                new_name = name.replace("-", "_")
+                sys.argv[i] = f"--{new_name}"
+
+
+
+def build_pre_parser():
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("action", nargs="?", help="Top-level action (run, build, help, etc.)")
+    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos'], nargs="?", help="Target (repo, script, cache, ...)")
+    pre_parser.add_argument("-h", "--help", action="store_true")
+    return pre_parser
+
+
+def build_parser(pre_args):
+    parser = argparse.ArgumentParser(prog="mlc", description="Manage repos, scripts, and caches.", add_help=False)
+    subparsers = parser.add_subparsers(dest="command", required=not pre_args.help)
+
+    # General commands
+    for action in ['run', 'pull', 'test', 'add', 'show', 'list', 'find', 'search', 'rm', 'cp', 'mv', 'help']:
+        p = subparsers.add_parser(action, add_help=False)
+        p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
+        p.add_argument('details', nargs='?', help='Details or identifier (optional)')
+        p.add_argument('extra', nargs=argparse.REMAINDER)
+
+    # Script-only
+    for action in ['docker', 'docker-run', 'experiment', 'remote-run', 'doc', 'lint']:
+        p = subparsers.add_parser(action, add_help=False)
+        p.add_argument('target', choices=['script', 'run'])
+        p.add_argument('details', nargs='?', help='Details or identifier (optional)')
+        p.add_argument('extra', nargs=argparse.REMAINDER)
+
+    # Load cfg
+    load_parser = subparsers.add_parser("load", add_help=False)
+    load_parser.add_argument("target", choices=["cfg"])
+    return parser
+
+
+def configure_logging(args):
+    if hasattr(args, 'extra') and args.extra:
+        args.extra[:] = [log_flag_aliases.get(a, a) for a in args.extra]
+        for flag, level in log_levels.items():
+            if flag in args.extra:
+                if not logger.isEnabledFor(level):
+                    logger.setLevel(level)
+                args.extra.remove(flag)
+
+
 def build_run_args(args):
     global mlc_run_cmd
     res = utils.convert_args_to_dictionary(getattr(args, 'extra', []))
@@ -159,6 +221,27 @@ def is_quoted(arg):
     return (arg.startswith("'") and arg.endswith("'")) or \
            (arg.startswith('"') and arg.endswith('"'))
 
+
+def check_raw_arguments_for_non_ascii():
+    bad_args = []
+
+    # Skip sys.argv[0] (script name)
+    for arg in sys.argv[1:]:
+        if is_quoted(arg):
+            continue  # allow non-ASCII inside quotes
+        for ch in arg:
+            if ord(ch) > 127:   # non-ASCII
+                bad_args.append((arg, ch, unicodedata.name(ch, "UNKNOWN")))
+                break  # report each arg once
+
+    if bad_args:
+        print("\n⚠️  ERROR: Non-ASCII characters detected in command-line arguments!\n")
+        for arg, ch, name in bad_args:
+            print(f"  → Argument: {arg}")
+            print(f"    Contains non-ASCII character: '{ch}' ({name})")
+        print("\nThis often happens due to copy-paste from PDFs or documents.\n"
+              "Please retype the arguments using plain ASCII.\n")
+        sys.exit(1)
 
 def main():
     """
@@ -198,9 +281,20 @@ def main():
       mlc run script --help
       mlc pull repo -h
     """
+    
+    check_raw_arguments_for_non_ascii()
+    convert_hyphen_to_underscore_in_args()
 
-    pre_args = default_parent.pre_args
-    args = default_parent.args
+    pre_parser = build_pre_parser()
+    pre_args, remaining_args = pre_parser.parse_known_args()
+
+    parser = build_parser(pre_args)
+    args = parser.parse_args() if remaining_args or pre_args.target else pre_args
+    
+    if hasattr(args, 'command') and args.command:
+        args.command = args.command.replace("-", "_")
+
+    configure_logging(args)
     run_args = build_run_args(args) if hasattr(args, "command") else {}
 
     if pre_args.help and not "tags" in run_args:
