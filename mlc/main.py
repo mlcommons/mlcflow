@@ -123,8 +123,8 @@ if default_parent is None:
     default_parent = Action()
 
 
-log_flag_aliases = {'-v': '--verbose', '-s': '--silent', '-q': '--quiet'}
-log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING, '--quiet': logging.ERROR}
+log_flag_aliases = {'-v': '--verbose', '-s': '--silent'}
+log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING}
 
 def convert_hyphen_to_underscore_in_args():
     for i, arg in enumerate(sys.argv):
