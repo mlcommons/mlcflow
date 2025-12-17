@@ -44,7 +44,7 @@ class Automation:
             logger.info(f"No meta file found in {self.path}")
 
     def search(self, i):
-        indices = self.action_object.index.indices
+        indices = self.action_object.get_index().indices
         target_index = indices.get(self.automation_type)
         result = []
         if target_index:
