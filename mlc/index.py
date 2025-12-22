@@ -91,7 +91,7 @@ class Index:
         
         index = self.get_index(folder_type, unique_id)
 
-        if not index:
+        if index != -1:
             self.indices[folder_type].append({
                     "uid": unique_id,
                     "tags": tags,
