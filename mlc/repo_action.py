@@ -142,7 +142,7 @@ class RepoAction(Action):
             else:
                 logger.warning(f"The repo to be registered has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
                 if ignore_on_conflict:
-                    logger.warning(f"Ignoring reister as ignore_on_conflict is set")
+                    logger.warning(f"Ignoring register as ignore_on_conflict is set")
                     return {"return": 0, 'conflict': True}
 
                 self.unregister_repo(is_conflict['conflicting_path'])
