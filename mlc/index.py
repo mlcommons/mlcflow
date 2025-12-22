@@ -370,6 +370,6 @@ class Index:
             try:
                 with open(output_file, "w") as f:
                     json.dump(index_data, f, indent=4, cls=CustomJSONEncoder)
-                logger.debug(f"Shared index for {folder_type} saved to {output_file}.")
+                #logger.debug(f"Shared index for {folder_type} saved to {output_file}.")
             except Exception as e:
                 logger.error(f"Error saving shared index for {folder_type}: {e}")
