@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 import inspect
 import shlex
+import unicodedata
 from . import utils
 
 from .action import Action, default_parent
@@ -43,7 +44,7 @@ class Automation:
             logger.info(f"No meta file found in {self.path}")
 
     def search(self, i):
-        indices = self.action_object.index.indices
+        indices = self.action_object.get_index().indices
         target_index = indices.get(self.automation_type)
         result = []
         if target_index:
@@ -131,7 +132,7 @@ def convert_hyphen_to_underscore_in_args():
             # Split --option=value into ("option", "value")
             if "=" in arg:
                 name, value = arg[2:].split("=", 1)
-                new_name = name.replace("-", "_")
+                new_name = name.replace("-", "_") if "." not in name else name
                 sys.argv[i] = f"--{new_name}={value}"
             else:
                 # No value: just convert the option name
@@ -178,7 +179,8 @@ def configure_logging(args):
         args.extra[:] = [log_flag_aliases.get(a, a) for a in args.extra]
         for flag, level in log_levels.items():
             if flag in args.extra:
-                logger.setLevel(level)
+                if not logger.isEnabledFor(level):
+                    logger.setLevel(level)
                 args.extra.remove(flag)
 
 
@@ -218,6 +220,7 @@ def build_run_args(args):
 def is_quoted(arg):
     return (arg.startswith("'") and arg.endswith("'")) or \
            (arg.startswith('"') and arg.endswith('"'))
+
 
 def check_raw_arguments_for_non_ascii():
     bad_args = []
@@ -329,9 +332,6 @@ def main():
             print(help_text)
         sys.exit(0)
 
-    # show repos alias list repo
-    if args.command in ("show"):
-        args.command = "list"
     if args.target == "repos":
         args.target = "repo"
         

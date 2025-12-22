@@ -9,6 +9,7 @@ class ColoredFormatter(logging.Formatter):
     """Custom formatter class to add colors to log levels"""
     COLORS = {
         'INFO': Fore.GREEN,
+        'DEBUG': Fore.CYAN + Style.DIM,
         'WARNING': Fore.YELLOW,
         'ERROR': Fore.RED
     }
