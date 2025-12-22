@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.8"]
+        python-version: ["3.14", "3.8"]
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         exclude:
           - os: windows-latest
@@ -152,13 +152,7 @@ jobs:
         mlc add repo https://github.com/mlcommons/inference
         mlc add repo https://mygit.com/myrepo
      
-    ' Disabled now as MLCFlow automatically deletes corrupted entries
-    - name: Test 13 - rm repo where we have a corrupt entry 
-      run: |
-        rm -r $HOME/MLC/repos/mlcommons@mlperf-automations
-        mlc rm repo mlcommons@mlperf-automations
-        mlc pull repo mlcommons@mlperf-automations --branch=dev
-    '   
+   
     - name: Test 14 - add script - Add a new MLC script
       run: |
         mlc add script my-script-1 --tags=my,new-tags-1
@@ -232,7 +226,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.8"]
+        python-version: ["3.14", "3.8"]
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         exclude:
           - os: windows-latest
@@ -286,7 +280,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.8"]
+        python-version: ["3.14", "3.8"]
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
 
     steps:
@@ -372,7 +366,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13", "3.8"]
+        python-version: ["3.14", "3.8"]
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         action: ["mlcr", "mlce", "mlct"]
 

@@ -192,7 +192,7 @@ def build_run_args(args):
 
     run_args = res['args_dict']
     if not mlc_run_cmd:
-        mlc_run_cmd = shlex.join(sys.argv)
+        mlc_run_cmd = shlex.join([os.path.basename(sys.argv[0]), *sys.argv[1:]])
     run_args['mlc_run_cmd'] = mlc_run_cmd
 
     if args.command in ['pull', 'rm', 'add', 'find'] and args.target == "repo":
