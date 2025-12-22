@@ -177,10 +177,10 @@ def build_parser(pre_args):
 def configure_logging(args):
     if hasattr(args, 'extra') and args.extra:
         args.extra[:] = [log_flag_aliases.get(a, a) for a in args.extra]
+        
         for flag, level in log_levels.items():
             if flag in args.extra:
-                if not logger.isEnabledFor(level):
-                    logger.setLevel(level)
+                logger.setLevel(level)
                 args.extra.remove(flag)
 
 

@@ -204,10 +204,10 @@ class Index:
             repo_path = repo.path #os.path.join(self.repos_path, repo)
             if not os.path.isdir(repo_path):
                 continue
-            logger.debug(f"------------Checking repository: {repo_path}---------------")
+            #logger.debug(f"------------Checking repository: {repo_path}---------------")
             # Filter for relevant directories in the repo
             for folder_type in ["script", "cache", "experiment"]:
-                logger.debug(f"Checking folder type: {folder_type}")
+                #logger.debug(f"Checking folder type: {folder_type}")
                 folder_path = os.path.join(repo_path, folder_type)
                 if not os.path.isdir(folder_path):
                     continue
@@ -217,7 +217,7 @@ class Index:
                     # logger.debug(f"Checking automation directory: {automation_dir}")
                     automation_path = os.path.join(folder_path, automation_dir)
                     if not os.path.isdir(automation_path):
-                        logger.debug(f"Skipping non-directory automation path: {automation_path}")
+                        #logger.debug(f"Skipping non-directory automation path: {automation_path}")
                         continue
                     
                     yaml_path = os.path.join(automation_path, "meta.yaml")
