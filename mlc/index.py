@@ -88,14 +88,18 @@ class Index:
         unique_id = meta['uid']
         alias = meta['alias']
         tags = meta['tags']
-        self.indices[folder_type].append({
+        
+        index = self.get_index(folder_type, unique_id)
+
+        if not index:
+            self.indices[folder_type].append({
                     "uid": unique_id,
                     "tags": tags,
                     "alias": alias,
                     "path": path,
                     "repo": repo
                 })
-        self._save_indices()
+            self._save_indices()
 
     def get_index(self, folder_type, uid):
         for index in range(len(self.indices[folder_type])):
