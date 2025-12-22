@@ -77,6 +77,11 @@ class RepoAction(Action):
 
         repo_path = os.path.join(self.repos_path, repo_folder_name)
 
+        r = self.find(run_args)
+        
+        if r['return'] == 0 and len(r['list']) > 0:
+            return {'return': 1, "error": f"""Repo already exists at {r['list'][0]}"""}
+
         for repo in self.repos:
             if repo.path == i_repo_path:
                 return {'return': 1, "error": f"""Repo already exists at {repo.path}"""}
@@ -95,7 +100,6 @@ class RepoAction(Action):
             os.makedirs(repo_path)
         else:
             repo_path = os.path.abspath(i_repo_path)
-        logger.info(f"""New repo path: {repo_path}""")
 
         #check if it has MLC meta
         meta_file = os.path.join(repo_path, "meta.yaml")
@@ -107,7 +111,8 @@ class RepoAction(Action):
             utils.save_yaml(meta_file, meta)
         else:
             meta = utils.read_yaml(meta_file)
-        self.register_repo(repo_path, meta)
+        
+        self.register_repo(repo_path, meta, run_args.get('ignore_on_conflict'))
 
         return {'return': 0}
 
@@ -116,13 +121,32 @@ class RepoAction(Action):
             if repo_object.meta.get('uid', '') == '':
                 return {"return": 1, "error": f"UID is not present in file 'meta.yaml' in the repo path {repo_object.path}"}
             if repo_meta["uid"] == repo_object.meta.get('uid', ''):
-                if repo_meta['path'] == repo_object.path:
+                if repo_meta.get('path', '') == repo_object.path:
                     return {"return": 1, "error": f"Same repo is already registered"}
                 else:
                     return {"return": 1, "error": f"Conflicting with repo in the path {repo_object.path}", "conflicting_path": repo_object.path}
         return {"return": 0}
     
-    def register_repo(self, repo_path, repo_meta):
+    def register_repo(self, repo_path, repo_meta, ignore_on_conflict=False):
+            
+        # Check UID conflicts
+        is_conflict = self.conflicting_repo(repo_meta)
+        if is_conflict['return'] > 0:
+            if "UID not present" in is_conflict['error']:
+                logger.warning(f"UID not found in meta.yaml at {repo_path}. Repo can not be registered in MLC repos. Skipping...")
+                return {"return": 0}
+            elif "already registered" in is_conflict["error"]: #at same path
+                #logger.warning(is_conflict["error"])
+                logger.debug("No changes made to repos.json.")
+                return {"return": 0}
+            else:
+                logger.warning(f"The repo to be registered has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
+                if ignore_on_conflict:
+                    logger.warning(f"Ignoring reister as ignore_on_conflict is set")
+                    return {"return": 0, 'conflict': True}
+
+                self.unregister_repo(is_conflict['conflicting_path'])
+                logger.warning(f"{is_conflict['conflicting_path']} is unregistered.")
     
         if repo_meta.get('deps'):
             for dep in repo_meta['deps']:
@@ -345,39 +369,18 @@ class RepoAction(Action):
             # check the meta file to obtain uids
             meta_file_path = os.path.join(repo_path, 'meta.yaml')
             if not os.path.exists(meta_file_path):
-                logger.warning(f"meta.yaml not found in {repo_path}. Repo pulled but not register in mlc repos. Skipping...")
+                logger.warning(f"meta.yaml not found in {repo_path}. Repo pulled but not registered in MLC repos. Skipping...")
                 return {"return": 0}
             
             with open(meta_file_path, 'r') as meta_file:
                 meta_data = yaml.safe_load(meta_file)
                 meta_data["path"] = repo_path
 
-            # Check UID conflicts
-            is_conflict = self.conflicting_repo(meta_data)
-            if is_conflict['return'] > 0:
-                if "UID not present" in is_conflict['error']:
-                    logger.warning(f"UID not found in meta.yaml at {repo_path}. Repo pulled but can not register in mlc repos. Skipping...")
-                    return {"return": 0}
-                elif "already registered" in is_conflict["error"]:
-                    #logger.warning(is_conflict["error"])
-                    logger.debug("No changes made to repos.json.")
-                    return {"return": 0}
-                else:
-                    if ignore_on_conflict:
-                        logger.debug("Repo alias existing. Ignoring the repo pull")
-                        return {"return": 0}
+            r = self.register_repo(repo_path, meta_data, ignore_on_conflict)
+            if r['return'] > 0:
+                return r
 
-                    logger.warning(f"The repo to be cloned has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
-                    self.unregister_repo(is_conflict['conflicting_path'])
-                    self.register_repo(repo_path, meta_data)
-                    logger.warning(f"{repo_path} is registered in repos.json and {is_conflict['conflicting_path']} is unregistered.")
-                    return {"return": 0}
-            else:         
-                r = self.register_repo(repo_path, meta_data)
-                if r['return'] > 0:
-                    return r
-
-                return {"return": 0}
+            return {"return": 0}
 
         except subprocess.CalledProcessError as e:
             return {'return': 1, 'error': f"Git command failed: {e}"}
