@@ -24,6 +24,8 @@ jobs:
             implementation: cpp
           - on: windows-latest
             implementation: cpp
+          - on: windows-latest
+            python-version: 3.13
     runs-on: "${{ matrix.on }}"
     steps:
     - uses: actions/checkout@v4
