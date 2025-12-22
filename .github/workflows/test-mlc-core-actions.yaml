@@ -389,5 +389,5 @@ jobs:
         python -m pip install .
     - name: MLC ${{matrix.action}} script
       run: |
-        mlcp mlcommons@mlperf-automations
+        mlcp mlcommons@mlperf-automations --branch=dev
         ${{matrix.action}} detect,cpu
