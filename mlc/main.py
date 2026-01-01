@@ -155,7 +155,7 @@ def build_parser(pre_args):
     subparsers = parser.add_subparsers(dest="command", required=not pre_args.help)
 
     # General commands
-    for action in ['run', 'pull', 'test', 'add', 'show', 'list', 'find', 'search', 'rm', 'cp', 'mv', 'help']:
+    for action in ['run', 'pull', 'test', 'add', 'show', 'list', 'find', 'search', 'rm', 'cp', 'mv', 'help', 'prune']:
         p = subparsers.add_parser(action, add_help=False)
         p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
         p.add_argument('details', nargs='?', help='Details or identifier (optional)')

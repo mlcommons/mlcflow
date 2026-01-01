@@ -1,6 +1,7 @@
 from .action import Action
 import os
 import json
+import time
 from . import utils
 from .logger import logger
 
@@ -59,7 +60,7 @@ class CacheAction(Action):
                 continue  # skip item
             '''
 
-            expiration_time = item_meta.get('expiration_time')
+            expiration_time = item_meta.get('cache_expiration')
             if expiration_time is not None and expiration_time < time.time():
                 continue  # skip expired item
 
@@ -157,6 +158,42 @@ Cache Meta:""")
             print("")
             
         return {'return': 0}
+
+    
+
+    def prune(self, args):
+        """
+    ####################################################################################################################
+    Target: Cache
+    Action: Prune
+    ####################################################################################################################
+
+    Prune all expired cached items
+
+    Example Command:
+
+    mlc prune cache
+
+        """
+        self.action_type = "cache"
+        run_args = {"fetch_all": True}  # to fetch the details of all the caches generated
+        
+        res = self.search(run_args)
+        if res['return'] > 0:
+            return res
+        
+        for item in res['list']:
+            expiration_time = item.meta.get('cache_expiration')
+            if expiration_time is not None and expiration_time < time.time():
+                ii = {}
+                ii['f'] = True
+                ii['item'] = item.meta.get('uid')
+                if ii['item']:
+                    self.rm(ii)
+
+        return {'return': 0}
+        
+
 
     def list(self, args):
         """
