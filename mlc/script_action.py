@@ -3,6 +3,7 @@ import os
 import sys
 import importlib
 import json
+import inspect
 from .index import Index
 from . import utils
 from .logger import logger
@@ -249,7 +250,15 @@ Main Script Meta:""")
 
         # Check if ScriptAutomation is defined in the module
         if hasattr(module, 'ScriptAutomation'):
-            automation_instance = module.ScriptAutomation(self, module_path)
+            ctor = module.ScriptAutomation.__init__
+            params = inspect.signature(ctor).parameters
+
+            if 'run_args' in params:
+                automation_instance = module.ScriptAutomation(self, module_path, run_args)
+            else:
+                automation_instance = module.ScriptAutomation(self, module_path)
+
+            automation_instance = module.ScriptAutomation(self, module_path, run_args)
             if function_name == "run":
                 result = automation_instance.run(run_args)  # Pass args to the run method
             elif function_name == "docker":

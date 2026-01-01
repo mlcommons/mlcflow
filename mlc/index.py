@@ -58,7 +58,7 @@ class Index:
         """
         Save updated mtimes in modified_times json file.
         """
-        logger.debug(f"Saving modified times to {self.modified_times_file}")
+        #logger.debug(f"Saving modified times to {self.modified_times_file}")
         with open(self.modified_times_file, "w") as f:
             json.dump(self.modified_times, f, indent=4)
 
@@ -164,11 +164,11 @@ class Index:
         #file does not exist, rebuild
         if not os.path.exists(index_json_path):
             logger.warning("index_script.json missing. Forcing full index rebuild...")
-            logger.debug("Resetting modified_times...")
+            #logger.debug("Resetting modified_times...")
             self.modified_times = {}
             self._save_modified_times()
-        else:
-            logger.debug("index_script.json exists. Skipping forced rebuild.")
+        #else:
+        #    logger.debug("index_script.json exists. Skipping forced rebuild.")
 
         #check repos.json mtime
         repos_json_path = os.path.join(self.repos_path, "repos.json")
@@ -178,8 +178,8 @@ class Index:
         old = self.modified_times.get(key)
         repo_old_mtime = old["mtime"] if isinstance(old, dict) else old
 
-        logger.debug(f"Current repos.json mtime: {repos_mtime}")
-        logger.debug(f"Old repos.json mtime: {repo_old_mtime}")
+        #logger.debug(f"Current repos.json mtime: {repos_mtime}")
+        #logger.debug(f"Old repos.json mtime: {repo_old_mtime}")
         current_item_keys.add(key)
 
         # if changed, reset indexes
@@ -197,8 +197,8 @@ class Index:
             self._save_indices()
             self._save_modified_times()
             repos_changed = True
-        else:
-            logger.debug("Repos.json not modified")
+        #else:
+        #    logger.debug("Repos.json not modified")
 
         for repo in self.repos:
             repo_path = repo.path #os.path.join(self.repos_path, repo)
@@ -230,7 +230,7 @@ class Index:
                         # logger.debug(f"Found JSON config file: {json_path}")
                         config_path = json_path
                     else:
-                        logger.debug(f"No config file found in {automation_path}, skipping")
+                        #logger.debug(f"No config file found in {automation_path}, skipping")
                         delete_flag = False
                         if automation_dir in self.modified_times:
                             del self.modified_times[automation_dir]
@@ -251,18 +251,19 @@ class Index:
                     if old_mtime == mtime and repos_changed != 1:
                         # logger.debug(f"No changes detected for {config_path}, skipping reindexing.")
                         continue
-                    if(old_mtime is None):
-                        logger.debug(f"New config file detected: {config_path}. Adding to index.")
+                    #if(old_mtime is None):
+                    #    logger.debug(f"New meta.yaml file detected: {config_path}. Adding to index.")
+                    
                     # update mtime
-                    logger.debug(f"{config_path} is modified, index getting updated")
-                    if config_path not in self.modified_times:
-                        logger.debug(f"*************{config_path} not found in modified_times; creating new entry***************")
+                    #logger.debug(f"{config_path} is modified, index getting updated")
+                    #if config_path not in self.modified_times:
+                    #    logger.debug(f"*************{config_path} not found in modified_times; creating new entry***************")
 
                     self.modified_times[config_path] = {
                         "mtime": mtime,
                         "date_time": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
                     }
-                    logger.debug(f"Modified time for {config_path} updated to {mtime}")
+                    #logger.debug(f"Modified time for {config_path} updated to {mtime}")
                     changed = True
                     # meta file changed, so reindex
                     self._process_config_file(config_path, folder_type, automation_path, repo)
@@ -271,21 +272,22 @@ class Index:
         old_keys = set(self.modified_times.keys())
         deleted_keys = old_keys - current_item_keys
         for key in deleted_keys:
-            logger.warning(f"Detected deleted item, removing entry form modified times: {key}")
+            logger.warning(f"Detected deleted item, removing entry from modified times: {key}")
             del self.modified_times[key]
             folder_key = os.path.dirname(key)
-            logger.warning(f"Removing index entry for folder: {folder_key}")
+            #logger.warning(f"Removing index entry for folder: {folder_key}")
             self._remove_index_entry(folder_key)
             changed = True
-        logger.debug(f"Deleted keys removed from modified times and indices: {deleted_keys}")
+        if deleted_keys:
+            logger.debug(f"Deleted keys removed from modified times and indices: {deleted_keys}")
 
         if changed:
             logger.debug("Changes detected, saving updated index and modified times.")
             self._save_modified_times()
             self._save_indices()
-            logger.debug("**************Index updated (changes detected).*************************")
-        else:
-            logger.debug("**************Index unchanged (no changes detected).********************")
+            #logger.debug("**************Index updated (changes detected).*************************")
+        #else:
+            #logger.debug("**************Index unchanged (no changes detected).********************")
 
     def _remove_index_entry(self, key):
         logger.debug(f"Removing index entry for {key}")
@@ -299,7 +301,7 @@ class Index:
         """
         Delete old index entry using UID (prevents duplicates).
         """
-        logger.debug(f"Deleting and updating index entry for the script {alias} with UID {uid}")
+        #logger.debug(f"Deleting and updating index entry for the script {alias} with UID {uid}")
         self.indices[folder_type] = [
             item for item in self.indices[folder_type]
             if item["uid"] != uid
