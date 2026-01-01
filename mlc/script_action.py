@@ -258,7 +258,6 @@ Main Script Meta:""")
             else:
                 automation_instance = module.ScriptAutomation(self, module_path)
 
-            automation_instance = module.ScriptAutomation(self, module_path, run_args)
             if function_name == "run":
                 result = automation_instance.run(run_args)  # Pass args to the run method
             elif function_name == "docker":
