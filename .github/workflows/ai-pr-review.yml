@@ -1,0 +1,120 @@
+name: AI PR Review (Incremental)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          pip install requests jq
+
+      - name: Get incremental diff
+        id: diff
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          git diff $BASE_SHA...$HEAD_SHA > pr.diff
+
+          if [ ! -s pr.diff ]; then
+            echo "EMPTY_DIFF=true" >> $GITHUB_ENV
+          fi
+
+      - name: Run OpenAI review
+        if: env.EMPTY_DIFF != 'true'
+        run: |
+          python3 << 'EOF'
+          import os, json, requests
+
+          OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+          DIFF = open("pr.diff").read()[:15000]
+
+          prompt = f"""
+          Review this incremental pull request diff.
+
+          Tasks:
+          1. Write a concise PR summary (overall risks, design issues).
+          2. Provide inline review comments with:
+             - file
+             - line
+             - comment
+
+          Respond ONLY in valid JSON with this schema:
+          {{
+            "summary": "string",
+            "comments": [
+              {{
+                "file": "path/to/file",
+                "line": 123,
+                "comment": "text"
+              }}
+            ]
+          }}
+
+          Diff:
+          {DIFF}
+          """
+
+          response = requests.post(
+              "https://api.openai.com/v1/responses",
+              headers={
+                  "Authorization": f"Bearer {OPENAI_API_KEY}",
+                  "Content-Type": "application/json"
+              },
+              json={
+                  "model": "gpt-4.1-mini",
+                  "input": prompt,
+                  "temperature": 0.2
+              }
+          )
+
+          data = response.json()
+          text = data["output"][0]["content"][0]["text"]
+
+          parsed = json.loads(text)
+          with open("ai_output.json", "w") as f:
+              json.dump(parsed, f, indent=2)
+          EOF
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Post PR summary comment
+        if: env.EMPTY_DIFF != 'true'
+        run: |
+          SUMMARY=$(jq -r '.summary' ai_output.json)
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "## 🤖 AI PR Review Summary\n\n$SUMMARY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post inline review comments
+        if: env.EMPTY_DIFF != 'true'
+        run: |
+          jq -c '.comments[]' ai_output.json | while read c; do
+            FILE=$(echo $c | jq -r '.file')
+            LINE=$(echo $c | jq -r '.line')
+            COMMENT=$(echo $c | jq -r '.comment')
+
+            gh api \
+              repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+              -f body="$COMMENT" \
+              -f commit_id="${{ github.event.pull_request.head.sha }}" \
+              -f path="$FILE" \
+              -f line="$LINE" \
+              -f side="RIGHT"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
