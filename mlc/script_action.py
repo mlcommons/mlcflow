@@ -279,7 +279,7 @@ Main Script Meta:""")
             
             if result['return'] > 0:
                 error = result.get('error', "")
-                raise ScriptExecutionError(f"Script {function_name} execution failed. Error : {error}")
+                raise ScriptExecutionError(f"Script {function_name} execution failed in {module_path}. \nError : {error}")
 
             if str(run_args.get("mlc_output")).lower() in ["on", "true", "yes", "1"]:
                 with open("tmp-state.json", "w") as f:
