@@ -8,6 +8,8 @@ import shutil
 from . import utils
 from .logger import logger
 from urllib.parse import urlparse
+from .repo import Repo
+from .index import Index
 
 class RepoAction(Action):
     """
@@ -164,9 +166,31 @@ class RepoAction(Action):
 
         with open(repos_file_path, 'w') as f:
             json.dump(repos_list, f, indent=2)
-            logger.info(f"Updated repos.json at {repos_file_path}")
-        
-        
+
+        logger.debug("Forcing Index rebuild ...")
+        # reload repos list 
+        with open(repos_file_path, 'r') as f:
+            repos_list = json.load(f)
+
+        repos = []
+        for p in repos_list:
+            meta = {}
+            yaml_file = os.path.join(p, "meta.yaml")
+            json_file = os.path.join(p, "meta.json")
+
+            if os.path.exists(yaml_file):
+                meta = utils.read_yaml(yaml_file)
+            elif os.path.exists(json_file):
+                meta = utils.read_json(json_file)
+            else:
+                logger.info(f"No meta file found in {self.repos_path}")
+                continue
+
+            repos.append(Repo(path=p, meta=meta))
+
+        # rebuild index via constructor
+        Index(self.repos_path, repos)
+        logger.debug("repos.json and index file has been updated")
         return {'return': 0}
 
     def unregister_repo(self, repo_path):
