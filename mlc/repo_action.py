@@ -166,31 +166,19 @@ class RepoAction(Action):
 
         with open(repos_file_path, 'w') as f:
             json.dump(repos_list, f, indent=2)
+            logger.info(f"Updated repos.json at {repos_file_path}")
+        
+        self.repos = self.load_repos_and_meta()
+        repo_obj = next(
+            (r for r in self.repos if r.path == repo_path),
+            None
+        )
 
-        logger.debug("Forcing Index rebuild ...")
-        # reload repos list 
-        with open(repos_file_path, 'r') as f:
-            repos_list = json.load(f)
-
-        repos = []
-        for p in repos_list:
-            meta = {}
-            yaml_file = os.path.join(p, "meta.yaml")
-            json_file = os.path.join(p, "meta.json")
-
-            if os.path.exists(yaml_file):
-                meta = utils.read_yaml(yaml_file)
-            elif os.path.exists(json_file):
-                meta = utils.read_json(json_file)
-            else:
-                logger.info(f"No meta file found in {self.repos_path}")
-                continue
-
-            repos.append(Repo(path=p, meta=meta))
-
-        # rebuild index via constructor
-        Index(self.repos_path, repos)
-        logger.debug("repos.json and index file has been updated")
+        if repo_obj:
+            index = Index(self.repos_path, self.repos)
+            index.add_repo(repo_obj)
+            logger.debug("Index file has been updated")
+        
         return {'return': 0}
 
     def unregister_repo(self, repo_path):
@@ -531,7 +519,8 @@ class RepoAction(Action):
     Action: rm
     ####################################################################################################################
 
-    The `rm` action removes a specified repository from MLCFlow, deleting both the repo folder and its registration.  
+    The `rm` action removes a specified repository from MLCFlow, deleting the repository folder, its index entries, 
+    and its registration.
     If there are any modified local changes, the user will be prompted for confirmation unless the `-f` flag is used  
     for force removal.
  
@@ -578,6 +567,8 @@ class RepoAction(Action):
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
         
         force_remove = True if run_args.get('f') else False
+        index = Index(self.repos_path, self.repos)
+        index.remove_repo_from_index(repo_path)
         
         return rm_repo(repo_path, repos_file_path, force_remove) 
         
