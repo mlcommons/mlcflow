@@ -175,7 +175,7 @@ class RepoAction(Action):
         )
 
         if repo_obj:
-            index = Index(self.repos_path, self.repos)
+            index = Action.get_index(self)
             index.add_repo(repo_obj)
             logger.debug("Index file has been updated")
         
@@ -567,7 +567,7 @@ class RepoAction(Action):
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
         
         force_remove = True if run_args.get('f') else False
-        index = Index(self.repos_path, self.repos)
+        index = Action.get_index(self)
         index.remove_repo_from_index(repo_path)
         
         return rm_repo(repo_path, repos_file_path, force_remove) 
