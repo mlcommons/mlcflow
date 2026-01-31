@@ -27,7 +27,6 @@ class Index:
         """
         self.repos_path = repos_path
         self.repos = repos
-        #logger.info(repos)
 
         logger.debug(f"Repos path for Index: {self.repos_path}")
         self.index_files = {
@@ -152,7 +151,64 @@ class Index:
         if t > latest:
             latest = t
         return latest
-    
+
+    def _index_single_repo(self, repo, repos_changed=False, current_item_keys=None):
+        repo_path = repo.path
+        if not os.path.isdir(repo_path):
+            return False
+
+        changed = False
+
+        for folder_type in ["script", "cache", "experiment"]:
+            folder_path = os.path.join(repo_path, folder_type)
+            if not os.path.isdir(folder_path):
+                continue
+
+            for automation_dir in os.listdir(folder_path):
+                automation_path = os.path.join(folder_path, automation_dir)
+                if not os.path.isdir(automation_path):
+                    continue
+
+                yaml_path = os.path.join(automation_path, "meta.yaml")
+                json_path = os.path.join(automation_path, "meta.json")
+
+                if os.path.isfile(yaml_path):
+                    config_path = yaml_path
+                elif os.path.isfile(json_path):
+                    config_path = json_path
+                else:
+                    #logger.debug(f"No config file found in {automation_path}, skipping")
+                    delete_flag = False
+                    if automation_dir in self.modified_times:
+                        del self.modified_times[automation_dir]
+                    if any(automation_dir in item["path"] for item in self.indices[folder_type]):
+                        logger.debug(f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
+                        delete_flag = True
+                        self._remove_index_entry(automation_path)
+                    if delete_flag:
+                        self._save_indices()
+                    continue
+                if current_item_keys is not None:
+                    current_item_keys.add(config_path)
+                mtime = self.get_item_mtime(config_path)
+                old = self.modified_times.get(config_path)
+                old_mtime = old["mtime"] if isinstance(old, dict) else old
+
+                # skip if unchanged
+                if old_mtime == mtime and repos_changed != 1:
+                    continue
+
+                self.modified_times[config_path] = {
+                    "mtime": mtime,
+                    "date_time": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                }
+                
+                # meta file changed, so reindex
+                self._process_config_file(config_path, folder_type, automation_path, repo)
+                changed = True
+        
+        return changed
+
     def build_index(self):
         """
         Build shared indices for script, cache, and experiment folders across all repositories.
@@ -164,19 +220,15 @@ class Index:
         # track all currently detected item paths
         current_item_keys = set()
         changed = False
-        repos_changed = False
-        
-        # load existing modified times
+        force_rebuild = False
+
+        # load modified times
         self.modified_times = self._load_modified_times()
 
+        # if missing index file, then force full rebuild
         index_json_path = os.path.join(self.repos_path, "index_script.json")
-
-        rebuild_index = False
-
-        #file does not exist, rebuild
         if not os.path.exists(index_json_path):
             logger.warning("index_script.json missing. Forcing full index rebuild...")
-            #logger.debug("Resetting modified_times...")
             self.modified_times = {}
             self._save_modified_times()
         #else:
@@ -211,6 +263,7 @@ class Index:
         #else:
         #    logger.debug("Repos.json not modified")
 
+        # index each repo
         for repo in self.repos:
             repo_path = repo.path #os.path.join(self.repos_path, repo)
             if not os.path.isdir(repo_path):
@@ -287,8 +340,7 @@ class Index:
                     self._process_config_file(config_path, folder_type, automation_path, repo)
 
         # remove deleted scripts
-        old_keys = set(self.modified_times.keys())
-        deleted_keys = old_keys - current_item_keys
+        deleted_keys = set(self.modified_times) - current_item_keys
         for key in deleted_keys:
             logger.warning(f"Detected deleted item, removing entry from modified times: {key}")
             del self.modified_times[key]
@@ -299,13 +351,10 @@ class Index:
         if deleted_keys:
             logger.debug(f"Deleted keys removed from modified times and indices: {deleted_keys}")
 
-        if changed:
+        if force_rebuild or changed:
             logger.debug("Changes detected, saving updated index and modified times.")
             self._save_modified_times()
             self._save_indices()
-            #logger.debug("**************Index updated (changes detected).*************************")
-        #else:
-            #logger.debug("**************Index unchanged (no changes detected).********************")
 
     def _remove_index_entry(self, key):
         logger.debug(f"Removing index entry for {key}")
@@ -399,3 +448,48 @@ class Index:
                 #logger.debug(f"Shared index for {folder_type} saved to {output_file}.")
             except Exception as e:
                 logger.error(f"Error saving shared index for {folder_type}: {e}")
+
+
+    def add_repo(self, repo):
+        """
+        Incrementally index a newly registered repository.
+        """
+        changed = self._index_single_repo(repo, repos_changed=True)
+
+        if changed:
+            self._save_indices()
+            self._save_modified_times()
+
+
+    def remove_repo_from_index(self, repo_path):
+        """
+        Remove all index entries and modified times belonging to a repo.
+        Called when a repo is unregistered from repos.json.
+        """
+
+        logger.info(f"Removing repo from index: {repo_path}")
+        changed = False
+
+        # remove index entries
+        for folder_type in self.indices:
+            before = len(self.indices[folder_type])
+            self.indices[folder_type] = [
+                item for item in self.indices[folder_type]
+                if not item["path"].startswith(repo_path)
+            ]
+            if len(self.indices[folder_type]) != before:
+                changed = True
+
+        # remove modified times
+        keys_to_delete = [
+            k for k in self.modified_times
+            if k.startswith(repo_path)
+        ]
+
+        for k in keys_to_delete:
+            del self.modified_times[k]
+            changed = True
+
+        if changed:
+            self._save_indices()
+            self._save_modified_times()

@@ -8,6 +8,8 @@ import shutil
 from . import utils
 from .logger import logger
 from urllib.parse import urlparse
+from .repo import Repo
+from .index import Index
 
 class RepoAction(Action):
     """
@@ -166,6 +168,16 @@ class RepoAction(Action):
             json.dump(repos_list, f, indent=2)
             logger.info(f"Updated repos.json at {repos_file_path}")
         
+        self.repos = self.load_repos_and_meta()
+        repo_obj = next(
+            (r for r in self.repos if r.path == repo_path),
+            None
+        )
+
+        if repo_obj:
+            index = Action.get_index(self)
+            index.add_repo(repo_obj)
+            logger.debug("Index file has been updated")
         
         return {'return': 0}
 
@@ -507,7 +519,8 @@ class RepoAction(Action):
     Action: rm
     ####################################################################################################################
 
-    The `rm` action removes a specified repository from MLCFlow, deleting both the repo folder and its registration.  
+    The `rm` action removes a specified repository from MLCFlow, deleting the repository folder, its index entries, 
+    and its registration.
     If there are any modified local changes, the user will be prompted for confirmation unless the `-f` flag is used  
     for force removal.
  
@@ -554,6 +567,8 @@ class RepoAction(Action):
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
         
         force_remove = True if run_args.get('f') else False
+        index = Action.get_index(self)
+        index.remove_repo_from_index(repo_path)
         
         return rm_repo(repo_path, repos_file_path, force_remove) 
         
