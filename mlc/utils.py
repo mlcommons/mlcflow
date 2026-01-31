@@ -694,24 +694,30 @@ def extract_file(options):
         with zipfile.ZipFile(filename, 'r') as archive:
             members = archive.namelist()
             for member in members:
-                # Strip folder levels
-                stripped_path = os.path.join(
-                    extract_to, *member.split(os.sep)[strip_folders:]
-                )
-                if member.endswith('/'):  # Directory
-                    os.makedirs(stripped_path, exist_ok=True)
-                else:  # File
-                    os.makedirs(os.path.dirname(stripped_path), exist_ok=True)
-                    with archive.open(member) as source, open(stripped_path, 'wb') as target:
-                        shutil.copyfileobj(source, target)
+                # Strip folder levels (zip files always use forward slashes internally)
+                parts = member.split('/')
+                if len(parts) > strip_folders:
+                    stripped_parts = parts[strip_folders:]
+                    stripped_path = os.path.join(extract_to, *stripped_parts)
+                    stripped_path = os.path.normpath(stripped_path)
+                    
+                    if member.endswith('/'):  # Directory
+                        os.makedirs(stripped_path, exist_ok=True)
+                    else:  # File
+                        os.makedirs(os.path.dirname(stripped_path), exist_ok=True)
+                        with archive.open(member) as source, open(stripped_path, 'wb') as target:
+                            shutil.copyfileobj(source, target)
 
     elif tarfile.is_tarfile(filename):
         with tarfile.open(filename, 'r') as archive:
             members = archive.getmembers()
             for member in members:
                 if strip_folders:
+                    # Tar files also use forward slashes internally
                     parts = member.name.split('/')
-                    member.name = '/'.join(parts[strip_folders:])
+                    if len(parts) > strip_folders:
+                        # Join with OS-specific separator for extraction
+                        member.name = os.path.join(*parts[strip_folders:])
                 archive.extract(member, path=extract_to)
 
     else:

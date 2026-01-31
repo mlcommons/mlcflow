@@ -41,6 +41,16 @@ class Index:
         self._load_existing_index()
         self.build_index()
 
+    def _get_stored_mtime(self, key):
+        """
+        Helper method to safely extract mtime from stored data.
+        Handles both old format (direct mtime) and new format (dict with mtime key).
+        """
+        old = self.modified_times.get(key)
+        if old is None:
+            return None
+        return old["mtime"] if isinstance(old, dict) else old
+
     def _load_modified_times(self):
         """
         Load stored mtimes to check for changes in scripts.
@@ -50,7 +60,8 @@ class Index:
                 # logger.info(f"Loading modified times from {self.modified_times_file}")
                 with open(self.modified_times_file, "r") as f:
                     return json.load(f)
-            except Exception:
+            except (json.JSONDecodeError, IOError) as e:
+                logger.warning(f"Failed to load modified times: {e}")
                 return {}
         return {}
 
@@ -77,7 +88,8 @@ class Index:
                         if isinstance(item.get("repo"), dict):
                             item["repo"] = Repo(**item["repo"])
 
-                except Exception:
+                except (json.JSONDecodeError, IOError, KeyError, TypeError) as e:
+                    logger.warning(f"Failed to load index for {folder_type}: {e}")
                     pass   # fall back to empty index
 
     def add(self, meta, folder_type, path, repo):
@@ -175,8 +187,7 @@ class Index:
         repos_mtime = os.path.getmtime(repos_json_path)
 
         key = f"{repos_json_path}"
-        old = self.modified_times.get(key)
-        repo_old_mtime = old["mtime"] if isinstance(old, dict) else old
+        repo_old_mtime = self._get_stored_mtime(key)
 
         #logger.debug(f"Current repos.json mtime: {repos_mtime}")
         #logger.debug(f"Old repos.json mtime: {repo_old_mtime}")
@@ -232,9 +243,17 @@ class Index:
                     else:
                         #logger.debug(f"No config file found in {automation_path}, skipping")
                         delete_flag = False
-                        if automation_dir in self.modified_times:
-                            del self.modified_times[automation_dir]
-                        if any(automation_dir in item["path"] for item in self.indices[folder_type]):
+                        if config_path := os.path.join(automation_path, "meta.yaml"):
+                            if config_path in self.modified_times:
+                                del self.modified_times[config_path]
+                                delete_flag = True
+                        if config_path := os.path.join(automation_path, "meta.json"):
+                            if config_path in self.modified_times:
+                                del self.modified_times[config_path]
+                                delete_flag = True
+                        
+                        # Use exact path matching instead of substring
+                        if any(item["path"] == automation_path for item in self.indices[folder_type]):
                             logger.debug(f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
                             delete_flag = True
                             self._remove_index_entry(automation_path)
@@ -244,11 +263,10 @@ class Index:
                     current_item_keys.add(config_path)
                     mtime = self.get_item_mtime(config_path)
 
-                    old = self.modified_times.get(config_path)
-                    old_mtime = old["mtime"] if isinstance(old, dict) else old
+                    old_mtime = self._get_stored_mtime(config_path)
 
                     # skip if unchanged
-                    if old_mtime == mtime and repos_changed != 1:
+                    if old_mtime == mtime and not repos_changed:
                         # logger.debug(f"No changes detected for {config_path}, skipping reindexing.")
                         continue
                     #if(old_mtime is None):
@@ -291,10 +309,12 @@ class Index:
 
     def _remove_index_entry(self, key):
         logger.debug(f"Removing index entry for {key}")
+        # Normalize paths for comparison
+        normalized_key = os.path.normpath(key)
         for ft in self.indices:
             self.indices[ft] = [
                 item for item in self.indices[ft]
-                if key not in item["path"]
+                if os.path.normpath(item["path"]) != normalized_key
             ]
 
     def _delete_by_uid(self, folder_type, uid, alias):

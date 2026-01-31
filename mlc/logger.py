@@ -15,6 +15,10 @@ class ColoredFormatter(logging.Formatter):
     }
 
     def format(self, record):
+        # Pad filename and line number for alignment
+        record.filename = f"{record.filename:<15}"  # Left-align filename with 25 char width
+        record.lineno = f"{record.lineno:>4}"  # Right-align line number with 4 char width
+        
         # Add color to the levelname
         if record.levelname in self.COLORS:
             record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{Style.RESET_ALL}"
