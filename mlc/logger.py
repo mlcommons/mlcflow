@@ -16,7 +16,7 @@ class ColoredFormatter(logging.Formatter):
 
     def format(self, record):
         # Pad filename and line number for alignment
-        record.filename = f"{record.filename:<15}"  # Left-align filename with 25 char width
+        record.filename = f"{record.filename:<15}"  # Left-align filename with 15 char width
         record.lineno = f"{record.lineno:>4}"  # Right-align line number with 4 char width
         
         # Add color to the levelname
@@ -29,7 +29,7 @@ class ColoredFormatter(logging.Formatter):
 def setup_logging(log_path = os.getcwd(), log_file = '.mlc-log.txt'):
     
     if not logger.hasHandlers():
-        logFormatter = ColoredFormatter('[%(asctime)s %(filename)s:%(lineno)d %(levelname)s] - %(message)s')
+        logFormatter = ColoredFormatter('[%(asctime)s %(filename)s:%(lineno)s %(levelname)s] - %(message)s')
         # by default logging level is set to INFO is being set
         logger.setLevel(logging.INFO)
    
