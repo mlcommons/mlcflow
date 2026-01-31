@@ -230,114 +230,15 @@ class Index:
         if not os.path.exists(index_json_path):
             logger.warning("index_script.json missing. Forcing full index rebuild...")
             self.modified_times = {}
-            self._save_modified_times()
-        #else:
-        #    logger.debug("index_script.json exists. Skipping forced rebuild.")
-
-        #check repos.json mtime
-        repos_json_path = os.path.join(self.repos_path, "repos.json")
-        repos_mtime = os.path.getmtime(repos_json_path)
-
-        key = f"{repos_json_path}"
-        repo_old_mtime = self._get_stored_mtime(key)
-
-        #logger.debug(f"Current repos.json mtime: {repos_mtime}")
-        #logger.debug(f"Old repos.json mtime: {repo_old_mtime}")
-        current_item_keys.add(key)
-
-        # if changed, reset indexes
-        if repo_old_mtime is None or repo_old_mtime != repos_mtime:
-            logger.debug("repos.json modified. Clearing index ........")
-            # reset indices
-            self.indices = {key: [] for key in self.index_files.keys()}
-            # record repo mtime
-            self.modified_times[key] = {
-                "mtime": repos_mtime,
-                "date_time": datetime.fromtimestamp(repos_mtime).strftime("%Y-%m-%d %H:%M:%S")
-            }
-            # clear modified times except for repos.json
-            self.modified_times = {key: self.modified_times[key]}
-            self._save_indices()
-            self._save_modified_times()
-            repos_changed = True
-        #else:
-        #    logger.debug("Repos.json not modified")
+            self.indices = {k: [] for k in self.index_files.keys()}
+            force_rebuild = True
+           
 
         # index each repo
         for repo in self.repos:
-            repo_path = repo.path #os.path.join(self.repos_path, repo)
-            if not os.path.isdir(repo_path):
-                continue
-            #logger.debug(f"------------Checking repository: {repo_path}---------------")
-            # Filter for relevant directories in the repo
-            for folder_type in ["script", "cache", "experiment"]:
-                #logger.debug(f"Checking folder type: {folder_type}")
-                folder_path = os.path.join(repo_path, folder_type)
-                if not os.path.isdir(folder_path):
-                    continue
-
-                # Process each automation directory
-                for automation_dir in os.listdir(folder_path):
-                    # logger.debug(f"Checking automation directory: {automation_dir}")
-                    automation_path = os.path.join(folder_path, automation_dir)
-                    if not os.path.isdir(automation_path):
-                        #logger.debug(f"Skipping non-directory automation path: {automation_path}")
-                        continue
-                    
-                    yaml_path = os.path.join(automation_path, "meta.yaml")
-                    json_path = os.path.join(automation_path, "meta.json")
-
-                    if os.path.isfile(yaml_path):
-                        # logger.debug(f"Found YAML config file: {yaml_path}")
-                        config_path = yaml_path
-                    elif os.path.isfile(json_path):
-                        # logger.debug(f"Found JSON config file: {json_path}")
-                        config_path = json_path
-                    else:
-                        #logger.debug(f"No config file found in {automation_path}, skipping")
-                        delete_flag = False
-                        if config_path := os.path.join(automation_path, "meta.yaml"):
-                            if config_path in self.modified_times:
-                                del self.modified_times[config_path]
-                                delete_flag = True
-                        if config_path := os.path.join(automation_path, "meta.json"):
-                            if config_path in self.modified_times:
-                                del self.modified_times[config_path]
-                                delete_flag = True
-                        
-                        # Use exact path matching instead of substring
-                        if any(item["path"] == automation_path for item in self.indices[folder_type]):
-                            logger.debug(f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
-                            delete_flag = True
-                            self._remove_index_entry(automation_path)
-                        if delete_flag:
-                            self._save_indices()
-                        continue
-                    current_item_keys.add(config_path)
-                    mtime = self.get_item_mtime(config_path)
-
-                    old_mtime = self._get_stored_mtime(config_path)
-
-                    # skip if unchanged
-                    if old_mtime == mtime and not repos_changed:
-                        # logger.debug(f"No changes detected for {config_path}, skipping reindexing.")
-                        continue
-                    #if(old_mtime is None):
-                    #    logger.debug(f"New meta.yaml file detected: {config_path}. Adding to index.")
-                    
-                    # update mtime
-                    #logger.debug(f"{config_path} is modified, index getting updated")
-                    #if config_path not in self.modified_times:
-                    #    logger.debug(f"*************{config_path} not found in modified_times; creating new entry***************")
-
-                    self.modified_times[config_path] = {
-                        "mtime": mtime,
-                        "date_time": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    #logger.debug(f"Modified time for {config_path} updated to {mtime}")
-                    changed = True
-                    # meta file changed, so reindex
-                    self._process_config_file(config_path, folder_type, automation_path, repo)
+            repo_changed = self._index_single_repo(repo, force_rebuild, current_item_keys)
+            if repo_changed:
+                changed = True
 
         # remove deleted scripts
         deleted_keys = set(self.modified_times) - current_item_keys
