@@ -177,25 +177,32 @@ class Index:
                 elif os.path.isfile(json_path):
                     config_path = json_path
                 else:
-                    #logger.debug(f"No config file found in {automation_path}, skipping")
+                    # No config file found, remove from index if exists
                     delete_flag = False
-                    if automation_dir in self.modified_times:
-                        del self.modified_times[automation_dir]
-                    if any(automation_dir in item["path"] for item in self.indices[folder_type]):
+                    
+                    # Check and remove both possible config paths from modified_times
+                    for config_name in ["meta.yaml", "meta.json"]:
+                        config_key = os.path.join(automation_path, config_name)
+                        if config_key in self.modified_times:
+                            del self.modified_times[config_key]
+                            delete_flag = True
+                    
+                    # Use exact path matching instead of substring
+                    if any(item["path"] == automation_path for item in self.indices[folder_type]):
                         logger.debug(f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
                         delete_flag = True
                         self._remove_index_entry(automation_path)
+                    
                     if delete_flag:
                         self._save_indices()
                     continue
                 if current_item_keys is not None:
                     current_item_keys.add(config_path)
                 mtime = self.get_item_mtime(config_path)
-                old = self.modified_times.get(config_path)
-                old_mtime = old["mtime"] if isinstance(old, dict) else old
+                old_mtime = self._get_stored_mtime(config_path)
 
                 # skip if unchanged
-                if old_mtime == mtime and repos_changed != 1:
+                if old_mtime == mtime and not repos_changed:
                     continue
 
                 self.modified_times[config_path] = {
@@ -317,17 +324,14 @@ class Index:
             alias = data.get("alias", None)
 
             # Validate and add to indices
-            if unique_id:
-                self._delete_by_uid(folder_type, unique_id, alias)
-                self.indices[folder_type].append({
-                    "uid": unique_id,
-                    "tags": tags,
-                    "alias": alias,
-                    "path": folder_path,
-                    "repo": repo
-                })
-            else:
-                logger.warning(f"Skipping {config_file}: Missing 'uid' field.")
+            self._delete_by_uid(folder_type, unique_id, alias)
+            self.indices[folder_type].append({
+                "uid": unique_id,
+                "tags": tags,
+                "alias": alias,
+                "path": folder_path,
+                "repo": repo
+            })
 
         except Exception as e:
             logger.error(f"Error processing {config_file}: {e}")
