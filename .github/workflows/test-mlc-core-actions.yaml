@@ -273,22 +273,32 @@ jobs:
         # Add a test script
         mlc add script test-delete-script --tags=test,delete,temp
         
-        # Verify it exists in the index
-        mlc find script test-delete-script
+        # Get the actual script path from find command
+        SCRIPT_PATH=$(mlc find script test-delete-script 2>&1 | grep "Item path:" | awk '{print $3}')
+        echo "Script path: $SCRIPT_PATH"
         
-        # Get the script path and manually delete it
-        SCRIPT_PATH="${HOME}/MLC/repos/mlcommons@mlperf-automations/script/test-delete-script"
+        if [ -z "$SCRIPT_PATH" ]; then
+          echo "Script was not found after adding. Exiting with failure."
+          exit 1
+        fi
+        
+        # Manually delete the script
         if [ -d "$SCRIPT_PATH" ]; then
           rm -rf "$SCRIPT_PATH"
           echo "Manually deleted script at $SCRIPT_PATH"
-        
-        
-          # Verify the deleted script is no longer in the index
-          if mlc find script test-delete-script 2>&1 | grep -q "test-delete-script"; then
-            echo "Deleted script still found in index. Index should have been updated. Exiting with failure."
-            exit 1
-          fi
+        else
+          echo "Script directory not found at $SCRIPT_PATH. Exiting with failure."
+          exit 1
         fi
+        
+        # Verify the deleted script is no longer in the index
+        # The find command will automatically trigger index rebuild and detect the deletion
+        if mlc find script test-delete-script 2>&1 | grep -q "test-delete-script"; then
+          echo "ERROR: Deleted script still found in index. Index should have been automatically updated."
+          exit 1
+        fi
+        
+        echo "Script deletion test passed successfully"
         
         # Test with cache: run a script to create cache, then delete it manually
         mlc run script --tags=detect,os --quiet
@@ -300,14 +310,16 @@ jobs:
           rm -rf "$CACHE_PATH"
           echo "Manually deleted cache at $CACHE_PATH"
           
-          
           # Verify the deleted cache is no longer in the index
+          # The find command will automatically trigger index rebuild and detect the deletion
           if mlc find cache --tags=detect,os 2>&1 | grep -q "$CACHE_PATH"; then
-            echo "Deleted cache still found in index. Index should have been updated. Exiting with failure."
+            echo "ERROR: Deleted cache still found in index. Index should have been automatically updated."
             exit 1
           fi
           
-          echo "Cache deletion test completed successfully"
+          echo "Cache deletion test passed successfully"
+        else
+          echo "No cache found to test deletion"
         fi
 
   test_mlc_access_core_actions:
