@@ -738,6 +738,56 @@ class Action:
 
     find = search
 
+    def reindex(self, i):
+        """
+        Reindex the specified target or all targets if none specified.
+
+        Args:
+            i (dict): Input dictionary with the following keys:
+                - reindex_target (str, optional): Target to reindex ('script', 'cache', 'repo', 'all', or None).
+                                                   If not provided or 'all', reindexes all targets.
+
+        Returns:
+            dict: Result of the operation with 'return' code 0 on success.
+
+        Example:
+            mlc reindex               # Reindex all targets
+            mlc reindex script        # Reindex only script target
+            mlc reindex cache         # Reindex only cache target
+        """
+        reindex_target = i.get('reindex_target')
+        
+        if not reindex_target or reindex_target == 'all' or reindex_target == 'repos' or reindex_target == 'repo':
+            # Reindex all targets
+            logger.info("Reindexing all targets (script, cache, experiment)...")
+            index = self.get_index()
+            
+            # Clear existing indices and force rebuild
+            index.indices = {k: [] for k in index.index_files.keys()}
+            index.modified_times = {}
+            index.build_index()
+            
+            logger.info("Successfully reindexed all targets.")
+            return {'return': 0, 'message': 'All targets reindexed successfully'}
+        else:
+                
+            logger.info(f"Reindexing {reindex_target} target...")
+            index = self.get_index()
+            
+            # Clear the specific index
+            if reindex_target in index.indices:
+                index.indices[reindex_target] = []
+                # Clear modified times for this target type only
+                keys_to_remove = [k for k in index.modified_times.keys() if reindex_target in k]
+                for key in keys_to_remove:
+                    del index.modified_times[key]
+            
+            # Rebuild the index
+            index.build_index()
+            
+            logger.info(f"Successfully reindexed {reindex_target} target.")
+            return {'return': 0, 'message': f'{reindex_target} target reindexed successfully'}
+
 default_parent = None
 if not default_parent:
     default_parent = Action()

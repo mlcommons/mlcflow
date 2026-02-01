@@ -232,10 +232,14 @@ class Index:
         # load modified times
         self.modified_times = self._load_modified_times()
 
-        # if missing index file, then force full rebuild
-        index_json_path = os.path.join(self.repos_path, "index_script.json")
-        if not os.path.exists(index_json_path):
-            logger.warning("index_script.json missing. Forcing full index rebuild...")
+        # if any index file is missing, force full rebuild
+        missing_indices = []
+        for index_type, index_path in self.index_files.items():
+            if not os.path.exists(index_path):
+                missing_indices.append(index_type)
+        
+        if missing_indices:
+            logger.warning(f"Missing index files: {', '.join(missing_indices)}. Forcing full index rebuild...")
             self.modified_times = {}
             self.indices = {k: [] for k in self.index_files.keys()}
             force_rebuild = True

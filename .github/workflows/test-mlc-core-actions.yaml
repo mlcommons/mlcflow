@@ -220,6 +220,14 @@ jobs:
         mlc rm repo mlcommons@mlperf-automations -f
         mlcr detect,cpu -j
 
+    - name: Test 26 - Test reindex command
+      run: |
+        mlc reindex
+        mlc reindex all
+        mlc reindex script
+        mlc reindex cache
+        mlc reindex repo
+
   test_mlc_access_core_actions:
 
     runs-on: ${{ matrix.os }}
