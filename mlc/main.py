@@ -166,7 +166,7 @@ def build_parser(pre_args):
 
     # Reindex command (target is optional)
     reindex_parser = subparsers.add_parser('reindex', add_help=False)
-    reindex_parser.add_argument('target', nargs='?', choices=['repo', 'repos', 'script', 'cache', 'all'], help='Target to reindex (optional, defaults to all)')
+    reindex_parser.add_argument('target', nargs='?', choices=['repo', 'repos', 'script', 'cache', 'experiment', 'all'], help='Target to reindex (optional, defaults to all)')
     reindex_parser.add_argument('details', nargs='?', help='Details or identifier (optional)')
     reindex_parser.add_argument('extra', nargs=argparse.REMAINDER)
 
