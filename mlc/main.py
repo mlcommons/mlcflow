@@ -148,7 +148,7 @@ def convert_hyphen_to_underscore_in_args():
 def build_pre_parser():
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("action", nargs="?", help="Top-level action (run, build, help, etc.)")
-    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos', 'all'], nargs="?", help="Target (repo, script, cache, ...)")
+    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos', 'experiment', 'all'], nargs="?", help="Target (repo, script, cache, ...)")
     pre_parser.add_argument("-h", "--help", action="store_true")
     return pre_parser
 
