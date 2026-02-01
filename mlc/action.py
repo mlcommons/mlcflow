@@ -767,6 +767,10 @@ class Action:
             index.modified_times = {}
             index.build_index()
             
+            # Force save to ensure indices are written even if build_index didn't detect changes
+            index._save_modified_times()
+            index._save_indices()
+            
             logger.info("Successfully reindexed all targets.")
             return {'return': 0, 'message': 'All targets reindexed successfully'}
         else:
@@ -784,6 +788,10 @@ class Action:
             
             # Rebuild the index
             index.build_index()
+            
+            # Force save to ensure indices are written
+            index._save_modified_times()
+            index._save_indices()
             
             logger.info(f"Successfully reindexed {reindex_target} target.")
             return {'return': 0, 'message': f'{reindex_target} target reindexed successfully'}
