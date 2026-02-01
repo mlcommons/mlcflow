@@ -194,7 +194,7 @@ class Index:
                         self._remove_index_entry(automation_path)
                     
                     if delete_flag:
-                        self._save_indices()
+                        changed = True
                     continue
                 if current_item_keys is not None:
                     current_item_keys.add(config_path)
