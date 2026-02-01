@@ -277,14 +277,12 @@ jobs:
         mlc find script test-delete-script
         
         # Get the script path and manually delete it
-        SCRIPT_PATH="${HOME}/MLC/repos/internal@mlc-local-repo/script/test-delete-script"
+        SCRIPT_PATH="${HOME}/MLC/repos/local/script/test-delete-script"
         if [ -d "$SCRIPT_PATH" ]; then
           rm -rf "$SCRIPT_PATH"
           echo "Manually deleted script at $SCRIPT_PATH"
         fi
         
-        # Run any mlc command that triggers index rebuild
-        mlc list script
         
         # Verify the deleted script is no longer in the index
         if mlc find script test-delete-script 2>&1 | grep -q "test-delete-script"; then
@@ -302,8 +300,6 @@ jobs:
           rm -rf "$CACHE_PATH"
           echo "Manually deleted cache at $CACHE_PATH"
           
-          # Trigger index rebuild
-          mlc list cache
           
           # Verify the deleted cache is no longer in the index
           if mlc find cache --tags=detect,os 2>&1 | grep -q "$CACHE_PATH"; then
