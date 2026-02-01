@@ -274,7 +274,7 @@ jobs:
         mlc add script test-delete-script --tags=test,delete,temp
         
         # Get the actual script path from find command
-        SCRIPT_PATH=$(mlc find script test-delete-script 2>&1 | grep "Item path:" | awk '{print $8}')
+        SCRIPT_PATH=$(mlc find script test-delete-script -p 2>&1)
         echo "Script path: $SCRIPT_PATH"
         
         if [ -z "$SCRIPT_PATH" ]; then
@@ -293,7 +293,7 @@ jobs:
         
         # Verify the deleted script is no longer in the index
         # The find command will automatically trigger index rebuild and detect the deletion
-        if mlc find script test-delete-script 2>&1 | grep -q "test-delete-script"; then
+        if mlc find script test-delete-script -p 2>&1 | grep -q "test-delete-script"; then
           echo "ERROR: Deleted script still found in index. Index should have been automatically updated."
           exit 1
         fi

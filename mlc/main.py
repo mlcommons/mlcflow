@@ -110,10 +110,16 @@ def process_console_output(res, target, action, run_args):
             logger.error("'list' entry not found in find result")
             return  # Exit function if there's an error
         if len(res['list']) == 0:
-            logger.warning(f"""No {target} entry found for the specified input: {run_args}!""")
+            # Only show warning if not in path-only mode
+            if not run_args.get('path_only'):
+                logger.warning(f"""No {target} entry found for the specified input: {run_args}!""")
         else:
             for item in res['list']:
-                logger.info(f"""Item path: {item.path}""")
+                if run_args.get('path_only'):
+                    # Print only the path without logger prefix for script-friendly output
+                    print(item.path)
+                else:
+                    logger.info(f"""Item path: {item.path}""")
     if action == "reindex":
         if "message" in res:
             logger.info(res['message'])
@@ -227,6 +233,10 @@ def build_run_args(args):
     if hasattr(args, 'command') and args.command == "reindex":
         if hasattr(args, 'target') and args.target:
             run_args['reindex_target'] = args.target
+    
+    # Check for path-only flag (for script-friendly output)
+    if run_args.get('path_only') or run_args.get('p'):
+        run_args['path_only'] = True
 
     return run_args
 

@@ -672,8 +672,11 @@ class Action:
             details = i['details']
             details_split = details.split(",")
             if len(details_split) > 1:
-                alias = details_split[0]
-                uid = details_split[1]
+                # Only treat as alias,uid if the second part is actually a valid UID
+                if utils.is_uid(details_split[1]):
+                    alias = details_split[0]
+                    uid = details_split[1]
+                # Otherwise, don't parse as alias,uid - let it be treated as tags
             else:
                 if utils.is_uid(details_split[0]):
                     uid = details_split[0]
