@@ -277,17 +277,17 @@ jobs:
         mlc find script test-delete-script
         
         # Get the script path and manually delete it
-        SCRIPT_PATH="${HOME}/MLC/repos/local/script/test-delete-script"
+        SCRIPT_PATH="${HOME}/MLC/repos/mlcommons@mlperf-automations/script/test-delete-script"
         if [ -d "$SCRIPT_PATH" ]; then
           rm -rf "$SCRIPT_PATH"
           echo "Manually deleted script at $SCRIPT_PATH"
-        fi
         
         
-        # Verify the deleted script is no longer in the index
-        if mlc find script test-delete-script 2>&1 | grep -q "test-delete-script"; then
-          echo "Deleted script still found in index. Index should have been updated. Exiting with failure."
-          exit 1
+          # Verify the deleted script is no longer in the index
+          if mlc find script test-delete-script 2>&1 | grep -q "test-delete-script"; then
+            echo "Deleted script still found in index. Index should have been updated. Exiting with failure."
+            exit 1
+          fi
         fi
         
         # Test with cache: run a script to create cache, then delete it manually
