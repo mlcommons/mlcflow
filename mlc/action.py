@@ -761,15 +761,7 @@ class Action:
             # Reindex all targets
             logger.info("Reindexing all targets (script, cache, experiment)...")
             index = self.get_index()
-            
-            # Clear existing indices and force rebuild
-            index.indices = {k: [] for k in index.index_files.keys()}
-            index.modified_times = {}
-            index.build_index()
-            
-            # Force save to ensure indices are written even if build_index didn't detect changes
-            index._save_modified_times()
-            index._save_indices()
+            index.build_index(force_rebuild=True)
             
             logger.info("Successfully reindexed all targets.")
             return {'return': 0, 'message': 'All targets reindexed successfully'}
@@ -779,19 +771,17 @@ class Action:
             index = self.get_index()
             
             # Clear the specific index
+            '''
             if reindex_target in index.indices:
                 index.indices[reindex_target] = []
                 # Clear modified times for this target type only
                 keys_to_remove = [k for k in index.modified_times.keys() if reindex_target in k]
                 for key in keys_to_remove:
                     del index.modified_times[key]
+            '''
             
-            # Rebuild the index
-            index.build_index()
-            
-            # Force save to ensure indices are written
-            index._save_modified_times()
-            index._save_indices()
+            # Rebuild the index (we are rebuilding for all targets here as the individual target rebuild is not implemented and not very critical)
+            index.build_index(force_rebuild=True)
             
             logger.info(f"Successfully reindexed {reindex_target} target.")
             return {'return': 0, 'message': f'{reindex_target} target reindexed successfully'}

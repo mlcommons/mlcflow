@@ -216,7 +216,7 @@ class Index:
         
         return changed
 
-    def build_index(self):
+    def build_index(self, force_rebuild=False):
         """
         Build shared indices for script, cache, and experiment folders across all repositories.
         
@@ -227,7 +227,6 @@ class Index:
         # track all currently detected item paths
         current_item_keys = set()
         changed = False
-        force_rebuild = False
 
         # load modified times
         self.modified_times = self._load_modified_times()
@@ -243,8 +242,7 @@ class Index:
             self.modified_times = {}
             self.indices = {k: [] for k in self.index_files.keys()}
             force_rebuild = True
-           
-
+        
         # index each repo
         for repo in self.repos:
             repo_changed = self._index_single_repo(repo, force_rebuild, current_item_keys)
