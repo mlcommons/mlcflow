@@ -274,7 +274,7 @@ jobs:
         mlc add script test-delete-script --tags=test,delete,temp
         
         # Get the actual script path from find command
-        SCRIPT_PATH=$(mlc find script test-delete-script 2>&1 | grep "Item path:" | awk '{print $3}')
+        SCRIPT_PATH=$(mlc find script test-delete-script 2>&1 | grep "Item path:" | awk '{print $8}')
         echo "Script path: $SCRIPT_PATH"
         
         if [ -z "$SCRIPT_PATH" ]; then
