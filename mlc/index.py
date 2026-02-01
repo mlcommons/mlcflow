@@ -252,10 +252,10 @@ class Index:
         # remove deleted scripts
         deleted_keys = set(self.modified_times) - current_item_keys
         for key in deleted_keys:
-            logger.warning(f"Detected deleted item, removing entry from modified times: {key}")
-            del self.modified_times[key]
             folder_key = os.path.dirname(key)
-            #logger.warning(f"Removing index entry for folder: {folder_key}")
+            logger.warning(f"Detected deleted item: {key}")
+            logger.debug(f"Removing index entry for folder: {folder_key}")
+            del self.modified_times[key]
             self._remove_index_entry(folder_key)
             changed = True
         if deleted_keys:
@@ -267,14 +267,18 @@ class Index:
             self._save_indices()
 
     def _remove_index_entry(self, key):
-        logger.debug(f"Removing index entry for {key}")
+        logger.debug(f"Removing index entry for path: {key}")
         # Normalize paths for comparison
         normalized_key = os.path.normpath(key)
         for ft in self.indices:
+            original_count = len(self.indices[ft])
             self.indices[ft] = [
                 item for item in self.indices[ft]
                 if os.path.normpath(item["path"]) != normalized_key
             ]
+            removed_count = original_count - len(self.indices[ft])
+            if removed_count > 0:
+                logger.debug(f"Removed {removed_count} item(s) from {ft} index")
 
     def _delete_by_uid(self, folder_type, uid, alias):
         """

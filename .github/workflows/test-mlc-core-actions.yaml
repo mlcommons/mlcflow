@@ -293,8 +293,9 @@ jobs:
         
         # Verify the deleted script is no longer in the index
         # The find command will automatically trigger index rebuild and detect the deletion
-        if mlc find script test-delete-script -p 2>&1 | grep -q "test-delete-script"; then
-          echo "ERROR: Deleted script still found in index. Index should have been automatically updated."
+        FIND_RESULT=$(mlc find script test-delete-script -p 2>/dev/null)
+        if [ -n "$FIND_RESULT" ]; then
+          echo "ERROR: Deleted script still found in index. Found: $FIND_RESULT"
           exit 1
         fi
         
@@ -304,7 +305,7 @@ jobs:
         mlc run script --tags=detect,os --quiet
         
         # Find and delete a cache entry
-        CACHE_PATH=$(mlc find cache --tags=detect,os 2>&1 | grep "Item path:" | head -1 | awk '{print $3}')
+        CACHE_PATH=$(mlc find cache --tags=detect,os -p 2>/dev/null | head -1)
         if [ -n "$CACHE_PATH" ] && [ -d "$CACHE_PATH" ]; then
           echo "Found cache at: $CACHE_PATH"
           rm -rf "$CACHE_PATH"
@@ -312,8 +313,9 @@ jobs:
           
           # Verify the deleted cache is no longer in the index
           # The find command will automatically trigger index rebuild and detect the deletion
-          if mlc find cache --tags=detect,os 2>&1 | grep -q "$CACHE_PATH"; then
-            echo "ERROR: Deleted cache still found in index. Index should have been automatically updated."
+          FIND_CACHE_RESULT=$(mlc find cache --tags=detect,os -p 2>/dev/null | grep -F "$CACHE_PATH")
+          if [ -n "$FIND_CACHE_RESULT" ]; then
+            echo "ERROR: Deleted cache still found in index. Found: $FIND_CACHE_RESULT"
             exit 1
           fi
           
