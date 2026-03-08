@@ -24,3 +24,6 @@
 - [ ] PR title and description are concise and clearly state the purpose of the change.
 - [ ] Related issues (if any) are properly referenced using `Fixes #` or `Closes #`.
 - [ ] All reviewer feedback has been addressed.
+
+### 🤖 Contributor Attestation for LLM-Assisted Code
+- [ ] If this PR includes LLM-generated or assisted code, I confirm that I have reviewed the code, take responsibility for it, and to the best of my knowledge it does not contain proprietary or improperly sourced material and can be contributed under the project’s license.
