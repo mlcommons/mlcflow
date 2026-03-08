@@ -98,16 +98,16 @@ jobs:
           # macOS Tests
           # ===================================================================
           # Test basic installation on macOS with Homebrew
-          - os: macOS 13
-            runner: macos-13
+          - os: macos-latest
+            runner: macos-latest
             scenario: basic-install
             test-type: success
             extra-flags: "--yes"
             description: "Basic non-interactive installation"
 
           # Test custom venv directory on macOS
-          - os: macOS 13
-            runner: macos-13
+          - os: macos-latest
+            runner: macos-latest
             scenario: custom-venv
             test-type: success
             extra-flags: "--yes --venv-dir /tmp/custom_mlcflow_venv"
