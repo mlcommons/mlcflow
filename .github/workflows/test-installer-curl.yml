@@ -30,33 +30,6 @@ jobs:
       matrix:
         include:
           # ===================================================================
-          # Ubuntu 20.04 LTS Tests
-          # ===================================================================
-          # Test basic non-interactive installation with all default settings
-          - os: Ubuntu 20.04
-            runner: ubuntu-20.04
-            scenario: basic-install
-            test-type: success
-            extra-flags: "--yes"
-            description: "Basic non-interactive installation"
-
-          # Test installation with custom venv directory
-          - os: Ubuntu 20.04
-            runner: ubuntu-20.04
-            scenario: custom-venv
-            test-type: success
-            extra-flags: "--yes --venv-dir /tmp/custom_mlcflow_venv"
-            description: "Custom virtual environment directory"
-
-          # Test verbose output mode for debugging
-          - os: Ubuntu 20.04
-            runner: ubuntu-20.04
-            scenario: verbose-mode
-            test-type: success
-            extra-flags: "--yes --verbose"
-            description: "Verbose logging mode"
-
-          # ===================================================================
           # Ubuntu 22.04 LTS Tests
           # ===================================================================
           # Test basic installation on Ubuntu 22.04
@@ -278,6 +251,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ===================================================================
+          # Ubuntu 20.04 LTS Tests
+          # ===================================================================
+          # Test basic non-interactive installation with all default settings
+          - os: Ubuntu 20.04
+            container: ubuntu:20.04
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # Test installation with custom venv directory
+          - os: Ubuntu 20.04
+            container: ubuntu:20.04
+            scenario: custom-venv
+            test-type: success
+            extra-flags: "--yes --venv-dir /tmp/custom_mlcflow_venv"
+            description: "Custom virtual environment directory"
+
           # ===================================================================
           # Debian 11 Tests
           # ===================================================================
