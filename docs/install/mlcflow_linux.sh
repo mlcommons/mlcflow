@@ -3,9 +3,13 @@
 # MLCFlow Generic Installer (v1)
 # Supports:
 #   - Ubuntu 20.04+
-#   - RHEL family (RHEL, Rocky, Alma, CentOS Stream)
+#   - RHEL family (RHEL, Alma, CentOS Stream)
+#   - macOS (with Homebrew)
 #   - x86_64 and aarch64
 
+# Exit if a command fails
+# Treats unset variables as errors
+# Makes pipeline fails if any command fails
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
@@ -31,6 +35,7 @@ MLC_BRANCH="$DEFAULT_BRANCH"
 # ------------------------------------------------------------------------------
 
 INTERACTIVE=false
+# checks if the stdout connected to a terminal
 if [ -t 1 ]; then
     INTERACTIVE=true
 fi
@@ -94,6 +99,8 @@ exit 0
 # Argument Parsing
 # ------------------------------------------------------------------------------
 
+# Loops through the arguments provided
+# If an option expects a value after it, reads it and skips for next iteration
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --yes) ASSUME_YES=true ;;
@@ -115,14 +122,19 @@ done
 # ------------------------------------------------------------------------------
 
 detect_os() {
-    if [ ! -f /etc/os-release ]; then
-        log_error "Cannot detect operating system."
-        exit 1
+    if [ "$(uname)" = "Darwin" ]; then
+        OS_ID="macos"
+        OS_VERSION="$(sw_vers -productVersion 2>/dev/null || echo unknown)"
+    else
+        if [ ! -f /etc/os-release ]; then
+            log_error "Cannot detect operating system."
+            exit 1
+        fi
+        # loads the content from os-release as variables
+        source /etc/os-release
+        OS_ID="$ID"
+        OS_VERSION="$VERSION_ID"
     fi
-
-    source /etc/os-release
-    OS_ID="$ID"
-    OS_VERSION="$VERSION_ID"
 
     case "$OS_ID" in
         ubuntu|debian)
@@ -134,6 +146,9 @@ detect_os() {
             else
                 PKG_MANAGER="yum"
             fi
+            ;;
+        macos)
+            PKG_MANAGER="brew"
             ;;
         *)
             log_error "Unsupported OS: $OS_ID"
@@ -149,22 +164,28 @@ detect_os() {
 # Privilege Detection
 # ------------------------------------------------------------------------------
 
+# Handles the following cases:
+# 1. If the script is already running as root (EUID=0), commands can be executed directly.
+# 2. If the script is not running as root but the `sudo` command is available,
+#    privileged commands will be executed using sudo.
+# 3. If neither root privileges nor sudo are available, the script will fail
+#    when attempting to run commands that require elevated permissions.
 if [ "$EUID" -eq 0 ]; then
     USE_SUDO=false
+elif command -v sudo >/dev/null 2>&1; then
+    USE_SUDO=true
 else
-    if command -v sudo >/dev/null 2>&1; then
-        USE_SUDO=true
-    else
-        log_error "Root or sudo required to install system dependencies."
-        exit 1
-    fi
+    USE_SUDO=false
 fi
 
 run_root() {
     if $USE_SUDO; then
         sudo "$@"
-    else
+    elif [ "$EUID" -eq 0 ]; then
         "$@"
+    else
+        log_error "Root or sudo required to install system dependencies."
+        exit 1
     fi
 }
 
@@ -172,15 +193,66 @@ run_root() {
 # System Dependencies
 # ------------------------------------------------------------------------------
 
+require_root_if_needed() {
+    if [ "$PKG_MANAGER" = "brew" ]; then
+        return
+    fi
+
+    if [ "$EUID" -ne 0 ] && ! $USE_SUDO; then
+        log_error "Root or sudo required to install missing dependencies."
+        exit 1
+    fi
+}
+
+have_pip_module() {
+    python3 -m pip --version >/dev/null 2>&1
+}
+
+have_venv_module() {
+    python3 -c 'import venv' >/dev/null 2>&1
+}
+
+check_missing_dependencies() {
+    MISSING_DEPS=()
+
+    command -v git >/dev/null 2>&1 || MISSING_DEPS+=("git")
+    command -v curl >/dev/null 2>&1 || MISSING_DEPS+=("curl")
+    command -v wget >/dev/null 2>&1 || MISSING_DEPS+=("wget")
+    command -v unzip >/dev/null 2>&1 || MISSING_DEPS+=("unzip")
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        MISSING_DEPS+=("python3")
+    else
+        have_pip_module || MISSING_DEPS+=("python3-pip")
+        have_venv_module || MISSING_DEPS+=("python3-venv")
+    fi
+}
+
 install_packages() {
     log_info "Installing system dependencies..."
 
-    if [ "$PKG_MANAGER" = "apt" ]; then
-        run_root apt update
-        run_root apt install -y python3 python3-venv python3-pip git curl
-    else
-        run_root "$PKG_MANAGER" install -y python3 python3-pip git curl
-    fi
+    case "$PKG_MANAGER" in
+        apt)
+            require_root_if_needed
+            run_root apt update
+            run_root apt install -y python3 python3-pip python3-venv git curl wget unzip
+            ;;
+        yum|dnf)
+            require_root_if_needed
+            # RHEL-family images may ship curl-minimal and conflict with curl package.
+            run_root "$PKG_MANAGER" install -y python3 python3-pip git curl-minimal wget unzip
+            # Some RHEL-family variants package venv separately
+            run_root "$PKG_MANAGER" install -y python3-venv >/dev/null 2>&1 || true
+            ;;
+        brew)
+            if ! command -v brew >/dev/null 2>&1; then
+                log_error "Homebrew is required on macOS. Please install it from https://brew.sh"
+                exit 1
+            fi
+            brew update
+            brew install python git curl wget unzip
+            ;;
+    esac
 }
 
 # ------------------------------------------------------------------------------
@@ -195,7 +267,11 @@ ensure_python() {
     if ! command -v python3 >/dev/null 2>&1; then
         log_warn "Python3 not found."
         handle_python_install
-        return
+    fi
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        log_error "Python3 is still unavailable after attempted installation."
+        exit 1
     fi
 
     PY_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
@@ -207,6 +283,21 @@ ensure_python() {
         log_warn "Python version < $MIN_PYTHON_VERSION"
         handle_python_install
     fi
+
+    if ! have_pip_module; then
+        log_warn "python3 pip module is missing. Installing..."
+        install_packages
+    fi
+
+    if ! have_venv_module; then
+        log_warn "python3 venv module is missing. Installing..."
+        install_packages
+    fi
+
+    if ! have_pip_module || ! have_venv_module; then
+        log_error "pip/venv modules are still missing after attempted installation."
+        exit 1
+    fi
 }
 
 handle_python_install() {
@@ -216,7 +307,7 @@ handle_python_install() {
     fi
 
     if ! $INTERACTIVE; then
-        log_error "Incompatible Python and non-interactive mode."
+        log_error "Incompatible Python and non-interactive mode. Run with --install-python to automatically install."
         exit 1
     fi
 
@@ -245,8 +336,6 @@ setup_venv() {
     # Activate venv
     # shellcheck disable=SC1090
     source "$VENV_DIR/bin/activate"
-
-    pip install --upgrade pip
 }
 
 # ------------------------------------------------------------------------------
@@ -254,16 +343,16 @@ setup_venv() {
 # ------------------------------------------------------------------------------
 
 install_mlcflow() {
-    if pip show mlcflow >/dev/null 2>&1; then
+    if python3 -m pip show mlcflow >/dev/null 2>&1; then
         if $UPGRADE; then
             log_info "Upgrading mlcflow..."
-            pip install --upgrade mlcflow
+            python3 -m pip install --upgrade mlcflow
         else
             log_info "mlcflow already installed. Skipping."
         fi
     else
         log_info "Installing mlcflow..."
-        pip install mlcflow
+        python3 -m pip install mlcflow
     fi
 }
 
@@ -271,14 +360,28 @@ install_mlcflow() {
 # Pull Automation Repo
 # ------------------------------------------------------------------------------
 
+prompt_repo_details() {
+    if ! $INTERACTIVE || $ASSUME_YES; then
+        return
+    fi
+
+    read -r -p "Automation repo [${MLC_REPO}]: " repo_input
+    if [ -n "${repo_input}" ]; then
+        MLC_REPO="${repo_input}"
+    fi
+
+    read -r -p "Automation branch [${MLC_BRANCH}]: " branch_input
+    if [ -n "${branch_input}" ]; then
+        MLC_BRANCH="${branch_input}"
+    fi
+}
+
 pull_repo() {
     log_info "Pulling automation repo:"
     log_info "  Repo   : ${MLC_REPO}"
     log_info "  Branch : ${MLC_BRANCH}"
 
-    # Using correct CLI format:
-    # mlc pull repo <repo_owner>@<repo_name> --branch <repo_branch>
-    mlc pull repo ${MLC_REPO} --branch=${MLC_BRANCH}
+    mlc pull repo "${MLC_REPO}" --branch="${MLC_BRANCH}"
 }
 
 # ------------------------------------------------------------------------------
@@ -287,9 +390,18 @@ pull_repo() {
 
 main() {
     detect_os
+    check_missing_dependencies
+    if [ "${#MISSING_DEPS[@]}" -gt 0 ]; then
+        log_warn "Missing dependencies: ${MISSING_DEPS[*]}"
+        install_packages
+    else
+        log_info "All base dependencies are present."
+    fi
+
     ensure_python
     setup_venv
     install_mlcflow
+    prompt_repo_details
     pull_repo
 
     log_info "Installation completed successfully."
