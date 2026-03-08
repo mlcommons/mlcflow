@@ -335,6 +335,20 @@ sudo dnf install python3-venv
 bash mlcflow_linux.sh --yes
 ```
 
+## Testing and CI
+
+### Automated Testing
+
+The installer is continuously tested via GitHub Actions across all supported platforms using the exact distribution method that users will use in production (`curl <url>/mlcflow_linux.sh | bash`). The CI workflow validates:
+
+- **Operating Systems**: Ubuntu 20.04/22.04/24.04, macOS 13, Debian 11/12, Rocky Linux 9, AlmaLinux 9, CentOS Stream 9
+
+### Known Testing Limitations
+
+**TODO**: The CI workflow currently only tests **non-interactive mode** (with `--yes` flag). The interactive installation path, which prompts users for repository name and branch, is not covered by automated tests.
+
+If you discover issues with interactive mode, please report them via GitHub Issues [here](https://github.com/mlcommons/mlcflow/issues).
+
 ## Support
 
 For issues, feature requests, or contributions:
