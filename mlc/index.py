@@ -407,7 +407,7 @@ class Index:
             lock_file = output_file + ".lock"
             try:
                 with self._file_lock_with_incremental_timeout(lock_file):
-                    logger.debug(f"Lock acquired at {lock_file} for Saving Index for {folder_type}")
+                    #logger.debug(f"Lock acquired at {lock_file} for Saving Index for {folder_type}")
 
                     with open(output_file, "w") as f:
                         json.dump(index_data, f, indent=4, cls=CustomJSONEncoder)
