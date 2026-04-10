@@ -234,6 +234,20 @@ TESTS_RUN_INPUT_SCHEMA = {
 }
 
 
+# ─── update_meta_if_env entry keys ──────────────────────────────
+UPDATE_META_IF_ENV_SCHEMA = {
+    "enable_if_env":            DICT,
+    "enable_if_any_env":        DICT,
+    "skip_if_env":              DICT,
+    "skip_if_any_env":          DICT,
+    "env":                      DICT,
+    "default_env":              DICT,
+    "default_variations":       DICT,
+    "docker":                   DICT,
+    "adr":                      DICT,
+    "ad":                       DICT,
+}
+
 def validate_meta(data, file_path=""):
     """
     Validate a script meta.yaml dict against the schema.
@@ -310,6 +324,34 @@ def validate_meta(data, file_path=""):
                                         errors.append(
                                             f"{prefix}{dep_list_key}[{i}].{ck}.{ek} list contains non-scalar: {type(item).__name__}")
 
+    # Validate update_meta_if_env entries
+    umie = data.get("update_meta_if_env")
+    if isinstance(umie, list):
+        for i, entry in enumerate(umie):
+            if not isinstance(entry, dict):
+                errors.append(f"{prefix}update_meta_if_env[{i}] is not a dict")
+                continue
+            for ek, ev in entry.items():
+                if ek not in UPDATE_META_IF_ENV_SCHEMA:
+                    warnings.append(f"{prefix}update_meta_if_env[{i}]: unknown key '{ek}'")
+                    continue
+                actual = type(ev).__name__
+                allowed = UPDATE_META_IF_ENV_SCHEMA[ek]
+                if actual not in allowed:
+                    errors.append(
+                        f"{prefix}update_meta_if_env[{i}].{ek} has type '{actual}', expected {allowed}")
+            # Validate enable_if_env/skip_if_env values inside update_meta_if_env
+            for ck in ["enable_if_env", "skip_if_env", "skip_if_any_env", "enable_if_any_env"]:
+                cv = entry.get(ck)
+                if isinstance(cv, dict):
+                    for ek2, ev2 in cv.items():
+                        if isinstance(ev2, (dict, list)) and not isinstance(ev2, str):
+                            if isinstance(ev2, list):
+                                for item in ev2:
+                                    if not isinstance(item, (str, int, float, bool)):
+                                        errors.append(
+                                            f"{prefix}update_meta_if_env[{i}].{ck}.{ek2} list contains non-scalar: {type(item).__name__}")
+
     # Validate variations
     variations = data.get("variations")
     if isinstance(variations, dict):
@@ -331,6 +373,7 @@ def validate_meta(data, file_path=""):
                 if actual not in allowed:
                     errors.append(
                         f"{prefix}variations.{vname}.{vk} has type '{actual}', expected {allowed}")
+
 
     # Validate docker section
     docker = data.get("docker")
