@@ -4,6 +4,7 @@ import json
 import yaml
 from .repo import Repo
 from datetime import datetime
+from .meta_schema import validate_meta
 from contextlib import contextmanager
 from filelock import FileLock, Timeout
 
@@ -379,6 +380,14 @@ class Index:
                 return
             tags = data.get("tags", [])
             alias = data.get("alias", None)
+
+            # Validate script meta against schema during indexing
+            if folder_type == "script":
+                errors, warnings = validate_meta(data, config_file)
+                for e in errors:
+                    logger.error(f"Meta validation error: {e}")
+                for w in warnings:
+                    logger.debug(f"Meta validation warning: {w}")
 
             # Validate and add to indices
             self._delete_by_uid(folder_type, unique_id, alias)
