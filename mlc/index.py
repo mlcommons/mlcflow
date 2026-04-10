@@ -389,9 +389,7 @@ class Index:
                 for w in warnings:
                     logger.debug(f"Meta validation warning: {w}")
                 if errors:
-                    import sys
-                    logger.error(f"Fix the above error(s) in {config_file} and try again.")
-                    sys.exit(1)
+                    raise ValueError(f"Meta validation failed for {config_file}. Fix the above error(s) and try again.")
 
             # Validate and add to indices
             self._delete_by_uid(folder_type, unique_id, alias)

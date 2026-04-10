@@ -85,7 +85,20 @@ def mlc_expand_short(action, target = "script"):
     sys.argv.insert(2, target)
 
     # Call the main function
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.extract_tb(e.__traceback__)
+        if tb:
+            last = tb[-1]
+            logger.error(f"{e}")
+            logger.error(f"  at {last.filename}:{last.lineno} in {last.name}")
+        else:
+            logger.error(f"{e}")
+        sys.exit(1)
 
 def mlcr():
     mlc_expand_short("run")
@@ -380,10 +393,23 @@ def main():
     res = method(run_args)
     if res['return'] > 0:
         logging.error(res.get('error', f"Error in {action}"))
-        raise Exception(f"An error occurred {res}")
+        sys.exit(1)
 
     process_console_output(res, args.target, args.command, run_args)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.extract_tb(e.__traceback__)
+        if tb:
+            last = tb[-1]
+            logger.error(f"{e}")
+            logger.error(f"  at {last.filename}:{last.lineno} in {last.name}")
+        else:
+            logger.error(f"{e}")
+        sys.exit(1)
 
