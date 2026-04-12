@@ -69,7 +69,6 @@ TOP_LEVEL_SCHEMA = {
     "prehook_deps":             LIST,        # list[dep_entry]
     "posthook_deps":            LIST,        # list[dep_entry]
     "post_deps":                LIST,        # list[dep_entry]
-    "post_deps_off":            LIST,        # list[dep_entry]
     "predeps":                  BOOL,
 
     # Variations
@@ -89,7 +88,6 @@ TOP_LEVEL_SCHEMA = {
 
     # Output / debugging
     "print_env_at_the_end":     DICT,        # dict[str, list[str]]
-    "print_env_at_the_end_disabled": DICT,
     "print_files_if_script_error": LIST,     # list[str]
     "warnings":                 LIST,        # list[str]
     "sudo_install":             BOOL,
@@ -97,11 +95,9 @@ TOP_LEVEL_SCHEMA = {
     # Conditional meta update
     "update_meta_if_env":       LIST,        # list[dict]
     "remote_run":               DICT,
-    "prehook_deps_off":         LIST,        # list[dep_entry]
 
     # Tests
     "tests":                    DICT,        # dict - see TESTS_SCHEMA
-    "test":                     DICT,        # alternate singular form
 }
 
 # ─── Dependency entry keys ──────────────────────────────────────
@@ -115,7 +111,6 @@ DEP_ENTRY_SCHEMA = {
     "enable_if_any_env":                DICT,
     "extra_cache_tags":                 STR,
     "update_tags_from_env_with_prefix": DICT,
-    "update_tags_from_env_with_prefix1": DICT,
     "update_tags_from_env":             LIST,
     "force_env_keys":                   LIST,
     "force_cache":                      BOOL,
@@ -148,7 +143,6 @@ VARIATION_ENTRY_SCHEMA = {
     "group":                    STR,
     "default":                  STR_OR_BOOL,
     "default_variations":       DICT,
-    "default-variations":       DICT,       # alternate form
     "deps":                     LIST,
     "prehook_deps":             LIST,
     "posthook_deps":            LIST,
@@ -172,7 +166,6 @@ VARIATION_ENTRY_SCHEMA = {
     "cache":                    BOOL,
     "force_cache":              BOOL,
     "update_meta_if_env":       LIST,
-    "default_gui":              BOOL,
     "warning":                  STR,
     "warnings":                 LIST,
     "names":                    LIST,
@@ -197,7 +190,6 @@ DOCKER_SCHEMA = {
     "mlc_repo":                 STR,
     "mlc_repo_branch":          STR,
     "mlc_repo_flags":           STR,
-    "mlc_repo_flags1":          STR,
     "extra_run_args":           STR,
     "all_gpus":                 STR,
     "user":                     STR,
