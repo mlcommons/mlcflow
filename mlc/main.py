@@ -85,7 +85,20 @@ def mlc_expand_short(action, target = "script"):
     sys.argv.insert(2, target)
 
     # Call the main function
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.extract_tb(e.__traceback__)
+        if tb:
+            last = tb[-1]
+            logger.error(f"{e}")
+            logger.error(f"  at {last.filename}:{last.lineno} in {last.name}")
+        else:
+            logger.error(f"{e}")
+        sys.exit(1)
 
 def mlcr():
     mlc_expand_short("run")
@@ -110,10 +123,19 @@ def process_console_output(res, target, action, run_args):
             logger.error("'list' entry not found in find result")
             return  # Exit function if there's an error
         if len(res['list']) == 0:
-            logger.warning(f"""No {target} entry found for the specified input: {run_args}!""")
+            # Only show warning if not in path-only mode
+            if not run_args.get('path_only'):
+                logger.warning(f"""No {target} entry found for the specified input: {run_args}!""")
         else:
             for item in res['list']:
-                logger.info(f"""Item path: {item.path}""")
+                if run_args.get('path_only'):
+                    # Print only the path without logger prefix for script-friendly output
+                    print(item.path)
+                else:
+                    logger.info(f"""Item path: {item.path}""")
+    if action == "reindex":
+        if "message" in res:
+            logger.info(res['message'])
     if "warnings" in res:
         logger.warning(f"{len(res['warnings'])} warning(s) found during the execution of the mlc command.")
         for warning in res["warnings"]:
@@ -145,7 +167,7 @@ def convert_hyphen_to_underscore_in_args():
 def build_pre_parser():
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("action", nargs="?", help="Top-level action (run, build, help, etc.)")
-    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos'], nargs="?", help="Target (repo, script, cache, ...)")
+    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos', 'experiment', 'all'], nargs="?", help="Target (repo, script, cache, ...)")
     pre_parser.add_argument("-h", "--help", action="store_true")
     return pre_parser
 
@@ -160,6 +182,12 @@ def build_parser(pre_args):
         p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
         p.add_argument('details', nargs='?', help='Details or identifier (optional)')
         p.add_argument('extra', nargs=argparse.REMAINDER)
+
+    # Reindex command (target is optional)
+    reindex_parser = subparsers.add_parser('reindex', add_help=False)
+    reindex_parser.add_argument('target', nargs='?', choices=['repo', 'repos', 'script', 'cache', 'experiment', 'all'], help='Target to reindex (optional, defaults to all)')
+    reindex_parser.add_argument('details', nargs='?', help='Details or identifier (optional)')
+    reindex_parser.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Script-only
     for action in ['docker', 'docker-run', 'experiment', 'remote-run', 'doc', 'lint']:
@@ -214,6 +242,14 @@ def build_run_args(args):
             run_args['src'] = args.details
         if args.extra:
             run_args['dest'] = args.extra[0]
+
+    if hasattr(args, 'command') and args.command == "reindex":
+        if hasattr(args, 'target') and args.target:
+            run_args['reindex_target'] = args.target
+    
+    # Check for path-only flag (for script-friendly output)
+    if run_args.get('path_only') or run_args.get('p'):
+        run_args['path_only'] = True
 
     return run_args
 
@@ -289,7 +325,8 @@ def main():
     pre_args, remaining_args = pre_parser.parse_known_args()
 
     parser = build_parser(pre_args)
-    args = parser.parse_args() if remaining_args or pre_args.target else pre_args
+    # Force full parsing for reindex command even without target, or if there are remaining args or target
+    args = parser.parse_args() if (remaining_args or pre_args.target or pre_args.action == 'reindex') else pre_args
     
     if hasattr(args, 'command') and args.command:
         args.command = args.command.replace("-", "_")
@@ -332,8 +369,19 @@ def main():
             print(help_text)
         sys.exit(0)
 
-    if args.target == "repos":
+    if hasattr(args, 'target') and args.target == "repos":
         args.target = "repo"
+    
+    # Handle reindex command specially - it can work without a target or with 'all'
+    if hasattr(args, 'command') and args.command == "reindex":
+        if not hasattr(args, 'target') or not args.target or args.target == "all":
+            # Reindex all targets by using the base Action class
+            args.target = "script"  # Use script as default to get access to the action
+    
+    # Check if command attribute exists
+    if not hasattr(args, 'command'):
+        logging.error("Error: No command specified.")
+        sys.exit(1)
         
     action = get_action(args.target, default_parent)
 
@@ -345,10 +393,23 @@ def main():
     res = method(run_args)
     if res['return'] > 0:
         logging.error(res.get('error', f"Error in {action}"))
-        raise Exception(f"An error occurred {res}")
+        sys.exit(1)
 
     process_console_output(res, args.target, args.command, run_args)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.extract_tb(e.__traceback__)
+        if tb:
+            last = tb[-1]
+            logger.error(f"{e}")
+            logger.error(f"  at {last.filename}:{last.lineno} in {last.name}")
+        else:
+            logger.error(f"{e}")
+        sys.exit(1)
 

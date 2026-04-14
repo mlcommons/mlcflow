@@ -220,6 +220,116 @@ jobs:
         mlc rm repo mlcommons@mlperf-automations -f
         mlcr detect,cpu -j
 
+    - name: Test 26 - Test reindex command and verify index files are updated
+      run: |
+        INDEX_SCRIPT="${HOME}/MLC/repos/index_script.json"
+        INDEX_CACHE="${HOME}/MLC/repos/index_cache.json"
+        INDEX_EXPERIMENT="${HOME}/MLC/repos/index_experiment.json"
+        
+        # Store initial modification times
+        if [ -f "$INDEX_SCRIPT" ]; then
+          BEFORE_SCRIPT=$(stat -c %Y "$INDEX_SCRIPT" 2>/dev/null || stat -f %m "$INDEX_SCRIPT" 2>/dev/null)
+        fi
+        if [ -f "$INDEX_CACHE" ]; then
+          BEFORE_CACHE=$(stat -c %Y "$INDEX_CACHE" 2>/dev/null || stat -f %m "$INDEX_CACHE" 2>/dev/null)
+        fi
+        if [ -f "$INDEX_EXPERIMENT" ]; then
+          BEFORE_EXPERIMENT=$(stat -c %Y "$INDEX_EXPERIMENT" 2>/dev/null || stat -f %m "$INDEX_EXPERIMENT" 2>/dev/null)
+        fi
+        
+        sleep 1
+        
+        # Test reindex all
+        mlc reindex
+        
+        # Verify all index files were updated
+        if [ -f "$INDEX_SCRIPT" ]; then
+          AFTER_SCRIPT=$(stat -c %Y "$INDEX_SCRIPT" 2>/dev/null || stat -f %m "$INDEX_SCRIPT" 2>/dev/null)
+          if [ "$BEFORE_SCRIPT" = "$AFTER_SCRIPT" ]; then
+            echo "index_script.json was not updated after 'mlc reindex'. Exiting with failure."
+            exit 1
+          fi
+        fi
+        
+        sleep 1
+        BEFORE_SCRIPT=$(stat -c %Y "$INDEX_SCRIPT" 2>/dev/null || stat -f %m "$INDEX_SCRIPT" 2>/dev/null)
+        
+        # Test reindex specific target
+        mlc reindex script
+        
+        AFTER_SCRIPT=$(stat -c %Y "$INDEX_SCRIPT" 2>/dev/null || stat -f %m "$INDEX_SCRIPT" 2>/dev/null)
+        if [ "$BEFORE_SCRIPT" = "$AFTER_SCRIPT" ]; then
+          echo "index_script.json was not updated after 'mlc reindex script'. Exiting with failure."
+          exit 1
+        fi
+        
+        # Test other reindex commands
+        mlc reindex all
+        mlc reindex cache
+        mlc reindex experiment
+
+    - name: Test 27 - Test index handling when script/cache/repo is manually deleted
+      run: |
+        # Add a test script
+        mlc add script test-delete-script --tags=test,delete,temp
+        
+        # Get the actual script path from find command
+        SCRIPT_PATH=$(mlc find script test-delete-script -p 2>&1)
+        echo "Script path: $SCRIPT_PATH"
+        
+        if [ -z "$SCRIPT_PATH" ]; then
+          echo "Script was not found after adding. Exiting with failure."
+          exit 1
+        fi
+        
+        # Manually delete the script
+        if [ -d "$SCRIPT_PATH" ]; then
+          rm -rf "$SCRIPT_PATH"
+          echo "Manually deleted script at $SCRIPT_PATH"
+        else
+          echo "Script directory not found at $SCRIPT_PATH. Exiting with failure."
+          exit 1
+        fi
+        
+        # Verify the deleted script is no longer in the index
+        # The find command will automatically trigger index rebuild and detect the deletion
+        FIND_RESULT=$(mlc find script test-delete-script -p 2>/dev/null)
+        if [ -n "$FIND_RESULT" ]; then
+          echo "ERROR: Deleted script still found in index. Found: $FIND_RESULT"
+          exit 1
+        fi
+        
+        echo "Script deletion test passed successfully"
+        
+        # Test with cache: run a script to create cache, then delete it manually
+        mlc run script --tags=detect,os --quiet
+        
+        # Find and delete a cache entry
+        CACHE_PATH=$(mlc find cache --tags=detect,os -p 2>/dev/null | head -1)
+        if [ -n "$CACHE_PATH" ] && [ -d "$CACHE_PATH" ]; then
+          echo "Found cache at: $CACHE_PATH"
+          
+          # Get the cache directory name for later verification
+          CACHE_DIR_NAME=$(basename "$CACHE_PATH")
+          
+          rm -rf "$CACHE_PATH"
+          echo "Manually deleted cache at $CACHE_PATH"
+          
+          # Verify the deleted cache is no longer in the index
+          # Check if the cache directory name appears in any found caches
+          if mlc find cache --tags=detect,os -p 2>/dev/null | grep -q "$CACHE_DIR_NAME"; then
+            echo "ERROR: Deleted cache directory still found in index."
+            echo "Deleted cache: $CACHE_PATH"
+            echo "Found caches:"
+            mlc find cache --tags=detect,os -p 2>/dev/null
+            exit 1
+          fi
+          
+          echo "Cache deletion test passed successfully"
+        else
+          echo "No cache found to test deletion"
+        fi
+
   test_mlc_access_core_actions:
 
     runs-on: ${{ matrix.os }}

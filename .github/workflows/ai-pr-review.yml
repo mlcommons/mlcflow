@@ -17,11 +17,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
 
       - name: Install dependencies
         run: |
           pip install requests jq
 
+      - name: Fetch PR head
+        run: |
+          git fetch origin ${{ github.event.pull_request.head.sha }}
+      
       - name: Get incremental diff
         id: diff
         run: |

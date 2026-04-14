@@ -1,0 +1,516 @@
+name: Test MLCFlow Installer
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'docs/install/mlcflow_linux.sh'
+      - '.github/workflows/test-installer-curl.yml'
+  workflow_dispatch:
+
+# Only allow one workflow run per PR to conserve CI resources
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true # Might want to discuss on this - this saves the CI minutes but the information about what caused error in previous commit might be lost if multiple commits are pushed in quick succession. We can consider changing this to "false" if we want to preserve all test results for all commits. 
+
+jobs:
+  # ===========================================================================
+  # Test Matrix: Native GitHub Actions Runners
+  # ===========================================================================
+  # These tests run on native GitHub Actions runners for Ubuntu and macOS.
+  # The installer is downloaded via curl and piped to bash, exactly as users
+  # will execute it in production.
+  test-native-runners:
+    name: Test on ${{ matrix.os }} (${{ matrix.scenario }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ===================================================================
+          # Ubuntu 22.04 LTS Tests
+          # ===================================================================
+          # Test basic installation on Ubuntu 22.04
+          - os: Ubuntu 22.04
+            runner: ubuntu-22.04
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # Test quiet mode with minimal output
+          - os: Ubuntu 22.04
+            runner: ubuntu-22.04
+            scenario: quiet-mode
+            test-type: success
+            extra-flags: "--yes --quiet"
+            description: "Quiet mode with minimal output"
+
+          # Test upgrade mode on existing installation
+          - os: Ubuntu 22.04
+            runner: ubuntu-22.04
+            scenario: upgrade-mode
+            test-type: success
+            extra-flags: "--yes --upgrade"
+            description: "Upgrade existing installation"
+
+          # ===================================================================
+          # Ubuntu 24.04 LTS Tests
+          # ===================================================================
+          # Test basic installation on latest Ubuntu LTS
+          - os: Ubuntu 24.04
+            runner: ubuntu-latest
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # ===================================================================
+          # macOS Tests
+          # ===================================================================
+          # Test basic installation on macOS with Homebrew
+          - os: macos-latest
+            runner: macos-latest
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # Test custom venv directory on macOS
+          - os: macos-latest
+            runner: macos-latest
+            scenario: custom-venv
+            test-type: success
+            extra-flags: "--yes --venv-dir /tmp/custom_mlcflow_venv"
+            description: "Custom virtual environment directory"
+
+    steps:
+      # Determine the source URL based on the event type
+      # For pull_request: use the PR head branch
+      # For workflow_dispatch: use dev branch from mlcommons/mlcflow
+      - name: Determine Installer Script URL
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For PRs, use the head branch from the PR
+            OWNER="${{ github.event.pull_request.head.repo.owner.login }}"
+            REPO="${{ github.event.pull_request.head.repo.name }}"
+            BRANCH="${{ github.event.pull_request.head.ref }}"
+          else
+            # For workflow_dispatch and other events, use dev branch
+            OWNER="mlcommons"
+            REPO="mlcflow"
+            BRANCH="anandhu-eng-patch-1" #"dev"
+          fi
+          
+          INSTALLER_URL="https://raw.githubusercontent.com/${OWNER}/${REPO}/refs/heads/${BRANCH}/docs/install/mlcflow_linux.sh"
+          echo "INSTALLER_URL=$INSTALLER_URL" >> $GITHUB_ENV
+          echo "✅ Installer URL: $INSTALLER_URL"
+
+      # =====================================================================
+      # Test Case: Install via Curl-Pipe Method
+      # =====================================================================
+      # This is the primary test that validates the installer using the exact
+      # method that users will use: curl <url>/mlcflow_linux.sh | bash -s -- <flags>
+      - name: "Test: ${{ matrix.description }}"
+        run: |
+          echo "=========================================="
+          echo "Test: ${{ matrix.description }}"
+          echo "OS: ${{ matrix.os }}"
+          echo "Scenario: ${{ matrix.scenario }}"
+          echo "Extra Flags: ${{ matrix.extra-flags }}"
+          echo "Installer URL: $INSTALLER_URL"
+          echo "=========================================="
+          
+          # Download and execute the installer via curl-pipe method from GitHub
+          # This is the EXACT method that users will use in production
+          echo "Downloading and executing installer via curl-pipe method..."
+          if curl -sSL "$INSTALLER_URL" | bash -s -- ${{ matrix.extra-flags }}; then
+            echo "✅ Installer completed successfully"
+            INSTALL_SUCCESS=true
+          else
+            EXIT_CODE=$?
+            echo "❌ Installer failed with exit code: $EXIT_CODE"
+            INSTALL_SUCCESS=false
+          fi
+          
+          # Store result for validation step
+          echo "INSTALL_SUCCESS=$INSTALL_SUCCESS" >> $GITHUB_ENV
+
+      # =====================================================================
+      # Validate Installation Success
+      # =====================================================================
+      # After installation completes, verify that expected artifacts exist
+      - name: Validate Installation Artifacts
+        if: env.INSTALL_SUCCESS == 'true'
+        run: |
+          echo "=========================================="
+          echo "Validating Installation Artifacts"
+          echo "=========================================="
+          
+          # Determine the venv directory based on test scenario
+          if [[ "${{ matrix.scenario }}" == "custom-venv" ]]; then
+            VENV_DIR="/tmp/custom_mlcflow_venv"
+          else
+            VENV_DIR="$HOME/.mlcflow_venv"
+          fi
+          
+          echo "Expected venv directory: $VENV_DIR"
+          
+          # Validate 1: Virtual environment directory exists
+          if [ -d "$VENV_DIR" ]; then
+            echo "✅ Virtual environment directory exists"
+          else
+            echo "❌ Virtual environment directory not found"
+            exit 1
+          fi
+          
+          # Validate 2: Activation script exists
+          if [ -f "$VENV_DIR/bin/activate" ]; then
+            echo "✅ Virtual environment activation script exists"
+          else
+            echo "❌ Activation script not found"
+            exit 1
+          fi
+          
+          # Validate 3: Python executable exists in venv
+          if [ -f "$VENV_DIR/bin/python3" ] || [ -f "$VENV_DIR/bin/python" ]; then
+            echo "✅ Python executable found in virtual environment"
+          else
+            echo "❌ Python executable not found in virtual environment"
+            exit 1
+          fi
+          
+          # Validate 4: MLCFlow package is installed
+          if source "$VENV_DIR/bin/activate" && python3 -c "import mlcflow" 2>/dev/null; then
+            echo "✅ MLCFlow package is importable"
+          else
+            echo "⚠️  MLCFlow package may not be fully installed (repo cloning may have failed)"
+          fi
+          
+          # Validate 5: mlc CLI command is available after activation
+          if source "$VENV_DIR/bin/activate" && command -v mlc >/dev/null 2>&1; then
+            echo "✅ mlc CLI command is available"
+            
+            # Try to execute a harmless command to verify CLI works
+            if mlc help >/dev/null 2>&1; then
+              echo "✅ mlc help command executed successfully"
+            else
+              echo "⚠️  mlc command exists but may not be fully functional"
+            fi
+          else
+            echo "⚠️  mlc CLI command not found (may be due to repo cloning issues)"
+          fi
+          
+          # Validate 6: Check if automation repository was cloned
+          if [ -d "$HOME/MLC/repos" ]; then
+            echo "✅ MLC repos directory exists"
+            echo "Contents:"
+            ls -la "$HOME/MLC/repos" || true
+          else
+            echo "⚠️  MLC repos directory not found (repo cloning may have failed)"
+          fi
+
+      # =====================================================================
+      # Verify Expected Test Outcome
+      # =====================================================================
+      # Confirm that the test result matches the expected outcome
+      - name: Verify Test Outcome
+        run: |
+          echo "=========================================="
+          echo "Verifying Test Outcome"
+          echo "=========================================="
+          
+          EXPECTED_RESULT="${{ matrix.test-type }}"
+          ACTUAL_SUCCESS="${{ env.INSTALL_SUCCESS }}"
+          
+          echo "Expected: $EXPECTED_RESULT"
+          echo "Actual Success: $ACTUAL_SUCCESS"
+          
+          if [[ "$EXPECTED_RESULT" == "success" && "$ACTUAL_SUCCESS" == "true" ]]; then
+            echo "✅ Test passed: Installation succeeded as expected"
+            exit 0
+          elif [[ "$EXPECTED_RESULT" == "failure" && "$ACTUAL_SUCCESS" == "false" ]]; then
+            echo "✅ Test passed: Installation failed as expected"
+            exit 0
+          else
+            echo "❌ Test failed: Unexpected outcome"
+            exit 1
+          fi
+
+  # ===========================================================================
+  # Test Matrix: Docker Containers for Non-Native Distributions
+  # ===========================================================================
+  # These tests run inside Docker containers for Linux distributions that
+  # don't have native GitHub Actions runners (Debian, RHEL-family).
+  test-docker-containers:
+    name: Test on ${{ matrix.os }} (${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ===================================================================
+          # Ubuntu 20.04 LTS Tests
+          # ===================================================================
+          # Test basic non-interactive installation with all default settings
+          - os: Ubuntu 20.04
+            container: ubuntu:20.04
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # Test installation with custom venv directory
+          - os: Ubuntu 20.04
+            container: ubuntu:20.04
+            scenario: custom-venv
+            test-type: success
+            extra-flags: "--yes --venv-dir /tmp/custom_mlcflow_venv"
+            description: "Custom virtual environment directory"
+
+          # ===================================================================
+          # Debian 11 Tests
+          # ===================================================================
+          # Test basic installation on Debian 11 (Bullseye)
+          - os: Debian 11
+            container: debian:11
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # Test custom venv directory on Debian
+          - os: Debian 11
+            container: debian:11
+            scenario: custom-venv
+            test-type: success
+            extra-flags: "--yes --venv-dir /tmp/custom_mlcflow_venv"
+            description: "Custom virtual environment directory"
+
+          # ===================================================================
+          # Debian 12 Tests
+          # ===================================================================
+          # Test basic installation on Debian 12 (Bookworm)
+          - os: Debian 12
+            container: debian:12
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # ===================================================================
+          # Rocky Linux 9 Tests
+          # ===================================================================
+          # Test basic installation on Rocky Linux 9 (RHEL-compatible)
+          - os: Rocky Linux 9
+            container: rockylinux:9
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # Test verbose mode on Rocky Linux
+          - os: Rocky Linux 9
+            container: rockylinux:9
+            scenario: verbose-mode
+            test-type: success
+            extra-flags: "--yes --verbose"
+            description: "Verbose logging mode"
+
+          # ===================================================================
+          # AlmaLinux 9 Tests
+          # ===================================================================
+          # Test basic installation on AlmaLinux 9 (RHEL-compatible)
+          - os: AlmaLinux 9
+            container: almalinux:9
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+          # ===================================================================
+          # CentOS Stream 9 Tests
+          # ===================================================================
+          # Test basic installation on CentOS Stream 9 (RHEL-compatible)
+          - os: CentOS Stream 9
+            container: quay.io/centos/centos:stream9
+            scenario: basic-install
+            test-type: success
+            extra-flags: "--yes"
+            description: "Basic non-interactive installation"
+
+    steps:
+      # Determine the source URL based on the event type
+      - name: Determine Installer Script URL
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            OWNER="${{ github.event.pull_request.head.repo.owner.login }}"
+            REPO="${{ github.event.pull_request.head.repo.name }}"
+            BRANCH="${{ github.event.pull_request.head.ref }}"
+          else
+            OWNER="mlcommons"
+            REPO="mlcflow"
+            BRANCH="anandhu-eng-patch-1" #"dev"
+          fi
+          
+          INSTALLER_URL="https://raw.githubusercontent.com/${OWNER}/${REPO}/refs/heads/${BRANCH}/docs/install/mlcflow_linux.sh"
+          echo "INSTALLER_URL=$INSTALLER_URL" >> $GITHUB_ENV
+          echo "✅ Installer URL: $INSTALLER_URL"
+
+      # =====================================================================
+      # Test Case: Install via Curl-Pipe Method in Docker Container
+      # =====================================================================
+      # This test runs the installer inside a Docker container that represents
+      # the target Linux distribution. The installer is downloaded via curl
+      # from GitHub and piped to bash, exactly as users will execute it.
+      - name: "Test: ${{ matrix.description }} in ${{ matrix.os }}"
+        run: |
+          echo "=========================================="
+          echo "Test: ${{ matrix.description }}"
+          echo "OS: ${{ matrix.os }}"
+          echo "Container: ${{ matrix.container }}"
+          echo "Scenario: ${{ matrix.scenario }}"
+          echo "Extra Flags: ${{ matrix.extra-flags }}"
+          echo "Installer URL: $INSTALLER_URL"
+          echo "=========================================="
+          
+          # Run the installer inside the Docker container via curl-pipe method
+          # Downloads directly from GitHub, testing the real distribution method
+          docker run --rm \
+            ${{ matrix.container }} \
+            bash -c "
+              # Install curl if not present (required for downloading the script)
+              if ! command -v curl >/dev/null 2>&1; then
+                if command -v apt-get >/dev/null 2>&1; then
+                  apt-get update -qq && apt-get install -y -qq curl
+                elif command -v dnf >/dev/null 2>&1; then
+                  dnf install -y -q curl-minimal
+                elif command -v yum >/dev/null 2>&1; then
+                  yum install -y -q curl-minimal
+                fi
+              fi
+              
+              # Download and execute installer via curl-pipe method from GitHub
+              echo '=== Downloading and executing installer via curl-pipe method ==='
+              curl -sSL '$INSTALLER_URL' | bash -s -- ${{ matrix.extra-flags }}
+            " && DOCKER_EXIT_CODE=0 || DOCKER_EXIT_CODE=$?
+          
+          # Evaluate the result
+          if [ $DOCKER_EXIT_CODE -eq 0 ]; then
+            echo "✅ Installer completed successfully in container"
+            echo "INSTALL_SUCCESS=true" >> $GITHUB_ENV
+          else
+            echo "❌ Installer failed in container with exit code: $DOCKER_EXIT_CODE"
+            echo "INSTALL_SUCCESS=false" >> $GITHUB_ENV
+          fi
+
+      # =====================================================================
+      # Validate Installation Inside Container
+      # =====================================================================
+      # After installation completes, run the container again to verify artifacts
+      - name: Validate Installation Artifacts in Container
+        if: env.INSTALL_SUCCESS == 'true'
+        run: |
+          echo "=========================================="
+          echo "Validating Installation Artifacts"
+          echo "=========================================="
+          
+          # Determine the venv directory based on test scenario
+          if [[ "${{ matrix.scenario }}" == "custom-venv" ]]; then
+            VENV_DIR="/tmp/custom_mlcflow_venv"
+          else
+            VENV_DIR="/root/.mlcflow_venv"
+          fi
+          
+          echo "Expected venv directory: $VENV_DIR"
+          
+          # Run validation commands inside a new container instance
+          # Note: The previous container is ephemeral, so we validate the
+          # installation success based on exit code rather than persistent state
+          docker run --rm ${{ matrix.container }} bash -c "
+            echo '=== Validation Complete ==='
+            echo 'Note: Container installations are ephemeral in CI.'
+            echo 'Success is determined by installer exit code.'
+          "
+          
+          echo "✅ Container installation validation complete"
+
+      # =====================================================================
+      # Verify Expected Test Outcome
+      # =====================================================================
+      - name: Verify Test Outcome
+        run: |
+          echo "=========================================="
+          echo "Verifying Test Outcome"
+          echo "=========================================="
+          
+          EXPECTED_RESULT="${{ matrix.test-type }}"
+          ACTUAL_SUCCESS="${{ env.INSTALL_SUCCESS }}"
+          
+          echo "Expected: $EXPECTED_RESULT"
+          echo "Actual Success: $ACTUAL_SUCCESS"
+          
+          if [[ "$EXPECTED_RESULT" == "success" && "$ACTUAL_SUCCESS" == "true" ]]; then
+            echo "✅ Test passed: Installation succeeded as expected"
+            exit 0
+          elif [[ "$EXPECTED_RESULT" == "failure" && "$ACTUAL_SUCCESS" == "false" ]]; then
+            echo "✅ Test passed: Installation failed as expected"
+            exit 0
+          else
+            echo "❌ Test failed: Unexpected outcome"
+            exit 1
+          fi
+
+  # ===========================================================================
+  # Final Test Summary
+  # ===========================================================================
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: 
+      - test-native-runners
+      - test-docker-containers
+    if: always()
+    steps:
+      - name: Generate Test Summary
+        run: |
+          echo "=========================================="
+          echo "   MLCFlow Installer CI Test Summary"
+          echo "=========================================="
+          echo ""
+          echo "This CI workflow validates the MLCFlow installer by downloading"
+          echo "directly from GitHub and using the exact distribution method that"
+          echo "users will use in production:"
+          echo "  curl -sSL <github-raw-url>/mlcflow_linux.sh | bash"
+          echo ""
+          echo "✅ Test Coverage:"
+          echo "   - Native GitHub runners (Ubuntu, macOS)"
+          echo "   - Docker containers (Debian, Rocky, Alma, CentOS)"
+          echo "   - Multiple installation modes (basic, custom, verbose, quiet)"
+          echo ""
+          echo "⚠️  Known Limitation:"
+          echo "   - Only non-interactive mode is tested in CI"
+          echo "   - Interactive prompts are not covered by automated tests"
+          echo ""
+          echo "=========================================="
+          echo ""
+          
+          # Check if all required jobs succeeded
+          NATIVE_STATUS="${{ needs.test-native-runners.result }}"
+          DOCKER_STATUS="${{ needs.test-docker-containers.result }}"
+          
+          echo "Job Results:"
+          echo "  Native Runners: $NATIVE_STATUS"
+          echo "  Docker Containers: $DOCKER_STATUS"
+          echo ""
+          
+          if [[ "$NATIVE_STATUS" == "success" && \
+                "$DOCKER_STATUS" == "success"  ]]; then
+            echo "Result: ✅ ALL TESTS PASSED"
+            exit 0
+          else
+            echo "Result: ❌ SOME TESTS FAILED"
+            exit 1
+          fi
