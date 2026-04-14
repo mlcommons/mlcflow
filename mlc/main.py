@@ -26,7 +26,7 @@ class Automation:
     path = None
 
     def __init__(self, action, automation_type, automation_file):
-        #logger.info(f"action = {action}")
+        # logger.info(f"action = {action}")
         self.action_object = action
         self.automation_type = automation_type
         self.path = os.path.dirname(automation_file)
@@ -68,16 +68,19 @@ class Automation:
             if tags or uid or i.get('all'):
                 for res in target_index:
                     c_tags = res["tags"]
-                    if set(p_tags).issubset(set(c_tags)) and set(n_tags).isdisjoint(set(c_tags)) and (not uid or uid == res['uid']) and (not alias or alias == res['alias']):
+                    if set(p_tags).issubset(set(c_tags)) and set(n_tags).isdisjoint(set(c_tags)) and (
+                            not uid or uid == res['uid']) and (not alias or alias == res['alias']):
                         it = Item(res['path'], res['repo'])
                         result.append(it)
-        #logger.info(result)
+        # logger.info(result)
         return {'return': 0, 'list': result}
-        #indices
+        # indices
+
 
 mlc_run_cmd = None
 
-def mlc_expand_short(action, target = "script"):
+
+def mlc_expand_short(action, target="script"):
     global mlc_run_cmd
     mlc_run_cmd = shlex.join(sys.argv)
     # Insert the positional argument into sys.argv for the main function
@@ -100,18 +103,30 @@ def mlc_expand_short(action, target = "script"):
             logger.error(f"{e}")
         sys.exit(1)
 
+
 def mlcr():
     mlc_expand_short("run")
+
+
 def mlcd():
     mlc_expand_short("docker")
+
+
 def mlcdr():
     mlc_expand_short("docker")
+
+
 def mlcrr():
     mlc_expand_short("remote-run")
+
+
 def mlce():
     mlc_expand_short("experiment")
+
+
 def mlct():
     mlc_expand_short("test")
+
 
 def mlcp():
     mlc_expand_short("pull", "repo")
@@ -125,11 +140,13 @@ def process_console_output(res, target, action, run_args):
         if len(res['list']) == 0:
             # Only show warning if not in path-only mode
             if not run_args.get('path_only'):
-                logger.warning(f"""No {target} entry found for the specified input: {run_args}!""")
+                logger.warning(
+                    f"""No {target} entry found for the specified input: {run_args}!""")
         else:
             for item in res['list']:
                 if run_args.get('path_only'):
-                    # Print only the path without logger prefix for script-friendly output
+                    # Print only the path without logger prefix for
+                    # script-friendly output
                     print(item.path)
                 else:
                     logger.info(f"""Item path: {item.path}""")
@@ -137,9 +154,12 @@ def process_console_output(res, target, action, run_args):
         if "message" in res:
             logger.info(res['message'])
     if "warnings" in res:
-        logger.warning(f"{len(res['warnings'])} warning(s) found during the execution of the mlc command.")
+        logger.warning(
+            f"{len(res['warnings'])} warning(s) found during the execution of the mlc command.")
         for warning in res["warnings"]:
-            logger.warning(f"Warning code: {warning['code']}, Discription: {warning['description']}")
+            logger.warning(
+                f"Warning code: {warning['code']}, Discription: {warning['description']}")
+
 
 if default_parent is None:
     default_parent = Action()
@@ -147,6 +167,7 @@ if default_parent is None:
 
 log_flag_aliases = {'-v': '--verbose', '-s': '--silent'}
 log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING}
+
 
 def convert_hyphen_to_underscore_in_args():
     for i, arg in enumerate(sys.argv):
@@ -163,37 +184,75 @@ def convert_hyphen_to_underscore_in_args():
                 sys.argv[i] = f"--{new_name}"
 
 
-
 def build_pre_parser():
     pre_parser = argparse.ArgumentParser(add_help=False)
-    pre_parser.add_argument("action", nargs="?", help="Top-level action (run, build, help, etc.)")
-    pre_parser.add_argument("target", choices=['run', 'script', 'cache', 'repo', 'repos', 'experiment', 'all'], nargs="?", help="Target (repo, script, cache, ...)")
+    pre_parser.add_argument(
+        "action",
+        nargs="?",
+        help="Top-level action (run, build, help, etc.)")
+    pre_parser.add_argument(
+        "target",
+        choices=[
+            'run',
+            'script',
+            'cache',
+            'repo',
+            'repos',
+            'experiment',
+            'all'],
+        nargs="?",
+        help="Target (repo, script, cache, ...)")
     pre_parser.add_argument("-h", "--help", action="store_true")
     return pre_parser
 
 
 def build_parser(pre_args):
-    parser = argparse.ArgumentParser(prog="mlc", description="Manage repos, scripts, and caches.", add_help=False)
-    subparsers = parser.add_subparsers(dest="command", required=not pre_args.help)
+    parser = argparse.ArgumentParser(
+        prog="mlc",
+        description="Manage repos, scripts, and caches.",
+        add_help=False)
+    subparsers = parser.add_subparsers(
+        dest="command", required=not pre_args.help)
 
     # General commands
-    for action in ['run', 'pull', 'test', 'add', 'show', 'list', 'find', 'search', 'rm', 'cp', 'mv', 'help', 'prune']:
+    for action in ['run', 'pull', 'test', 'add', 'show', 'list',
+                   'find', 'search', 'rm', 'cp', 'mv', 'help', 'prune']:
         p = subparsers.add_parser(action, add_help=False)
         p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
-        p.add_argument('details', nargs='?', help='Details or identifier (optional)')
+        p.add_argument(
+            'details',
+            nargs='?',
+            help='Details or identifier (optional)')
         p.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Reindex command (target is optional)
     reindex_parser = subparsers.add_parser('reindex', add_help=False)
-    reindex_parser.add_argument('target', nargs='?', choices=['repo', 'repos', 'script', 'cache', 'experiment', 'all'], help='Target to reindex (optional, defaults to all)')
-    reindex_parser.add_argument('details', nargs='?', help='Details or identifier (optional)')
+    reindex_parser.add_argument(
+        'target',
+        nargs='?',
+        choices=[
+            'repo',
+            'repos',
+            'script',
+            'cache',
+            'experiment',
+            'all'],
+        help='Target to reindex (optional, defaults to all)')
+    reindex_parser.add_argument(
+        'details',
+        nargs='?',
+        help='Details or identifier (optional)')
     reindex_parser.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Script-only
-    for action in ['docker', 'docker-run', 'experiment', 'remote-run', 'doc', 'lint']:
+    for action in ['docker', 'docker-run',
+                   'experiment', 'remote-run', 'doc', 'lint']:
         p = subparsers.add_parser(action, add_help=False)
         p.add_argument('target', choices=['script', 'run'])
-        p.add_argument('details', nargs='?', help='Details or identifier (optional)')
+        p.add_argument(
+            'details',
+            nargs='?',
+            help='Details or identifier (optional)')
         p.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Load cfg
@@ -205,7 +264,7 @@ def build_parser(pre_args):
 def configure_logging(args):
     if hasattr(args, 'extra') and args.extra:
         args.extra[:] = [log_flag_aliases.get(a, a) for a in args.extra]
-        
+
         for flag, level in log_levels.items():
             if flag in args.extra:
                 logger.setLevel(level)
@@ -220,17 +279,21 @@ def build_run_args(args):
 
     run_args = res['args_dict']
     if not mlc_run_cmd:
-        mlc_run_cmd = shlex.join([os.path.basename(sys.argv[0]), *sys.argv[1:]])
+        mlc_run_cmd = shlex.join(
+            [os.path.basename(sys.argv[0]), *sys.argv[1:]])
     run_args['mlc_run_cmd'] = mlc_run_cmd
 
     if args.command in ['pull', 'rm', 'add', 'find'] and args.target == "repo":
         run_args['repo'] = args.details
 
-    if args.command in ['docker', 'docker-run', 'experiment', 'remote-run', 'doc', 'lint'] and args.target == "run":
-        #run_args['target'] = 'script' #dont modify this as script might have target as in input
+    if args.command in ['docker', 'docker-run', 'experiment',
+                        'remote-run', 'doc', 'lint'] and args.target == "run":
+        # run_args['target'] = 'script' #dont modify this as script might have
+        # target as in input
         args.target = "script"
 
-    if args.details and not utils.is_uid(args.details) and not run_args.get("tags") and args.target in ["script", "cache"]:
+    if args.details and not utils.is_uid(args.details) and not run_args.get(
+            "tags") and args.target in ["script", "cache"]:
         run_args['tags'] = args.details
 
     if not run_args.get('details') and args.details:
@@ -246,12 +309,13 @@ def build_run_args(args):
     if hasattr(args, 'command') and args.command == "reindex":
         if hasattr(args, 'target') and args.target:
             run_args['reindex_target'] = args.target
-    
+
     # Check for path-only flag (for script-friendly output)
     if run_args.get('path_only') or run_args.get('p'):
         run_args['path_only'] = True
 
     return run_args
+
 
 def is_quoted(arg):
     return (arg.startswith("'") and arg.endswith("'")) or \
@@ -279,6 +343,7 @@ def check_raw_arguments_for_non_ascii():
               "Please retype the arguments using plain ASCII.\n")
         sys.exit(1)
 
+
 def main():
     """
     MLCFlow is a CLI tool for managing repos, scripts, and caches.
@@ -286,38 +351,38 @@ def main():
     You can also use this tool for any of your workflow automation tasks.
 
     MLCFlow CLI operates using actions and targets. It enables users to perform actions on specified targets using the following syntax:
-          
+
     mlc <action> <target> [options]
 
     Here, actions represent the operations to be performed, and the target is the object on which the action is executed.
 
     Each target has a specific set of actions to tailor automation workflows, as shown below:
-    
+
     | Target  | Actions                                                   |
     |---------|-----------------------------------------------------------|
     | script  | run, find/search, rm, mv, cp, add, test, docker-run, show |
     | cache   | find/search, rm, show                                     |
     | repo    | pull, search, rm, list, find/search                       |
-    
+
     Example:
       mlc run script detect-os
-      
-    For help related to a particular target, run: 
-    
+
+    For help related to a particular target, run:
+
     mlc <target> --help/-h
 
     Examples:
       mlc script --help
       mlc repo -h
-    
-    For help related to a specific action for a target, run: 
-    
+
+    For help related to a specific action for a target, run:
+
     mlc <action> <target> --help/-h
     Examples:
       mlc run script --help
       mlc pull repo -h
     """
-    
+
     check_raw_arguments_for_non_ascii()
     convert_hyphen_to_underscore_in_args()
 
@@ -325,9 +390,11 @@ def main():
     pre_args, remaining_args = pre_parser.parse_known_args()
 
     parser = build_parser(pre_args)
-    # Force full parsing for reindex command even without target, or if there are remaining args or target
-    args = parser.parse_args() if (remaining_args or pre_args.target or pre_args.action == 'reindex') else pre_args
-    
+    # Force full parsing for reindex command even without target, or if there
+    # are remaining args or target
+    args = parser.parse_args() if (
+        remaining_args or pre_args.target or pre_args.action == 'reindex') else pre_args
+
     if hasattr(args, 'command') and args.command:
         args.command = args.command.replace("-", "_")
 
@@ -340,8 +407,10 @@ def main():
             if pre_args.action.startswith("docker"):
                 pre_args.target = "script"
             else:
-                logger.error(f"Invalid action-target {pre_args.action} - {pre_args.target} combination")
-                raise Exception(f"Invalid action-target {pre_args.action} - {pre_args.target} combination")
+                logger.error(
+                    f"Invalid action-target {pre_args.action} - {pre_args.target} combination")
+                raise Exception(
+                    f"Invalid action-target {pre_args.action} - {pre_args.target} combination")
         if not pre_args.action and not pre_args.target:
             help_text += main.__doc__
         elif pre_args.action and not pre_args.target:
@@ -353,7 +422,8 @@ def main():
             actions = get_action(pre_args.target, default_parent)
             help_text += actions.__doc__
             # iterate through every method
-            for method_name, method in inspect.getmembers(actions.__class__, inspect.isfunction):
+            for method_name, method in inspect.getmembers(
+                    actions.__class__, inspect.isfunction):
                 method = getattr(actions, method_name)
                 if method.__doc__ and not method.__doc__.startswith("_"):
                     help_text += method.__doc__
@@ -363,30 +433,36 @@ def main():
                 method = getattr(actions, pre_args.action)
                 help_text += actions.__doc__
                 help_text += method.__doc__
-            except:
-                logger.error(f"Error: '{pre_args.action}' is not supported for {pre_args.target}.")
+            except BaseException:
+                logger.error(
+                    f"Error: '{pre_args.action}' is not supported for {pre_args.target}.")
         if help_text != "":
             print(help_text)
         sys.exit(0)
 
     if hasattr(args, 'target') and args.target == "repos":
         args.target = "repo"
-    
-    # Handle reindex command specially - it can work without a target or with 'all'
+
+    # Handle reindex command specially - it can work without a target or with
+    # 'all'
     if hasattr(args, 'command') and args.command == "reindex":
-        if not hasattr(args, 'target') or not args.target or args.target == "all":
+        if not hasattr(
+                args, 'target') or not args.target or args.target == "all":
             # Reindex all targets by using the base Action class
             args.target = "script"  # Use script as default to get access to the action
-    
+
     # Check if command attribute exists
     if not hasattr(args, 'command'):
         logging.error("Error: No command specified.")
         sys.exit(1)
-        
+
     action = get_action(args.target, default_parent)
 
     if not action or not hasattr(action, args.command):
-        logging.error("Error: '%s' is not supported for %s.", args.command, args.target)
+        logging.error(
+            "Error: '%s' is not supported for %s.",
+            args.command,
+            args.target)
         sys.exit(1)
 
     method = getattr(action, args.command)
@@ -396,6 +472,7 @@ def main():
         sys.exit(1)
 
     process_console_output(res, args.target, args.command, run_args)
+
 
 if __name__ == '__main__':
     try:
@@ -412,4 +489,3 @@ if __name__ == '__main__':
         else:
             logger.error(f"{e}")
         sys.exit(1)
-

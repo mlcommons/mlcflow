@@ -1,3 +1,4 @@
+import sys
 import argparse
 import subprocess
 import re
@@ -10,6 +11,7 @@ import uuid
 import shutil
 import tarfile
 import zipfile
+
 
 def generate_temp_file(i):
     """
@@ -37,11 +39,11 @@ def generate_temp_file(i):
 
         # Generate a unique file name using uuid
         temp_file_name = f"{prefix}{uuid.uuid4().hex}{suffix}"
-        
+
         # Optionally write the string content to the file
         with open(temp_file_name, 'w') as temp_file:
             temp_file.write(content)
-        
+
         # If remove_dir is True, remove the directory where the file is created
         if remove_dir:
             dir_name = os.path.dirname(temp_file_name)
@@ -52,7 +54,9 @@ def generate_temp_file(i):
     except Exception as e:
         return {'return': 1, 'error': str(e)}
 
-def load_txt(file_name, check_if_exists=False, split=False, match_text=None, fail_if_no_match=None, remove_after_read=False):
+
+def load_txt(file_name, check_if_exists=False, split=False,
+             match_text=None, fail_if_no_match=None, remove_after_read=False):
     """
     Load text from a file with optional checks, processing, and regex matching.
 
@@ -65,7 +69,7 @@ def load_txt(file_name, check_if_exists=False, split=False, match_text=None, fai
         remove_after_read (bool): If True, deletes the file after reading.
 
     Returns:
-        dict: 
+        dict:
             * return (int): 0 if successful, 1 if an error occurred.
             * error (str): Error message if return > 0.
             * string (str): Loaded text if split is False.
@@ -73,11 +77,11 @@ def load_txt(file_name, check_if_exists=False, split=False, match_text=None, fai
     """
     if check_if_exists and not os.path.isfile(file_name):
         return {'return': 1, 'error': f"File '{file_name}' does not exist."}
-    
+
     try:
         with open(file_name, 'r') as f:
             content = f.read()
-        match_ = False 
+        match_ = False
         # Check for match_text using regex
         if match_text:
             match_ = re.search(match_text, content)
@@ -85,21 +89,22 @@ def load_txt(file_name, check_if_exists=False, split=False, match_text=None, fai
                 return {'return': 1, 'error': fail_if_no_match}
         if remove_after_read:
             os.remove(file_name)
-        
+
         result = {'return': 0}
         if split:
             result['list'] = content.splitlines()
             result['string'] = content
         else:
             result['string'] = content
-        
+
         if match_:
             result['match'] = match_
-        
+
         return result
 
     except Exception as e:
         return {'return': 1, 'error': str(e)}
+
 
 def compare_versions(current_version, min_version):
     """
@@ -127,6 +132,7 @@ def compare_versions(current_version, min_version):
             return 0
     except Exception as e:
         raise ValueError(f"Invalid version format: {e}")
+
 
 def run_system_cmd(i):
     """
@@ -181,13 +187,21 @@ def run_system_cmd(i):
 def print_env(env, yaml=True, sort_keys=True, begin_spaces=None):
     printd(env, yaml=yaml, sort_keys=sort_keys, begin_spaces=begin_spaces)
 
-def printd(mydict, yaml=True, sort_keys=True, begin_spaces = None):
-    if yaml:
-        print_formatted_yaml(mydict, sort_keys=sort_keys, begin_spaces=begin_spaces)
-    else:
-        print_formatted_json(mydict, sort_keys = sort_keys, begin_spaces = begin_spaces)
 
-def print_formatted_yaml(data, sort_keys=True, begin_spaces = None):
+def printd(mydict, yaml=True, sort_keys=True, begin_spaces=None):
+    if yaml:
+        print_formatted_yaml(
+            mydict,
+            sort_keys=sort_keys,
+            begin_spaces=begin_spaces)
+    else:
+        print_formatted_json(
+            mydict,
+            sort_keys=sort_keys,
+            begin_spaces=begin_spaces)
+
+
+def print_formatted_yaml(data, sort_keys=True, begin_spaces=None):
     """
     Converts a Python dictionary (or other serializable object) to a YAML-formatted
     string and prints it in a human-readable format.
@@ -201,20 +215,22 @@ def print_formatted_yaml(data, sort_keys=True, begin_spaces = None):
     """
     try:
         yaml_string = yaml.dump(
-            data, 
-            default_flow_style=False, 
-            sort_keys=False, 
+            data,
+            default_flow_style=False,
+            sort_keys=False,
             allow_unicode=True
         )
         if not begin_spaces:
             print(yaml_string)
         else:
-            indented_yaml_str = "\n".join(" " * begin_spaces + line for line in yaml_string.splitlines())
+            indented_yaml_str = "\n".join(
+                " " * begin_spaces + line for line in yaml_string.splitlines())
             print(indented_yaml_str)
     except yaml.YAMLError as e:
         print(f"Error formatting YAML: {e}")
 
-def print_formatted_json(data, sort_keys = True, begin_spaces = None):
+
+def print_formatted_json(data, sort_keys=True, begin_spaces=None):
     """
     Prints a dictionary as a formatted JSON string.
 
@@ -229,10 +245,12 @@ def print_formatted_json(data, sort_keys = True, begin_spaces = None):
         if not begin_spaces:
             print(formatted_json)
         else:
-            indented_json_str = "\n".join(" " * begin_spaces + line for line in formatted_json.splitlines())
+            indented_json_str = "\n".join(
+                " " * begin_spaces + line for line in formatted_json.splitlines())
             print(indented_json_str)
     except TypeError as e:
         print(f"Error formatting JSON: {e}")
+
 
 def read_yaml(filepath):
     try:
@@ -241,24 +259,26 @@ def read_yaml(filepath):
     except Exception as e:
         logger.info(f"Error reading YAML file {filepath}: {e}")
 
+
 def read_json(filepath):
     try:
         with open(filepath, "r") as f:
             return json.load(f)
     except Exception as e:
         logger.info(f"Error reading JSON file {filepath}: {e}")
- 
+
+
 def merge_dicts(params, in_place=True):
     """
     Merges two dictionaries with optional handling for lists and unique values.
-    
+
     Args:
         params (dict): A dictionary containing:
             - 'dict1': First dictionary to merge.
             - 'dict2': Second dictionary to merge.
             - 'append_lists' (bool): If True, lists in dict1 and dict2 will be merged.
             - 'append_unique' (bool): If True, lists will only contain unique values after merging.
-    
+
     Returns:
         dict: A new dictionary resulting from the merge.
     """
@@ -286,11 +306,12 @@ def merge_dicts(params, in_place=True):
                 for k in params:
                     if k not in ["dict1", "dict2"]:
                         ii[k] = params[k]
-                merge_dicts(ii, in_place) 
+                merge_dicts(ii, in_place)
             elif isinstance(existing_value, list) and isinstance(value, list):
                 if append_lists:
                     if append_unique:
-                        # Combine dictionaries uniquely based on their key-value pairs
+                        # Combine dictionaries uniquely based on their
+                        # key-value pairs
                         seen = set()
                         merged_list = []
                         for item in existing_value + value:
@@ -305,7 +326,7 @@ def merge_dicts(params, in_place=True):
                                 seen.add(item_frozenset)
                                 merged_list.append(item)
                         merged_dict[key] = merged_list
-                    
+
                     else:
                         # Simply append the values
                         merged_dict[key] = existing_value + value
@@ -313,12 +334,12 @@ def merge_dicts(params, in_place=True):
                     # If lists shouldn't be appended, override the value
                     merged_dict[key] = value
             else:
-                # If it's not a list, simply overwrite or merge the value as needed
+                # If it's not a list, simply overwrite or merge the value as
+                # needed
                 merged_dict[key] = value
         else:
             # If key doesn't exist in dict1, add it directly
             merged_dict[key] = value
-
 
     return {'return': 0, 'merged': merged_dict, 'dict1': merged_dict}
 
@@ -364,6 +385,7 @@ def save_yaml(file_name, meta, sort_keys=True):
     except Exception as e:
         return {'return': 1, 'error': str(e)}
 
+
 def save_txt(file_name, string):
     """
     Saves the provided string to a text file.
@@ -400,12 +422,14 @@ def convert_args_to_dictionary(inp):
                     args_dict[list_key] = arg_value.split(",")
                     continue
 
-            # Handle dictionaries: `--adr.compiler.tags=gcc` becomes `{"adr": {"compiler": {"tags": "gcc"}}}`
+            # Handle dictionaries: `--adr.compiler.tags=gcc` becomes `{"adr":
+            # {"compiler": {"tags": "gcc"}}}`
             elif "." in arg_key:
                 keys = arg_key.split(".")
                 current = args_dict
                 for part in keys[:-1]:
-                    if part not in current or not isinstance(current[part], dict):
+                    if part not in current or not isinstance(
+                            current[part], dict):
                         current[part] = {}
                     current = current[part]
                 current[keys[-1]] = arg_value
@@ -425,21 +449,22 @@ def convert_args_to_dictionary(inp):
 
     return {'return': 0, 'args_dict': args_dict}
 
+
 def is_uid(name):
-        """
-        Checks if the given name is a 16-digit hexadecimal UID.
+    """
+    Checks if the given name is a 16-digit hexadecimal UID.
 
-        Args:
-            name (str): The string to check.
+    Args:
+        name (str): The string to check.
 
-        Returns:
-            bool: True if the name is a 16-digit hexadecimal UID, False otherwise.
-        """
-        # Define a regex pattern for a 16-digit hexadecimal UID
-        hex_uid_pattern = r"^[0-9a-fA-F]{16}$"
+    Returns:
+        bool: True if the name is a 16-digit hexadecimal UID, False otherwise.
+    """
+    # Define a regex pattern for a 16-digit hexadecimal UID
+    hex_uid_pattern = r"^[0-9a-fA-F]{16}$"
 
-        # Check if the name matches the pattern
-        return bool(re.fullmatch(hex_uid_pattern, name))
+    # Check if the name matches the pattern
+    return bool(re.fullmatch(hex_uid_pattern, name))
 
 
 def is_valid_url(url):
@@ -481,6 +506,7 @@ def sub_input(i, keys, reverse=False):
 
     return {'return': 0, 'result': result}
 
+
 def assemble_object(alias, uid):
     """
     Assemble an object by concatenating the alias and uid.
@@ -502,10 +528,6 @@ def assemble_object(alias, uid):
     result = alias + (', ' if alias and uid else '') + uid
 
     return result
-
-import importlib.util
-import sys
-import os
 
 
 def load_python_module(params):
@@ -536,27 +558,32 @@ def load_python_module(params):
 
     # Check if the file exists at the given path
     if not os.path.isfile(full_path):
-        return {'return': 1, 'error': f"Error: The file at '{full_path}' does not exist."}
+        return {'return': 1,
+                'error': f"Error: The file at '{full_path}' does not exist."}
 
     # Load the module dynamically using importlib
     try:
         # Specify the module spec
         spec = importlib.util.spec_from_file_location(module_name, full_path)
         if spec is None:
-            return {'return': 1, 'error': f"Error: Could not load the module '{module_name}' from '{full_path}'."}
+            return {
+                'return': 1, 'error': f"Error: Could not load the module '{module_name}' from '{full_path}'."}
 
         # Load the module
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        # Add the module to sys.modules so it can be accessed like a normal module
+        # Add the module to sys.modules so it can be accessed like a normal
+        # module
         sys.modules[module_name] = module
 
         # Return success with loaded code and full path
         return {'return': 0, 'code': module, 'path': full_path}
 
     except Exception as e:
-        return {'return': 1, 'error': f"Error: Failed to load module '{module_name}' from '{full_path}'. Error: {str(e)}"}
+        return {
+            'return': 1, 'error': f"Error: Failed to load module '{module_name}' from '{full_path}'. Error: {str(e)}"}
+
 
 def convert_env_to_dict(env_text):
     """
@@ -572,7 +599,8 @@ def convert_env_to_dict(env_text):
 
     # Split the text into lines and process each line
     for line in env_text.splitlines():
-        # Strip any leading/trailing whitespace and ensure the line is not empty
+        # Strip any leading/trailing whitespace and ensure the line is not
+        # empty
         line = line.strip()
         if line and '=' in line:
             key, value = line.split('=', 1)
@@ -580,7 +608,8 @@ def convert_env_to_dict(env_text):
 
     return {'return': 0, 'dict': env_dict}
 
-def load_json(file_name, encoding = None):
+
+def load_json(file_name, encoding=None):
     """
     Load JSON data from a file and handle errors.
 
@@ -610,8 +639,8 @@ def load_json(file_name, encoding = None):
         return {'return': 1, 'error': f"Error decoding JSON in file '{file_name}'."}
 
     except Exception as e:
-        return {'return': 1, 'error': f"An unexpected error occurred: {str(e)}"}
-
+        return {'return': 1,
+                'error': f"An unexpected error occurred: {str(e)}"}
 
 
 def get_new_uid():
@@ -628,7 +657,8 @@ def get_new_uid():
         return {"return": 0, "uid": new_uid}
     except Exception as e:
         return {"return": 1, "error": f"Failed to generate UID: {str(e)}"}
-    
+
+
 def modify_git_url(get_type, url, params={}):
     """
     Modify the GitHub url to support cloning of repo with either ssh or pat
@@ -641,12 +671,14 @@ def modify_git_url(get_type, url, params={}):
     from giturlparse import parse
     p = parse(url)
     if get_type == "ssh":
-        return {"return": 0, "url": p.url2ssh }
+        return {"return": 0, "url": p.url2ssh}
     elif get_type == "pat":
         token = params['token']
-        return {"return": 0, "url":"https://git:" + token + "@" + p.host + "/" + p.owner + "/" + p.repo }
+        return {"return": 0, "url": "https://git:" + token +
+                "@" + p.host + "/" + p.owner + "/" + p.repo}
     else:
         return {"return": 1, "error": f"Unsupported type: {get_type}"}
+
 
 def convert_tags_to_list(tags_string):
     """
@@ -664,7 +696,6 @@ def convert_tags_to_list(tags_string):
     tags_list = [tag.strip() for tag in tags_string.split(',') if tag.strip()]
 
     return {'return': 0, 'tags': tags_list}
-
 
 
 def extract_file(options):
@@ -694,17 +725,19 @@ def extract_file(options):
         with zipfile.ZipFile(filename, 'r') as archive:
             members = archive.namelist()
             for member in members:
-                # Strip folder levels (zip files always use forward slashes internally)
+                # Strip folder levels (zip files always use forward slashes
+                # internally)
                 parts = member.split('/')
                 if len(parts) > strip_folders:
                     stripped_parts = parts[strip_folders:]
                     stripped_path = os.path.join(extract_to, *stripped_parts)
                     stripped_path = os.path.normpath(stripped_path)
-                    
+
                     if member.endswith('/'):  # Directory
                         os.makedirs(stripped_path, exist_ok=True)
                     else:  # File
-                        os.makedirs(os.path.dirname(stripped_path), exist_ok=True)
+                        os.makedirs(
+                            os.path.dirname(stripped_path), exist_ok=True)
                         with archive.open(member) as source, open(stripped_path, 'wb') as target:
                             shutil.copyfileobj(source, target)
 
@@ -724,4 +757,3 @@ def extract_file(options):
         raise ValueError(f"Unsupported file format: {filename}")
 
     print(f"Extraction complete. Files extracted to: {extract_to}")
-
