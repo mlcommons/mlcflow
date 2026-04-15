@@ -381,7 +381,7 @@ pull_repo() {
     log_info "  Repo   : ${MLC_REPO}"
     log_info "  Branch : ${MLC_BRANCH}"
 
-    mlc pull repo "${MLC_REPO}" --branch="${MLC_BRANCH}"
+    mlc pull repo "${MLC_REPO}" --checkout="${MLC_BRANCH}"
 }
 
 # ------------------------------------------------------------------------------
