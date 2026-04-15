@@ -8,6 +8,7 @@ from .meta_schema import validate_meta
 from contextlib import contextmanager
 from filelock import FileLock, Timeout
 
+
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Repo):
@@ -24,7 +25,7 @@ class Index:
     def __init__(self, repos_path, repos):
         """
         Initialize the Index class.
-        
+
         Args:
             repos_path (str): Path to the base folder containing repositories.
         """
@@ -38,7 +39,8 @@ class Index:
             "experiment": os.path.join(repos_path, "index_experiment.json")
         }
         self.indices = {key: [] for key in self.index_files.keys()}
-        self.modified_times_file = os.path.join(repos_path, "modified_times.json")
+        self.modified_times_file = os.path.join(
+            repos_path, "modified_times.json")
         self.modified_times = self._load_modified_times()
         self._load_existing_index()
         self.build_index()
@@ -68,7 +70,7 @@ class Index:
                         return json.load(f)
                 else:
                     return {}
-                
+
         except Timeout:
             logger.warning(f"Timeout acquiring lock {lock_file}")
             return {}
@@ -78,13 +80,14 @@ class Index:
             return {}
 
     @contextmanager
-    def _file_lock_with_incremental_timeout(self, lock_file, timeout_seconds=60):
+    def _file_lock_with_incremental_timeout(
+            self, lock_file, timeout_seconds=60):
         """
         Acquire a file lock by waiting up to a minute, then retrying once if it times out.
         """
         try:
             with FileLock(lock_file, timeout=timeout_seconds):
-                yield # Control goes to the caller's 'with' block while the file lock is held
+                yield  # Control goes to the caller's 'with' block while the file lock is held
                 return
         except Timeout:
             logger.warning(
@@ -104,12 +107,13 @@ class Index:
             with self._file_lock_with_incremental_timeout(lock_file):
                 # logger.debug(f"Lock acquired at {lock_file} for Saving Modified Times")
 
-                #logger.debug(f"Saving modified times to {self.modified_times_file}")
+                # logger.debug(f"Saving modified times to {self.modified_times_file}")
                 with open(self.modified_times_file, "w") as f:
                     json.dump(self.modified_times, f, indent=4)
-        
+
         except Timeout:
-            logger.warning(f"Timeout acquiring lock {lock_file}, skipping modified times save")
+            logger.warning(
+                f"Timeout acquiring lock {lock_file}, skipping modified times save")
 
         except Exception as e:
             logger.error(f"Error saving modified times: {e}")
@@ -134,7 +138,7 @@ class Index:
                                 item["repo"] = Repo(**item["repo"])
                     else:
                         self.indices[folder_type] = []
-            
+
             except Timeout:
                 logger.error(f"Timeout acquiring lock {lock_file}")
                 self.indices[folder_type] = []
@@ -151,17 +155,17 @@ class Index:
         unique_id = meta['uid']
         alias = meta['alias']
         tags = meta['tags']
-        
+
         index = self.get_index(folder_type, unique_id)
 
         if index == -1:
             self.indices[folder_type].append({
-                    "uid": unique_id,
-                    "tags": tags,
-                    "alias": alias,
-                    "path": path,
-                    "repo": repo
-                })
+                "uid": unique_id,
+                "tags": tags,
+                "alias": alias,
+                "path": path,
+                "repo": repo
+            })
             self._save_indices()
 
     def get_index(self, folder_type, uid):
@@ -175,36 +179,38 @@ class Index:
         alias = meta['alias']
         tags = meta['tags']
         index = self.get_index(folder_type, uid)
-        if index == -1: #add it
+        if index == -1:  # add it
             self.add(meta, folder_type, path, repo)
             logger.debug(f"Index update failed, new index created for {uid}")
         else:
             self.indices[folder_type][index] = {
-                    "uid": uid,
-                    "tags": tags,
-                    "alias": alias,
-                    "path": path,
-                    "repo": repo
-                }
+                "uid": uid,
+                "tags": tags,
+                "alias": alias,
+                "path": path,
+                "repo": repo
+            }
         self._save_indices()
 
     def rm(self, meta, folder_type, path):
         uid = meta['uid']
         index = self.get_index(folder_type, uid)
-        if index == -1: 
-            logger.warning(f"Index is not having the {folder_type} item {path}")
+        if index == -1:
+            logger.warning(
+                f"Index is not having the {folder_type} item {path}")
         else:
-            del(self.indices[folder_type][index])
+            del (self.indices[folder_type][index])
         self._save_indices()
 
-    def get_item_mtime(self,file):
+    def get_item_mtime(self, file):
         latest = 0
         t = os.path.getmtime(file)
         if t > latest:
             latest = t
         return latest
 
-    def _index_single_repo(self, repo, repos_changed=False, current_item_keys=None):
+    def _index_single_repo(self, repo, repos_changed=False,
+                           current_item_keys=None):
         repo_path = repo.path
         if not os.path.isdir(repo_path):
             return False
@@ -231,20 +237,23 @@ class Index:
                 else:
                     # No config file found, remove from index if exists
                     delete_flag = False
-                    
-                    # Check and remove both possible config paths from modified_times
+
+                    # Check and remove both possible config paths from
+                    # modified_times
                     for config_name in ["meta.yaml", "meta.json"]:
                         config_key = os.path.join(automation_path, config_name)
                         if config_key in self.modified_times:
                             del self.modified_times[config_key]
                             delete_flag = True
-                    
+
                     # Use exact path matching instead of substring
-                    if any(item["path"] == automation_path for item in self.indices[folder_type]):
-                        logger.debug(f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
+                    if any(
+                            item["path"] == automation_path for item in self.indices[folder_type]):
+                        logger.debug(
+                            f"Removed index entry (if it exists) for {folder_type} : {automation_dir}")
                         delete_flag = True
                         self._remove_index_entry(automation_path)
-                    
+
                     if delete_flag:
                         changed = True
                     continue
@@ -261,17 +270,18 @@ class Index:
                     "mtime": mtime,
                     "date_time": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
                 }
-                
+
                 # meta file changed, so reindex
-                self._process_config_file(config_path, folder_type, automation_path, repo)
+                self._process_config_file(
+                    config_path, folder_type, automation_path, repo)
                 changed = True
-        
+
         return changed
 
     def build_index(self, force_rebuild=False):
         """
         Build shared indices for script, cache, and experiment folders across all repositories.
-        
+
         Returns:
             None
         """
@@ -288,16 +298,18 @@ class Index:
         for index_type, index_path in self.index_files.items():
             if not os.path.exists(index_path):
                 missing_indices.append(index_type)
-        
+
         if missing_indices:
-            logger.warning(f"Missing index files: {', '.join(missing_indices)}. Forcing full index rebuild...")
+            logger.warning(
+                f"Missing index files: {', '.join(missing_indices)}. Forcing full index rebuild...")
             self.modified_times = {}
             self.indices = {k: [] for k in self.index_files.keys()}
             force_rebuild = True
-        
+
         # index each repo
         for repo in self.repos:
-            repo_changed = self._index_single_repo(repo, force_rebuild, current_item_keys)
+            repo_changed = self._index_single_repo(
+                repo, force_rebuild, current_item_keys)
             if repo_changed:
                 changed = True
 
@@ -311,10 +323,12 @@ class Index:
             self._remove_index_entry(folder_key)
             changed = True
         if deleted_keys:
-            logger.debug(f"Deleted keys removed from modified times and indices: {deleted_keys}")
+            logger.debug(
+                f"Deleted keys removed from modified times and indices: {deleted_keys}")
 
         if force_rebuild or changed:
-            logger.debug("Changes detected, saving updated index and modified times.")
+            logger.debug(
+                "Changes detected, saving updated index and modified times.")
             self._save_modified_times()
             self._save_indices()
 
@@ -330,19 +344,21 @@ class Index:
             ]
             removed_count = original_count - len(self.indices[ft])
             if removed_count > 0:
-                logger.debug(f"Removed {removed_count} item(s) from {ft} index")
+                logger.debug(
+                    f"Removed {removed_count} item(s) from {ft} index")
 
     def _delete_by_uid(self, folder_type, uid, alias):
         """
         Delete old index entry using UID (prevents duplicates).
         """
-        #logger.debug(f"Deleting and updating index entry for the script {alias} with UID {uid}")
+        # logger.debug(f"Deleting and updating index entry for the script {alias} with UID {uid}")
         self.indices[folder_type] = [
             item for item in self.indices[folder_type]
             if item["uid"] != uid
         ]
 
-    def _process_config_file(self, config_file, folder_type, folder_path, repo):
+    def _process_config_file(
+            self, config_file, folder_type, folder_path, repo):
         """
         Process a single configuration file (meta.json or meta.yaml) and add its data to the corresponding index.
 
@@ -367,11 +383,13 @@ class Index:
                 with open(config_file, "r") as f:
                     data = json.load(f) or {}
             else:
-                logger.warning(f"Skipping {config_file}: Unsupported file format.")
+                logger.warning(
+                    f"Skipping {config_file}: Unsupported file format.")
                 return
-            
+
             if not isinstance(data, dict):
-                logger.warning(f"Skipping {config_file}: Invalid or empty meta")
+                logger.warning(
+                    f"Skipping {config_file}: Invalid or empty meta")
                 return
             # Extract necessary fields
             unique_id = data.get("uid")
@@ -389,7 +407,8 @@ class Index:
                 for w in warnings:
                     logger.debug(f"Meta validation warning: {w}")
                 if errors:
-                    raise ValueError(f"Meta validation failed for {config_file}. Fix the above error(s) and try again.")
+                    raise ValueError(
+                        f"Meta validation failed for {config_file}. Fix the above error(s) and try again.")
 
             # Validate and add to indices
             self._delete_by_uid(folder_type, unique_id, alias)
@@ -404,32 +423,32 @@ class Index:
         except Exception as e:
             logger.error(f"Error processing {config_file}: {e}")
 
-
     def _save_indices(self):
         """
         Save the indices to JSON files.
-        
+
         Returns:
             None
         """
-        #logger.info(self.indices)
+        # logger.info(self.indices)
         for folder_type, index_data in self.indices.items():
             output_file = self.index_files[folder_type]
             lock_file = output_file + ".lock"
             try:
                 with self._file_lock_with_incremental_timeout(lock_file):
-                    #logger.debug(f"Lock acquired at {lock_file} for Saving Index for {folder_type}")
+                    # logger.debug(f"Lock acquired at {lock_file} for Saving Index for {folder_type}")
 
                     with open(output_file, "w") as f:
-                        json.dump(index_data, f, indent=4, cls=CustomJSONEncoder)
-                    #logger.debug(f"Shared index for {folder_type} saved to {output_file}.")
-            
+                        json.dump(
+                            index_data, f, indent=4, cls=CustomJSONEncoder)
+                    # logger.debug(f"Shared index for {folder_type} saved to {output_file}.")
+
             except Timeout:
                 logger.error(f"Timeout acquiring lock {lock_file}")
 
             except Exception as e:
-                logger.error(f"Error saving shared index for {folder_type}: {e}")
-
+                logger.error(
+                    f"Error saving shared index for {folder_type}: {e}")
 
     def add_repo(self, repo):
         """
@@ -440,7 +459,6 @@ class Index:
         if changed:
             self._save_indices()
             self._save_modified_times()
-
 
     def remove_repo_from_index(self, repo_path):
         """

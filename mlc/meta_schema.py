@@ -26,219 +26,222 @@ REQUIRED_KEYS = {"alias", "uid", "automation_alias", "automation_uid"}
 # key -> set of allowed type names
 TOP_LEVEL_SCHEMA = {
     # Identity (required)
-    "alias":                    STR,
-    "uid":                      STR,
-    "automation_alias":         STR,
-    "automation_uid":           STR,
+    "alias": STR,
+    "uid": STR,
+    "automation_alias": STR,
+    "automation_uid": STR,
 
     # Metadata
-    "name":                     STR,
-    "category":                 STR,
-    "tags":                     LIST,        # list[str]
-    "tags_help":                STR,
-    "developers":               STR,
-    "sort":                     INT,
-    "category_sort":            INT,
-    "private":                  BOOL,
-    "min_mlc_version":          STR,
+    "name": STR,
+    "category": STR,
+    "tags": LIST,        # list[str]
+    "tags_help": STR,
+    "developers": STR,
+    "sort": INT,
+    "category_sort": INT,
+    "private": BOOL,
+    "min_mlc_version": STR,
 
     # Environment
-    "env":                      DICT,        # dict[str, str]
-    "default_env":              DICT,        # dict[str, str]
-    "new_env_keys":             LIST,        # list[str]
-    "new_state_keys":           LIST,        # list[str]
-    "local_env_keys":           LIST,        # list[str]
-    "file_path_env_keys":       LIST,        # list[str]
-    "folder_path_env_keys":     LIST,        # list[str]
+    "env": DICT,        # dict[str, str]
+    "default_env": DICT,        # dict[str, str]
+    "new_env_keys": LIST,        # list[str]
+    "new_state_keys": LIST,        # list[str]
+    "local_env_keys": LIST,        # list[str]
+    "file_path_env_keys": LIST,        # list[str]
+    "folder_path_env_keys": LIST,        # list[str]
 
     # Cache
-    "cache":                    STR_OR_BOOL,
-    "can_force_cache":          BOOL,
-    "cache_expiration":         STR,
+    "cache": STR_OR_BOOL,
+    "can_force_cache": BOOL,
+    "cache_expiration": STR,
     "extra_cache_tags_from_env": LIST,       # list[str]
-    "clean_files":              LIST,        # list[str]
-    "clean_output_files":       LIST,        # list[str]
+    "clean_files": LIST,        # list[str]
+    "clean_output_files": LIST,        # list[str]
 
     # Input mapping
-    "input_mapping":            {*DICT, "NoneType"},  # dict[str, str]  input_name -> ENV_KEY (or null)
-    "input_description":        {*DICT, "NoneType"},  # dict[str, dict] input_name -> {desc, choices, ...} (or null)
-    "env_key_mappings":         DICT,        # dict[str, str]
+    # dict[str, str]  input_name -> ENV_KEY (or null)
+    "input_mapping": {*DICT, "NoneType"},
+    # dict[str, dict] input_name -> {desc, choices, ...} (or null)
+    "input_description": {*DICT, "NoneType"},
+    "env_key_mappings": DICT,        # dict[str, str]
 
     # Dependencies
-    "deps":                     LIST,        # list[dep_entry]
-    "prehook_deps":             LIST,        # list[dep_entry]
-    "posthook_deps":            LIST,        # list[dep_entry]
-    "post_deps":                LIST,        # list[dep_entry]
-    "predeps":                  BOOL,
+    "deps": LIST,        # list[dep_entry]
+    "prehook_deps": LIST,        # list[dep_entry]
+    "posthook_deps": LIST,        # list[dep_entry]
+    "post_deps": LIST,        # list[dep_entry]
+    "predeps": BOOL,
 
     # Variations
-    "variations":               DICT,        # dict[str, variation_entry]
-    "variation_groups_order":   LIST,        # list[str]
-    "default_variation":        STR,
-    "default_variations":       DICT,        # dict[str, str]
+    "variations": DICT,        # dict[str, variation_entry]
+    "variation_groups_order": LIST,        # list[str]
+    "default_variation": STR,
+    "default_variations": DICT,        # dict[str, str]
     "invalid_variation_combinations": LIST,  # list[list[str]]
-    "valid_variation_combinations":   LIST,  # list[list[str]]
+    "valid_variation_combinations": LIST,  # list[list[str]]
 
     # Versions
-    "versions":                 DICT,        # dict[str, version_entry]
-    "default_version":          STR,
+    "versions": DICT,        # dict[str, version_entry]
+    "default_version": STR,
 
     # Docker
-    "docker":                   DICT,        # dict - see DOCKER_SCHEMA
+    "docker": DICT,        # dict - see DOCKER_SCHEMA
 
     # Output / debugging
-    "print_env_at_the_end":     DICT,        # dict[str, list[str]]
+    "print_env_at_the_end": DICT,        # dict[str, list[str]]
     "print_files_if_script_error": LIST,     # list[str]
-    "warnings":                 LIST,        # list[str]
-    "sudo_install":             BOOL,
+    "warnings": LIST,        # list[str]
+    "sudo_install": BOOL,
 
     # Conditional meta update
-    "update_meta_if_env":       LIST,        # list[dict]
-    "remote_run":               DICT,
+    "update_meta_if_env": LIST,        # list[dict]
+    "remote_run": DICT,
 
     # Tests
-    "tests":                    DICT,        # dict - see TESTS_SCHEMA
+    "tests": DICT,        # dict - see TESTS_SCHEMA
 }
 
 # ─── Dependency entry keys ──────────────────────────────────────
 DEP_ENTRY_SCHEMA = {
-    "tags":                             STR,
-    "names":                            STR_OR_LIST,
-    "env":                              DICT,
-    "enable_if_env":                    DICT,
-    "skip_if_env":                      DICT,
-    "skip_if_any_env":                  DICT,
-    "enable_if_any_env":                DICT,
-    "extra_cache_tags":                 STR,
+    "tags": STR,
+    "names": STR_OR_LIST,
+    "env": DICT,
+    "enable_if_env": DICT,
+    "skip_if_env": DICT,
+    "skip_if_any_env": DICT,
+    "enable_if_any_env": DICT,
+    "extra_cache_tags": STR,
     "update_tags_from_env_with_prefix": DICT,
-    "update_tags_from_env":             LIST,
-    "force_env_keys":                   LIST,
-    "force_cache":                      BOOL,
-    "reuse_version":                    BOOL,
-    "inherit_variation_tags":           STR_OR_BOOL,
-    "skip_inherit_variation_groups":    LIST,
-    "version":                          STR,
-    "version_min":                      STR,
-    "version_max":                      STR_OR_FLOAT,
-    "version_max_usable":               STR_OR_FLOAT,
-    "dynamic":                          BOOL,
-    "ignore_missing":                   BOOL,
-    "skip_if_fake_run":                 BOOL,
-    "verify":                           BOOL,
-    "md5sum":                           STR,
-    "revision":                         STR,
-    "model_filename":                   STR,
-    "full_subfolder":                   STR,
-    "env_key":                          STR,
-    "continue_on_error":                BOOL,
-    "ignore_script_error":              BOOL,
-    "inherit_cache_expiration":         BOOL,
-    "update_tags_if_env":               DICT,
-    "update_meta_if_env":               LIST,
+    "update_tags_from_env": LIST,
+    "force_env_keys": LIST,
+    "force_cache": BOOL,
+    "reuse_version": BOOL,
+    "inherit_variation_tags": STR_OR_BOOL,
+    "skip_inherit_variation_groups": LIST,
+    "version": STR,
+    "version_min": STR,
+    "version_max": STR_OR_FLOAT,
+    "version_max_usable": STR_OR_FLOAT,
+    "dynamic": BOOL,
+    "ignore_missing": BOOL,
+    "skip_if_fake_run": BOOL,
+    "verify": BOOL,
+    "md5sum": STR,
+    "revision": STR,
+    "model_filename": STR,
+    "full_subfolder": STR,
+    "env_key": STR,
+    "continue_on_error": BOOL,
+    "ignore_script_error": BOOL,
+    "inherit_cache_expiration": BOOL,
+    "update_tags_if_env": DICT,
+    "update_meta_if_env": LIST,
 }
 
 # ─── Variation entry keys ───────────────────────────────────────
 VARIATION_ENTRY_SCHEMA = {
-    "env":                      {*DICT, "NoneType"},
-    "group":                    STR,
-    "default":                  STR_OR_BOOL,
-    "default_variations":       DICT,
-    "deps":                     LIST,
-    "prehook_deps":             LIST,
-    "posthook_deps":            LIST,
-    "post_deps":                LIST,
-    "add_deps":                 DICT,
-    "add_deps_recursive":       DICT,
-    "add_deps_tags":            DICT,
-    "new_env_keys":             LIST,
-    "new_state_keys":           LIST,
-    "base":                     LIST,
-    "adr":                      DICT,
-    "ad":                       DICT,
-    "default_env":              DICT,
-    "state":                    DICT,
-    "const":                    DICT,
-    "docker":                   DICT,
-    "alias":                    STR,
-    "default_version":          STR_OR_FLOAT,
-    "required_disk_space":      INT,
-    "cache_expiration":         {*STR, *INT},
-    "cache":                    BOOL,
-    "force_cache":              BOOL,
-    "update_meta_if_env":       LIST,
-    "warning":                  STR,
-    "warnings":                 LIST,
-    "names":                    LIST,
-    "default_variation":        DICT,
+    "env": {*DICT, "NoneType"},
+    "group": STR,
+    "default": STR_OR_BOOL,
+    "default_variations": DICT,
+    "deps": LIST,
+    "prehook_deps": LIST,
+    "posthook_deps": LIST,
+    "post_deps": LIST,
+    "add_deps": DICT,
+    "add_deps_recursive": DICT,
+    "add_deps_tags": DICT,
+    "new_env_keys": LIST,
+    "new_state_keys": LIST,
+    "base": LIST,
+    "adr": DICT,
+    "ad": DICT,
+    "default_env": DICT,
+    "state": DICT,
+    "const": DICT,
+    "docker": DICT,
+    "alias": STR,
+    "default_version": STR_OR_FLOAT,
+    "required_disk_space": INT,
+    "cache_expiration": {*STR, *INT},
+    "cache": BOOL,
+    "force_cache": BOOL,
+    "update_meta_if_env": LIST,
+    "warning": STR,
+    "warnings": LIST,
+    "names": LIST,
+    "default_variation": DICT,
 }
 
 # ─── Docker section keys ────────────────────────────────────────
 DOCKER_SCHEMA = {
-    "real_run":                 BOOL,
-    "run":                      BOOL,
-    "skip_run_cmd":             STR_OR_BOOL,
-    "interactive":              BOOL,
-    "pre_run_cmds":             LIST,
-    "deps":                     LIST,
-    "mounts":                   LIST,
-    "input_mapping":            DICT,
-    "input_paths":              LIST,
-    "skip_input_for_fake_run":  LIST,
-    "os":                       STR,
-    "os_version":               STR,
-    "base_image":               STR,
-    "mlc_repo":                 STR,
-    "mlc_repo_branch":          STR,
-    "mlc_repo_flags":           STR,
-    "extra_run_args":           STR,
-    "all_gpus":                 STR,
-    "user":                     STR,
-    "use_host_user_id":         BOOL,
-    "use_host_group_id":        STR_OR_BOOL,
-    "skip_mlc_sys_upgrade":     STR,
-    "shm_size":                 STR,
-    "port_maps":                LIST,
-    "image_tag_extra":          STR,
-    "fake_run_deps":            BOOL,
-    "pass_docker_to_script":    BOOL,
-    "mount_current_dir":        STR,
-    "use_google_dns":           BOOL,
-    "add_quotes_to_keys":       LIST,
-    "device":                   STR,
-    "run_cmd_prefix":           STR,
-    "pass_user_group":          BOOL,
-    "default_env":              DICT,
-    "env":                      DICT,
+    "real_run": BOOL,
+    "run": BOOL,
+    "skip_run_cmd": STR_OR_BOOL,
+    "interactive": BOOL,
+    "pre_run_cmds": LIST,
+    "deps": LIST,
+    "mounts": LIST,
+    "input_mapping": DICT,
+    "input_paths": LIST,
+    "skip_input_for_fake_run": LIST,
+    "os": STR,
+    "os_version": STR,
+    "base_image": STR,
+    "mlc_repo": STR,
+    "mlc_repo_branch": STR,
+    "mlc_repo_flags": STR,
+    "extra_run_args": STR,
+    "all_gpus": STR,
+    "user": STR,
+    "use_host_user_id": BOOL,
+    "use_host_group_id": STR_OR_BOOL,
+    "skip_mlc_sys_upgrade": STR,
+    "shm_size": STR,
+    "port_maps": LIST,
+    "image_tag_extra": STR,
+    "fake_run_deps": BOOL,
+    "pass_docker_to_script": BOOL,
+    "mount_current_dir": STR,
+    "use_google_dns": BOOL,
+    "add_quotes_to_keys": LIST,
+    "device": STR,
+    "run_cmd_prefix": STR,
+    "pass_user_group": BOOL,
+    "default_env": DICT,
+    "env": DICT,
 }
 
 # ─── Tests section keys ─────────────────────────────────────────
 TESTS_SCHEMA = {
-    "run_inputs":               LIST,   # list[dict] - each has variations_list, env, etc.
-    "needs_pat":                BOOL,
+    "run_inputs": LIST,   # list[dict] - each has variations_list, env, etc.
+    "needs_pat": BOOL,
 }
 
 # ─── Tests run_inputs entry keys ────────────────────────────────
 TESTS_RUN_INPUT_SCHEMA = {
-    "variations_list":          LIST,   # list[str]
-    "env":                      DICT,
-    "test_input_index":         STR,
-    "disable_run_script":       BOOL,
+    "variations_list": LIST,   # list[str]
+    "env": DICT,
+    "test_input_index": STR,
+    "disable_run_script": BOOL,
 }
 
 
 # ─── update_meta_if_env entry keys ──────────────────────────────
 UPDATE_META_IF_ENV_SCHEMA = {
-    "enable_if_env":            DICT,
-    "enable_if_any_env":        DICT,
-    "skip_if_env":              DICT,
-    "skip_if_any_env":          DICT,
-    "env":                      DICT,
-    "default_env":              DICT,
-    "default_variations":       DICT,
-    "docker":                   DICT,
-    "adr":                      DICT,
-    "ad":                       DICT,
+    "enable_if_env": DICT,
+    "enable_if_any_env": DICT,
+    "skip_if_env": DICT,
+    "skip_if_any_env": DICT,
+    "env": DICT,
+    "default_env": DICT,
+    "default_variations": DICT,
+    "docker": DICT,
+    "adr": DICT,
+    "ad": DICT,
 }
+
 
 def validate_meta(data, file_path=""):
     """
@@ -282,7 +285,8 @@ def validate_meta(data, file_path=""):
                 f"{prefix}Key '{key}' has type '{actual_type}', expected {allowed}")
 
     # Validate dependency lists
-    for dep_list_key in ["deps", "prehook_deps", "posthook_deps", "post_deps", "post_deps_off"]:
+    for dep_list_key in ["deps", "prehook_deps",
+                         "posthook_deps", "post_deps", "post_deps_off"]:
         deps = data.get(dep_list_key)
         if deps is None:
             continue
@@ -304,15 +308,19 @@ def validate_meta(data, file_path=""):
                     errors.append(
                         f"{prefix}{dep_list_key}[{i}].{dk} has type '{actual}', expected {allowed}")
 
-            # Validate enable_if_env/skip_if_env values are single strings/lists, not nested dicts
-            for ck in ["enable_if_env", "skip_if_env", "skip_if_any_env", "enable_if_any_env"]:
+            # Validate enable_if_env/skip_if_env values are single
+            # strings/lists, not nested dicts
+            for ck in ["enable_if_env", "skip_if_env",
+                       "skip_if_any_env", "enable_if_any_env"]:
                 cv = dep.get(ck)
                 if isinstance(cv, dict):
                     for ek, ev in cv.items():
-                        if isinstance(ev, (dict, list)) and not isinstance(ev, str):
+                        if isinstance(ev, (dict, list)
+                                      ) and not isinstance(ev, str):
                             if isinstance(ev, list):
                                 for item in ev:
-                                    if not isinstance(item, (str, int, float, bool)):
+                                    if not isinstance(
+                                            item, (str, int, float, bool)):
                                         errors.append(
                                             f"{prefix}{dep_list_key}[{i}].{ck}.{ek} list contains non-scalar: {type(item).__name__}")
 
@@ -325,22 +333,27 @@ def validate_meta(data, file_path=""):
                 continue
             for ek, ev in entry.items():
                 if ek not in UPDATE_META_IF_ENV_SCHEMA:
-                    warnings.append(f"{prefix}update_meta_if_env[{i}]: unknown key '{ek}'")
+                    warnings.append(
+                        f"{prefix}update_meta_if_env[{i}]: unknown key '{ek}'")
                     continue
                 actual = type(ev).__name__
                 allowed = UPDATE_META_IF_ENV_SCHEMA[ek]
                 if actual not in allowed:
                     errors.append(
                         f"{prefix}update_meta_if_env[{i}].{ek} has type '{actual}', expected {allowed}")
-            # Validate enable_if_env/skip_if_env values inside update_meta_if_env
-            for ck in ["enable_if_env", "skip_if_env", "skip_if_any_env", "enable_if_any_env"]:
+            # Validate enable_if_env/skip_if_env values inside
+            # update_meta_if_env
+            for ck in ["enable_if_env", "skip_if_env",
+                       "skip_if_any_env", "enable_if_any_env"]:
                 cv = entry.get(ck)
                 if isinstance(cv, dict):
                     for ek2, ev2 in cv.items():
-                        if isinstance(ev2, (dict, list)) and not isinstance(ev2, str):
+                        if isinstance(ev2, (dict, list)
+                                      ) and not isinstance(ev2, str):
                             if isinstance(ev2, list):
                                 for item in ev2:
-                                    if not isinstance(item, (str, int, float, bool)):
+                                    if not isinstance(
+                                            item, (str, int, float, bool)):
                                         errors.append(
                                             f"{prefix}update_meta_if_env[{i}].{ck}.{ek2} list contains non-scalar: {type(item).__name__}")
 
@@ -365,7 +378,6 @@ def validate_meta(data, file_path=""):
                 if actual not in allowed:
                     errors.append(
                         f"{prefix}variations.{vname}.{vk} has type '{actual}', expected {allowed}")
-
 
     # Validate docker section
     docker = data.get("docker")
@@ -406,13 +418,23 @@ def validate_meta(data, file_path=""):
 
     # Check for variation entry keys mistakenly used as variation names
     # Exclude common short words that are legitimately used as both
-    _variation_name_allowlist = {"default", "base", "env", "ad", "cache", "state", "alias", "warning", "const"}
+    _variation_name_allowlist = {
+        "default",
+        "base",
+        "env",
+        "ad",
+        "cache",
+        "state",
+        "alias",
+        "warning",
+        "const"}
     if isinstance(variations, dict):
         for vname in variations:
             if vname in VARIATION_ENTRY_SCHEMA and vname not in _variation_name_allowlist:
                 warnings.append(
                     f"{prefix}variation '{vname}' looks like a variation property key used as a variation name")
-            # Also check if variation attrs contain keys that look like variation names
+            # Also check if variation attrs contain keys that look like
+            # variation names
             vattrs = variations[vname]
             if isinstance(vattrs, dict):
                 for vk in vattrs:
@@ -420,7 +442,8 @@ def validate_meta(data, file_path=""):
                         continue  # valid property
                     if vk.startswith("MLC_"):
                         continue  # env override
-                    # Check if this unknown key is actually a known variation name in this script
+                    # Check if this unknown key is actually a known variation
+                    # name in this script
                     if vk in variations and vk != vname:
                         warnings.append(
                             f"{prefix}variations.{vname}: key '{vk}' matches another variation name - possible indentation error")

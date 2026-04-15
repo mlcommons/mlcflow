@@ -11,12 +11,13 @@ from urllib.parse import urlparse
 from .repo import Repo
 from .index import Index
 
+
 class RepoAction(Action):
     """
     ####################################################################################################################
     Repo Action
     ####################################################################################################################
-    
+
     Currently, the following actions are supported for Repos:
     1. add
     2. find
@@ -39,10 +40,9 @@ class RepoAction(Action):
     """
 
     def __init__(self, parent=None):
-        #super().__init__(parent)
+        # super().__init__(parent)
         self.parent = parent
         self.__dict__.update(vars(parent))
-
 
     def add(self, run_args):
         """
@@ -51,8 +51,8 @@ class RepoAction(Action):
     Action: Add
     ####################################################################################################################
 
-    The `add` action is used to create a new MLC repository and register it in MLCFlow.  
-    The newly created repo folder will be stored inside the `repos` folder within the parent MLC directory.  
+    The `add` action is used to create a new MLC repository and register it in MLCFlow.
+    The newly created repo folder will be stored inside the `repos` folder within the parent MLC directory.
 
     Example Command:
 
@@ -72,24 +72,27 @@ class RepoAction(Action):
         """
         if not run_args['repo']:
             logger.error("The repository to be added is not specified")
-            return {"return": 1, "error": "The repository to be added is not specified"}
+            return {"return": 1,
+                    "error": "The repository to be added is not specified"}
 
-        i_repo_path = run_args['repo'] #can be a path, forder_name or URL
+        i_repo_path = run_args['repo']  # can be a path, forder_name or URL
         repo_folder_name = os.path.basename(i_repo_path.rstrip('/'))
 
         repo_path = os.path.join(self.repos_path, repo_folder_name)
 
         r = self.find(run_args)
-        
+
         if r['return'] == 0 and len(r['list']) > 0:
-            return {'return': 1, "error": f"""Repo already exists at {r['list'][0]}"""}
+            return {'return': 1,
+                    "error": f"""Repo already exists at {r['list'][0]}"""}
 
         for repo in self.repos:
             if repo.path == i_repo_path:
-                return {'return': 1, "error": f"""Repo already exists at {repo.path}"""}
+                return {'return': 1,
+                        "error": f"""Repo already exists at {repo.path}"""}
 
         if not os.path.exists(i_repo_path):
-            #check if its an URL
+            # check if its an URL
             if utils.is_valid_url(i_repo_path):
                 parsed = urlparse(i_repo_path)
                 if parsed.hostname == "github.com":
@@ -103,7 +106,7 @@ class RepoAction(Action):
         else:
             repo_path = os.path.abspath(i_repo_path)
 
-        #check if it has MLC meta
+        # check if it has MLC meta
         meta_file = os.path.join(repo_path, "meta.yaml")
         if not os.path.exists(meta_file):
             meta = {}
@@ -113,7 +116,7 @@ class RepoAction(Action):
             utils.save_yaml(meta_file, meta)
         else:
             meta = utils.read_yaml(meta_file)
-        
+
         self.register_repo(repo_path, meta, run_args.get('ignore_on_conflict'))
 
         return {'return': 0}
@@ -121,45 +124,58 @@ class RepoAction(Action):
     def conflicting_repo(self, repo_meta):
         for repo_object in self.repos:
             if repo_object.meta.get('uid', '') == '':
-                return {"return": 1, "error": f"UID is not present in file 'meta.yaml' in the repo path {repo_object.path}"}
+                return {
+                    "return": 1, "error": f"UID is not present in file 'meta.yaml' in the repo path {repo_object.path}"}
             if repo_meta["uid"] == repo_object.meta.get('uid', ''):
                 if repo_meta.get('path', '') == repo_object.path:
-                    return {"return": 1, "error": f"Same repo is already registered"}
+                    return {"return": 1,
+                            "error": f"Same repo is already registered"}
                 else:
-                    return {"return": 1, "error": f"Conflicting with repo in the path {repo_object.path}", "conflicting_path": repo_object.path}
+                    return {"return": 1, "error": f"Conflicting with repo in the path {repo_object.path}",
+                            "conflicting_path": repo_object.path}
         return {"return": 0}
-    
+
     def register_repo(self, repo_path, repo_meta, ignore_on_conflict=False):
-            
+
         # Check UID conflicts
         is_conflict = self.conflicting_repo(repo_meta)
         if is_conflict['return'] > 0:
             if "UID not present" in is_conflict['error']:
-                logger.warning(f"UID not found in meta.yaml at {repo_path}. Repo can not be registered in MLC repos. Skipping...")
+                logger.warning(
+                    f"UID not found in meta.yaml at {repo_path}. Repo can not be registered in MLC repos. Skipping...")
                 return {"return": 0}
-            elif "already registered" in is_conflict["error"]: #at same path
-                #logger.warning(is_conflict["error"])
+            elif "already registered" in is_conflict["error"]:  # at same path
+                # logger.warning(is_conflict["error"])
                 logger.debug("No changes made to repos.json.")
                 return {"return": 0}
             else:
-                logger.warning(f"The repo to be registered has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
+                logger.warning(
+                    f"The repo to be registered has conflict with the repo already in the path: {is_conflict['conflicting_path']}")
                 if ignore_on_conflict:
-                    logger.warning(f"Ignoring register as ignore_on_conflict is set")
+                    logger.warning(
+                        f"Ignoring register as ignore_on_conflict is set")
                     return {"return": 0, 'conflict': True}
 
                 self.unregister_repo(is_conflict['conflicting_path'])
-                logger.warning(f"{is_conflict['conflicting_path']} is unregistered.")
-    
+                logger.warning(
+                    f"{is_conflict['conflicting_path']} is unregistered.")
+
         if repo_meta.get('deps'):
             for dep in repo_meta['deps']:
-                self.pull_repo(dep['url'], branch=dep.get('branch'), checkout=dep.get('checkout'), ignore_on_conflict=dep.get('is_alias_okay', True))
+                self.pull_repo(
+                    dep['url'],
+                    branch=dep.get('branch'),
+                    checkout=dep.get('checkout'),
+                    ignore_on_conflict=dep.get(
+                        'is_alias_okay',
+                        True))
 
         # Get the path to the repos.json file in $HOME/MLC
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
 
         with open(repos_file_path, 'r') as f:
             repos_list = json.load(f)
-        
+
         if repo_path not in repos_list:
             repos_list.append(repo_path)
             logger.info(f"Added new repo path: {repo_path}")
@@ -167,7 +183,7 @@ class RepoAction(Action):
         with open(repos_file_path, 'w') as f:
             json.dump(repos_list, f, indent=2)
             logger.info(f"Updated repos.json at {repos_file_path}")
-        
+
         self.repos = self.load_repos_and_meta()
         repo_obj = next(
             (r for r in self.repos if r.path == repo_path),
@@ -178,14 +194,13 @@ class RepoAction(Action):
             index = Action.get_index(self)
             index.add_repo(repo_obj)
             logger.debug("Index file has been updated")
-        
+
         return {'return': 0}
 
     def unregister_repo(self, repo_path):
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
-        
-        return unregister_repo(repo_path, repos_file_path)
 
+        return unregister_repo(repo_path, repos_file_path)
 
     def find(self, run_args):
         """
@@ -208,25 +223,28 @@ class RepoAction(Action):
         """
         # Get repos_list using the existing method
         repos_list = self.load_repos_and_meta()
-        if(run_args.get('item', run_args.get('artifact'))):
+        if (run_args.get('item', run_args.get('artifact'))):
             repo = run_args.get('item', run_args.get('artifact'))
         else:
-            repo = run_args.get('repo', run_args.get('item', run_args.get('artifact')))
+            repo = run_args.get(
+                'repo', run_args.get(
+                    'item', run_args.get('artifact')))
 
         # Check if repo is None or empty
         if not repo:
             return {"return": 1, "error": "Please enter a Repo Alias, Repo UID, or Repo URL in one of the following formats:\n"
-                                         "- <repo_owner>@<repos_name>\n"
-                                         "- <repo_url>\n"
-                                         "- <repo_uid>\n"
-                                         "- <repo_alias>\n"
-                                         "- <repo_alias>,<repo_uid>"}
+                    "- <repo_owner>@<repos_name>\n"
+                    "- <repo_url>\n"
+                    "- <repo_uid>\n"
+                    "- <repo_alias>\n"
+                    "- <repo_alias>,<repo_uid>"}
 
         # Handle the different repo input formats
         repo_name = None
         repo_uid = None
 
-        # Check if the repo is in the format of a repo UID (alphanumeric string)
+        # Check if the repo is in the format of a repo UID (alphanumeric
+        # string)
         if utils.is_uid(repo):
             repo_uid = repo
         if "," in repo:
@@ -242,7 +260,8 @@ class RepoAction(Action):
                 parsed = urlparse(repo)
             except Exception:
                 parsed = None
-            if parsed and parsed.scheme in ("http", "https") and parsed.hostname == "github.com":
+            if parsed and parsed.scheme in (
+                    "http", "https") and parsed.hostname == "github.com":
                 result = self.github_url_to_user_repo_format(repo)
                 if result["return"] == 0:
                     repo_name = result["value"]
@@ -254,10 +273,9 @@ class RepoAction(Action):
         # Check if repo_name exists in repos.json
         matched_repo_path = None
         for repo_obj in repos_list:
-            if repo_name and repo_name == os.path.basename(repo_obj.path) :
+            if repo_name and repo_name == os.path.basename(repo_obj.path):
                 matched_repo_path = repo_obj
                 break
-
 
         # Search through self.repos for matching repos
         lst = []
@@ -267,22 +285,23 @@ class RepoAction(Action):
             elif repo_name == i.meta['alias']:
                 lst.append(i)
 
-
         # After loop, check if any match was found
         if not lst and not matched_repo_path:
             # Determine error message based on input
             if utils.is_uid(repo):
-                return {"return": 1, "error": f"No repository with UID: '{repo_uid}' was found"}
+                return {
+                    "return": 1, "error": f"No repository with UID: '{repo_uid}' was found"}
             elif "," in repo and not matched_repo_path:
-                return {"return": 1, "error": f"No repository with alias: '{repo_name}' and UID: '{repo_uid}' was found"}
+                return {
+                    "return": 1, "error": f"No repository with alias: '{repo_name}' and UID: '{repo_uid}' was found"}
             else:
-                return {"return": 1, "error": f"No repository with alias: '{repo_name}' was found"}
+                return {
+                    "return": 1, "error": f"No repository with alias: '{repo_name}' was found"}
 
-                
         # Append the matched repo path
-        if(len(lst)==0 and matched_repo_path):
+        if (len(lst) == 0 and matched_repo_path):
             lst.append(matched_repo_path)
-            
+
         return {'return': 0, 'list': lst}
 
     def github_url_to_user_repo_format(self, url):
@@ -294,19 +313,22 @@ class RepoAction(Action):
         # """
         # Regex to match GitHub URLs
         pattern = r"(?:https?://)?(?:www\.)?github\.com/([^/]+)/([^/.]+)(?:\.git)?"
-        
+
         match = re.match(pattern, url)
         if match:
             user, repo_name = match.groups()
             return {"return": 0, "value": f"{user}@{repo_name}"}
         else:
-            return {"return": 0, "value": os.path.basename(url).replace(".git", "")}
+            return {"return": 0, "value": os.path.basename(
+                url).replace(".git", "")}
 
-    def pull_repo(self, repo_url, branch=None, checkout = None, tag = None, pat = None, ssh = None, ignore_on_conflict = False, repo_path = None):
-        
+    def pull_repo(self, repo_url, branch=None, checkout=None, tag=None,
+                  pat=None, ssh=None, ignore_on_conflict=False, repo_path=None):
+
         # Determine the checkout path from environment or default
-        repo_base_path = self.repos_path # either the value will be from 'MLC_REPOS'
-        os.makedirs(repo_base_path, exist_ok=True)  # Ensure the directory exists
+        repo_base_path = self.repos_path  # either the value will be from 'MLC_REPOS'
+        # Ensure the directory exists
+        os.makedirs(repo_base_path, exist_ok=True)
 
         # Handle user@repo format (convert to standard GitHub URL)
         if re.match(r'^[\w-]+@[\w-]+$', repo_url):
@@ -325,7 +347,6 @@ class RepoAction(Action):
             else:
                 repo_url = res["url"]
 
-
         # Extract the repo name from URL
         repo_name = repo_url.split('/')[-1].replace('.git', '')
         res = self.github_url_to_user_repo_format(repo_url)
@@ -340,39 +361,58 @@ class RepoAction(Action):
             # If the directory doesn't exist, clone it
             if not os.path.exists(repo_path):
                 logger.info(f"Cloning repository {repo_url} to {repo_path}...")
-                
+
                 # Build clone command without branch if not provided
                 clone_command = ['git', 'clone', repo_url, repo_path]
                 if branch:
-                    clone_command = ['git', 'clone', '--branch', branch, repo_url, repo_path]
-                
+                    clone_command = [
+                        'git',
+                        'clone',
+                        '--branch',
+                        branch,
+                        repo_url,
+                        repo_path]
+
                 subprocess.run(clone_command, check=True)
 
             else:
-                logger.info(f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
-    
+                logger.info(
+                    f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
+
                 # Check for local changes
-                status_command = ['git', '-C', repo_path, 'status', '--porcelain', '--untracked-files=no']
-                local_changes = subprocess.run(status_command, capture_output=True, text=True)
+                status_command = [
+                    'git',
+                    '-C',
+                    repo_path,
+                    'status',
+                    '--porcelain',
+                    '--untracked-files=no']
+                local_changes = subprocess.run(
+                    status_command, capture_output=True, text=True)
 
                 if local_changes.stdout.strip():
-                    logger.warning("There are local changes in the repository. Please commit or stash them before checking out.")
+                    logger.warning(
+                        "There are local changes in the repository. Please commit or stash them before checking out.")
                     print(local_changes.stdout.strip())
-                    return {"return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
+                    return {
+                        "return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
                 else:
-                    logger.info("No local changes detected. Pulling latest changes...")
-                    subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
+                    logger.info(
+                        "No local changes detected. Pulling latest changes...")
+                    subprocess.run(
+                        ['git', '-C', repo_path, 'pull'], check=True)
                     logger.info("Repository successfully pulled.")
 
             if tag:
-                checkout = "tags/"+tag
+                checkout = "tags/" + tag
 
             # Checkout to a specific branch or commit if --checkout is provided
             if checkout or tag:
                 logger.info(f"Checking out to {checkout} in {repo_path}...")
-                subprocess.run(['git', '-C', repo_path, 'checkout', checkout], check=True)
-            
-            #if not tag:
+                subprocess.run(
+                    ['git', '-C', repo_path, 'checkout', checkout], check=True)
+
+            # if not tag:
             #    subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
             #    logger.info("Repository successfully pulled.")
 
@@ -381,9 +421,10 @@ class RepoAction(Action):
             # check the meta file to obtain uids
             meta_file_path = os.path.join(repo_path, 'meta.yaml')
             if not os.path.exists(meta_file_path):
-                logger.warning(f"meta.yaml not found in {repo_path}. Repo pulled but not registered in MLC repos. Skipping...")
+                logger.warning(
+                    f"meta.yaml not found in {repo_path}. Repo pulled but not registered in MLC repos. Skipping...")
                 return {"return": 0}
-            
+
             with open(meta_file_path, 'r') as meta_file:
                 meta_data = yaml.safe_load(meta_file)
                 meta_data["path"] = repo_path
@@ -397,7 +438,8 @@ class RepoAction(Action):
         except subprocess.CalledProcessError as e:
             return {'return': 1, 'error': f"Git command failed: {e}"}
         except Exception as e:
-            return {'return': 1, 'error': f"Error pulling repository: {str(e)}"}
+            return {'return': 1,
+                    'error': f"Error pulling repository: {str(e)}"}
 
     def pull(self, run_args):
         """
@@ -408,8 +450,8 @@ class RepoAction(Action):
 
     The `pull` action clones an MLC repository and registers it in MLC.
 
-    If the repository already exists locally in the MLC repos directory, it fetches the latest changes only if there are no 
-    uncommited modifications(excluding untracked files/folders). The `pull` action could be also used to checkout 
+    If the repository already exists locally in the MLC repos directory, it fetches the latest changes only if there are no
+    uncommited modifications(excluding untracked files/folders). The `pull` action could be also used to checkout
     to a particular branch, commit or release tag using flags --checkout and --tag.
 
     Example Command:
@@ -425,7 +467,7 @@ class RepoAction(Action):
     Example Output:
 
       anandhu@anandhu-VivoBook-ASUSLaptop-X515UA-M515UA:~$ mlc pull repo mlcommons@mlperf-automations
-      [2025-02-19 16:46:27,208 main.py:1260 INFO] - Cloning repository https://github.com/mlcommons/mlperf-automations.git 
+      [2025-02-19 16:46:27,208 main.py:1260 INFO] - Cloning repository https://github.com/mlcommons/mlperf-automations.git
       to /home/anandhu/MLC/repos/mlcommons@mlperf-automations...
       Cloning into '/home/anandhu/MLC/repos/mlcommons@mlperf-automations'...
       remote: Enumerating objects: 77610, done.
@@ -439,7 +481,7 @@ class RepoAction(Action):
       [2025-02-19 16:46:57,605 main.py:1126 INFO] - Added new repo path: /home/anandhu/MLC/repos/mlcommons@mlperf-automations
       [2025-02-19 16:46:57,606 main.py:1130 INFO] - Updated repos.json at /home/anandhu/MLC/repos/repos.json
 
-    Note:  
+    Note:
         - repo_uid and repo_alias are not supported in the pull action for the repo target.
         - Only one of --checkout, --branch, or --tag should be specified at a time.
 
@@ -447,9 +489,11 @@ class RepoAction(Action):
         repo_url = run_args.get('repo', run_args.get('url', 'repo'))
         if not repo_url or repo_url == "repo":
             for repo_object in self.repos:
-                if os.path.exists(os.path.join(repo_object.path, ".git")) and os.access(repo_object.path, os.W_OK):
+                if os.path.exists(os.path.join(repo_object.path, ".git")) and os.access(
+                        repo_object.path, os.W_OK):
                     repo_folder_name = os.path.basename(repo_object.path)
-                    res = self.pull_repo(repo_folder_name, repo_path = repo_object.path)
+                    res = self.pull_repo(
+                        repo_folder_name, repo_path=repo_object.path)
                     if res['return'] > 0:
                         return res
         else:
@@ -461,18 +505,18 @@ class RepoAction(Action):
             ssh = run_args.get('ssh')
 
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
-                    return {"return": 1, "error": "Only one among the three flags(branch, checkout and tag) could be specified"}
+                return {
+                    "return": 1, "error": "Only one among the three flags(branch, checkout and tag) could be specified"}
 
             res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh)
             if res['return'] > 0:
                 return res
 
-
         return {'return': 0}
 
     def show(self, run_args):
         return self.list(run_args)
-            
+
     def list(self, run_args):
         """
     ####################################################################################################################
@@ -481,7 +525,7 @@ class RepoAction(Action):
     ####################################################################################################################
 
     The `list` action displays all registered MLC repositories along with their aliases and paths.
-    
+
     Example Command:
 
     mlc list repo
@@ -511,7 +555,7 @@ class RepoAction(Action):
         print("-------------")
         logger.info("Repository listing ended")
         return {"return": 0}
-    
+
     def rm(self, run_args):
         """
     ####################################################################################################################
@@ -519,11 +563,11 @@ class RepoAction(Action):
     Action: rm
     ####################################################################################################################
 
-    The `rm` action removes a specified repository from MLCFlow, deleting the repository folder, its index entries, 
+    The `rm` action removes a specified repository from MLCFlow, deleting the repository folder, its index entries,
     and its registration.
-    If there are any modified local changes, the user will be prompted for confirmation unless the `-f` flag is used  
+    If there are any modified local changes, the user will be prompted for confirmation unless the `-f` flag is used
     for force removal.
- 
+
     Example Command:
 
     mlc rm repo mlcommons@mlperf-automations
@@ -541,16 +585,17 @@ class RepoAction(Action):
         """
         if not run_args['repo']:
             logger.error("The repository to be removed is not specified")
-            return {"return": 1, "error": "The repository to be removed is not specified"}
+            return {"return": 1,
+                    "error": "The repository to be removed is not specified"}
 
         r = self.find(run_args)
-        
 
         if r['return'] == 0:
 
             list_repos = r['list']
             if len(list_repos) > 1:
-                return {"return": 1, "error": "Please select a unique repo by repo alias or repo UID to remove"}
+                return {
+                    "return": 1, "error": "Please select a unique repo by repo alias or repo UID to remove"}
 
             repo = list_repos[0]
             repo_path = repo.path
@@ -565,62 +610,78 @@ class RepoAction(Action):
                 return r
 
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
-        
+
         force_remove = True if run_args.get('f') else False
         index = Action.get_index(self)
         index.remove_repo_from_index(repo_path)
-        
-        return rm_repo(repo_path, repos_file_path, force_remove) 
-        
+
+        return rm_repo(repo_path, repos_file_path, force_remove)
+
+
 def rm_repo(repo_path, repos_file_path, force_remove):
-        logger.info("rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json")
-        
-        repo_name = os.path.basename(repo_path)
-        mlc_repos_path = os.path.abspath(os.path.dirname(repos_file_path))
-        repo_parent_path = os.path.abspath(os.path.dirname(repo_path))
+    logger.info(
+        "rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json")
 
-        if os.path.isdir(repo_path) and os.path.samefile(mlc_repos_path, repo_parent_path):
-            # Check for local changes
-            status_command = ['git', '-C', repo_path, 'status', '--porcelain', '--untracked-files=no']
-            local_changes = subprocess.run(status_command, capture_output=True, text=True)
+    repo_name = os.path.basename(repo_path)
+    mlc_repos_path = os.path.abspath(os.path.dirname(repos_file_path))
+    repo_parent_path = os.path.abspath(os.path.dirname(repo_path))
 
-            if local_changes.stdout:
-                logger.warning("Local changes detected in repository. Changes are listed below:")
-                print(local_changes.stdout)
-                confirm_remove = True if force_remove or (input("Continue to remove repo?").lower()) in ["yes", "y"] else False
-            else:
-                logger.info("No local changes detected. Removing repo...")
-                confirm_remove = True
-            if confirm_remove:
-                if force_remove:
-                    logger.info("Force remove is set.")
-                shutil.rmtree(repo_path)
-                logger.info(f"Repo {repo_name} residing in path {repo_path} has been successfully removed")
-                logger.info("Checking whether the repo was registered in repos.json")
-                unregister_repo(repo_path, repos_file_path)
-            else:
-                logger.info("rm repo ooperation cancelled by user!")
-        
+    if os.path.isdir(repo_path) and os.path.samefile(
+            mlc_repos_path, repo_parent_path):
+        # Check for local changes
+        status_command = [
+            'git',
+            '-C',
+            repo_path,
+            'status',
+            '--porcelain',
+            '--untracked-files=no']
+        local_changes = subprocess.run(
+            status_command, capture_output=True, text=True)
 
+        if local_changes.stdout:
+            logger.warning(
+                "Local changes detected in repository. Changes are listed below:")
+            print(local_changes.stdout)
+            confirm_remove = True if force_remove or (
+                input("Continue to remove repo?").lower()) in [
+                "yes", "y"] else False
         else:
-            logger.warning(f"Repo {repo_name} was not found in the repo folder. repos.json will be checked for external paths. If any, that will be removed.")
+            logger.info("No local changes detected. Removing repo...")
+            confirm_remove = True
+        if confirm_remove:
+            if force_remove:
+                logger.info("Force remove is set.")
+            shutil.rmtree(repo_path)
+            logger.info(
+                f"Repo {repo_name} residing in path {repo_path} has been successfully removed")
+            logger.info(
+                "Checking whether the repo was registered in repos.json")
             unregister_repo(repo_path, repos_file_path)
-
-        return {"return": 0}
-    
-def unregister_repo(repo_path, repos_file_path):
-        logger.info(f"Unregistering the repo in path {repo_path}")
-
-        with open(repos_file_path, 'r') as f:
-            repos_list = json.load(f)
-        
-        if repo_path in repos_list:
-            repos_list.remove(repo_path)
-            with open(repos_file_path, 'w') as f:
-                json.dump(repos_list, f, indent=2)  
-            logger.info(f"Path: {repo_path} has been removed.")
         else:
-            logger.info(f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
-                
-        return {'return': 0}
+            logger.info("rm repo ooperation cancelled by user!")
 
+    else:
+        logger.warning(
+            f"Repo {repo_name} was not found in the repo folder. repos.json will be checked for external paths. If any, that will be removed.")
+        unregister_repo(repo_path, repos_file_path)
+
+    return {"return": 0}
+
+
+def unregister_repo(repo_path, repos_file_path):
+    logger.info(f"Unregistering the repo in path {repo_path}")
+
+    with open(repos_file_path, 'r') as f:
+        repos_list = json.load(f)
+
+    if repo_path in repos_list:
+        repos_list.remove(repo_path)
+        with open(repos_file_path, 'w') as f:
+            json.dump(repos_list, f, indent=2)
+        logger.info(f"Path: {repo_path} has been removed.")
+    else:
+        logger.info(
+            f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
+
+    return {'return': 0}
