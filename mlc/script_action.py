@@ -1,3 +1,4 @@
+import re
 from .action import Action
 import os
 import sys
@@ -258,28 +259,56 @@ Main Script Meta:""")
             else:
                 automation_instance = module.ScriptAutomation(self, module_path)
 
-            if function_name == "run":
-                result = automation_instance.run(run_args)  # Pass args to the run method
-            elif function_name == "docker":
-                result = automation_instance.docker(run_args)  # Pass args to the run method
-            elif function_name == "test":
-                result = automation_instance.test(run_args)  # Pass args to the run method
-            elif function_name == "experiment":
-                result = automation_instance.experiment(run_args)  # Pass args to the experiment method
-            elif function_name == "remote_run":
-                result = automation_instance.remote_run(run_args)  # Pass args to the experiment method
-            elif function_name == "help":
-                result = automation_instance.help(run_args)  # Pass args to the help method
-            elif function_name == "doc":
-                result = automation_instance.doc(run_args)  # Pass args to the doc method
-            elif function_name == "lint":
-                result = automation_instance.lint(run_args)  # Pass args to the lint method
-            else:
-                return {'return': 1, 'error': f'Function {function_name} is not supported'}
+            try:
+                if function_name == "run":
+                    result = automation_instance.run(run_args)  # Pass args to the run method
+                elif function_name == "docker":
+                    result = automation_instance.docker(run_args)  # Pass args to the run method
+                elif function_name == "test":
+                    result = automation_instance.test(run_args)  # Pass args to the run method
+                elif function_name == "experiment":
+                    result = automation_instance.experiment(run_args)  # Pass args to the experiment method
+                elif function_name == "remote_run":
+                    result = automation_instance.remote_run(run_args)  # Pass args to the experiment method
+                elif function_name == "help":
+                    result = automation_instance.help(run_args)  # Pass args to the help method
+                elif function_name == "doc":
+                    result = automation_instance.doc(run_args)  # Pass args to the doc method
+                elif function_name == "lint":
+                    result = automation_instance.lint(run_args)  # Pass args to the lint method
+                else:
+                    return {'return': 1, 'error': f'Function {function_name} is not supported'}
+            except ScriptExecutionError:
+                raise
+            except Exception as exc:
+                _repo_match = re.search(r'/repos/([^/]+)/', module_path)
+                _repo_alias = _repo_match.group(1) if _repo_match else None
+                _script_name = run_args.get('tags', run_args.get('details'))
+                raise ScriptExecutionError(
+                    f"Script {function_name} execution failed in {module_path}." + "\nError : " + f"{type(exc).__name__}: {exc}",
+                    script_name=_script_name, repo_alias=_repo_alias, module_path=module_path,
+                    run_args=run_args) from exc
             
             if result['return'] > 0:
                 error = result.get('error', "")
-                raise ScriptExecutionError(f"Script {function_name} execution failed in {module_path}. \nError : {error}")
+                _name_match = re.search(r'name\s*=\s*([^,)]+)', error)
+                _script_name = _name_match.group(1).strip() if _name_match else run_args.get('tags', run_args.get('details'))
+                _repo_match = re.search(r'/repos/([^/]+)/', module_path)
+                _repo_alias = _repo_match.group(1) if _repo_match else None
+                # Dump dependency version info to file for debugging
+                _version_info_file = None
+                _version_info = result.get('version_info', [])
+                if _version_info:
+                    _version_info_file = os.path.join(os.getcwd(), 'mlc-error-version-info.json')
+                    try:
+                        with open(_version_info_file, 'w') as _vf:
+                            json.dump(_version_info, _vf, indent=2)
+                    except Exception:
+                        _version_info_file = None
+                raise ScriptExecutionError(
+                    f"Script {function_name} execution failed in {module_path}. \nError : {error}",
+                    script_name=_script_name, repo_alias=_repo_alias, module_path=module_path,
+                    run_args=run_args, version_info_file=_version_info_file)
 
             if str(run_args.get("mlc_output")).lower() in ["on", "true", "yes", "1"]:
                 with open("tmp-state.json", "w") as f:
@@ -489,5 +518,10 @@ Main Script Meta:""")
         return self.call_script_module_function("experiment", run_args)
 
 class ScriptExecutionError(Exception):
-    # """Custom error for configuration issues."""
-    pass
+    def __init__(self, message, script_name=None, repo_alias=None, module_path=None, run_args=None, version_info_file=None):
+        super().__init__(message)
+        self.script_name = script_name
+        self.repo_alias = repo_alias
+        self.module_path = module_path
+        self.run_args = run_args or {}
+        self.version_info_file = version_info_file

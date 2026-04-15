@@ -17,7 +17,7 @@ jobs:
       - name: "MLCommons CLA bot check"
         if: (github.event.comment.body == 'recheck') || github.event_name == 'pull_request_target'
         # Alpha Release
-        uses: mlcommons/cla-bot@master
+        uses: mlcommons/cla-bot@7facd19917cdb24be27bd8d266b41094506a0fb2 # master 2026-03-24
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # the below token should have repo scope and must be manually added by you in the repository's secret

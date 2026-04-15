@@ -10,6 +10,8 @@ import uuid
 import shutil
 import tarfile
 import zipfile
+import logging
+logger = logging.getLogger("mlc")
 
 def generate_temp_file(i):
     """

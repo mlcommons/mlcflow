@@ -8,13 +8,16 @@ on:
         required: false
         default: ''
 
+permissions:
+  contents: write
+
 jobs:
   reset-branch:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
@@ -24,7 +27,9 @@ jobs:
 
       - name: Use Input Branch
         if: ${{ inputs.branch != '' }}
-        run: echo "branch=${{ inputs.branch }}" >> $GITHUB_ENV
+        env:
+          BRANCH_INPUT: ${{ inputs.branch }}
+        run: echo "branch=${BRANCH_INPUT}" >> $GITHUB_ENV
 
       - name: Add Upstream Remote
         run: |

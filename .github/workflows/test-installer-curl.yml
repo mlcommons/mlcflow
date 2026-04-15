@@ -10,6 +10,9 @@ on:
       - '.github/workflows/test-installer-curl.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # Only allow one workflow run per PR to conserve CI resources
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -91,12 +94,16 @@ jobs:
       # For pull_request: use the PR head branch
       # For workflow_dispatch: use dev branch from mlcommons/mlcflow
       - name: Determine Installer Script URL
+        env:
+          PR_OWNER: ${{ github.event.pull_request.head.repo.owner.login }}
+          PR_REPO: ${{ github.event.pull_request.head.repo.name }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             # For PRs, use the head branch from the PR
-            OWNER="${{ github.event.pull_request.head.repo.owner.login }}"
-            REPO="${{ github.event.pull_request.head.repo.name }}"
-            BRANCH="${{ github.event.pull_request.head.ref }}"
+            OWNER="${PR_OWNER}"
+            REPO="${PR_REPO}"
+            BRANCH="${PR_BRANCH}"
           else
             # For workflow_dispatch and other events, use dev branch
             OWNER="mlcommons"
@@ -344,11 +351,15 @@ jobs:
     steps:
       # Determine the source URL based on the event type
       - name: Determine Installer Script URL
+        env:
+          PR_OWNER: ${{ github.event.pull_request.head.repo.owner.login }}
+          PR_REPO: ${{ github.event.pull_request.head.repo.name }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            OWNER="${{ github.event.pull_request.head.repo.owner.login }}"
-            REPO="${{ github.event.pull_request.head.repo.name }}"
-            BRANCH="${{ github.event.pull_request.head.ref }}"
+            OWNER="${PR_OWNER}"
+            REPO="${PR_REPO}"
+            BRANCH="${PR_BRANCH}"
           else
             OWNER="mlcommons"
             REPO="mlcflow"
