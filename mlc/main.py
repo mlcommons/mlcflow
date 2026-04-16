@@ -228,6 +228,10 @@ def mlcdr():
     mlc_expand_short("docker")
 
 
+def mlca():
+    mlc_expand_short("apptainer")
+
+
 def mlcrr():
     mlc_expand_short("remote-run")
 
@@ -361,7 +365,7 @@ def build_parser(pre_args):
     reindex_parser.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Script-only
-    for action in ['docker', 'docker-run',
+    for action in ['docker', 'docker-run', 'apptainer',
                    'experiment', 'remote-run', 'doc', 'lint']:
         p = subparsers.add_parser(action, add_help=False)
         p.add_argument('target', choices=['script', 'run'])
@@ -402,7 +406,7 @@ def build_run_args(args):
     if args.command in ['pull', 'rm', 'add', 'find'] and args.target == "repo":
         run_args['repo'] = args.details
 
-    if args.command in ['docker', 'docker-run', 'experiment',
+    if args.command in ['docker', 'docker-run', 'apptainer', 'experiment',
                         'remote-run', 'doc', 'lint'] and args.target == "run":
         # run_args['target'] = 'script' #dont modify this as script might have
         # target as in input
@@ -526,7 +530,7 @@ def main():
     if pre_args.help and not "tags" in run_args:
         help_text = ""
         if pre_args.target == "run":
-            if pre_args.action.startswith("docker"):
+            if pre_args.action.startswith("docker") or pre_args.action == "apptainer":
                 pre_args.target = "script"
             else:
                 logger.error(
