@@ -82,8 +82,16 @@ _current_target = None
 
 def get_version_info():
     """Return mlcflow version string with commit hash."""
-    from . import __version__
-    return f"mlcflow {__version__}"
+    try:
+        from . import __version__
+        return f"mlcflow {__version__}"
+    except ImportError:
+        pass
+    try:
+        from importlib.metadata import version
+        return f"mlcflow {version('mlcflow')}"
+    except Exception:
+        return "mlcflow (unknown version)"
 
 def _get_repo_hashes():
     """Get git info for all repos. Returns list of (alias, branch, hash, has_local_changes)."""
@@ -311,7 +319,6 @@ def build_pre_parser():
         nargs="?",
         help="Target (repo, script, cache, ...)")
     pre_parser.add_argument("-h", "--help", action="store_true")
-    pre_parser.add_argument("-V", "--version", action="store_true")
     return pre_parser
 
 
@@ -495,12 +502,14 @@ def main():
     check_raw_arguments_for_non_ascii()
     convert_hyphen_to_underscore_in_args()
 
-    pre_parser = build_pre_parser()
-    pre_args, remaining_args = pre_parser.parse_known_args()
-
-    if pre_args.version:
+    # Handle version before argparse to avoid --version conflicting with
+    # script arguments like --version=3.4
+    if len(sys.argv) >= 2 and sys.argv[1] in ('--version', '-V', 'version'):
         print(get_version_info())
         sys.exit(0)
+
+    pre_parser = build_pre_parser()
+    pre_args, remaining_args = pre_parser.parse_known_args()
 
     parser = build_parser(pre_args)
     # Force full parsing for reindex command even without target, or if there

@@ -45,6 +45,7 @@ py-modules = []
 
 [project.scripts]
 mlc = "mlc.main:main"
+mlcflow = "mlc.main:main"
 mlcr = "mlc.main:mlcr"
 mlcrr = "mlc.main:mlcrr"
 mlcd = "mlc.main:mlcd"
