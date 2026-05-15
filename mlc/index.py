@@ -346,7 +346,7 @@ class Index:
             if removed_count > 0:
                 logger.debug(
                     f"Removed {removed_count} item(s) from {ft} index")
-    
+
     def _delete_index_entries(self, folder_type, key, value):
         """
         Remove index entries matching for the same path or same UID.
@@ -360,7 +360,7 @@ class Index:
     def _process_config_file(
             self, config_file, folder_type, folder_path, repo):
         """
-        Process a single configuration file (meta.json or meta.yaml) and 
+        Process a single configuration file (meta.json or meta.yaml) and
         add its data to the corresponding index when the configuration file appears to be changed.
 
         Args:
@@ -414,7 +414,8 @@ class Index:
             # Remove stale entry for the same meta file path if exists
             self._delete_index_entries(folder_type, "path", folder_path)
 
-            # Remove index entry with the same UID for other meta file if exists
+            # Remove index entry with the same UID for other meta file if
+            # exists
             self._delete_index_entries(folder_type, "uid", unique_id)
 
             self.indices[folder_type].append({

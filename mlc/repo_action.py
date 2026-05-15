@@ -431,7 +431,8 @@ class RepoAction(Action):
                     meta_data["path"] = repo_path
             except yaml.YAMLError as e:
                 logger.error(f"Error loading YAML configuration: {e}")
-                return {"return": 1, "error": f"Syntax error in {meta_file_path}: {e}"}
+                return {"return": 1,
+                        "error": f"Syntax error in {meta_file_path}: {e}"}
 
             r = self.register_repo(repo_path, meta_data, ignore_on_conflict)
             if r['return'] > 0:
