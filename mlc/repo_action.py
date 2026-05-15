@@ -425,9 +425,13 @@ class RepoAction(Action):
                     f"meta.yaml not found in {repo_path}. Repo pulled but not registered in MLC repos. Skipping...")
                 return {"return": 0}
 
-            with open(meta_file_path, 'r') as meta_file:
-                meta_data = yaml.safe_load(meta_file)
-                meta_data["path"] = repo_path
+            try:
+                with open(meta_file_path, 'r') as meta_file:
+                    meta_data = yaml.safe_load(meta_file)
+                    meta_data["path"] = repo_path
+            except yaml.YAMLError as e:
+                logger.error(f"Error loading YAML configuration: {e}")
+                return {"return": 1, "error": f"Syntax error in {meta_file_path}: {e}"}
 
             r = self.register_repo(repo_path, meta_data, ignore_on_conflict)
             if r['return'] > 0:

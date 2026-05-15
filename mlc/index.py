@@ -346,21 +346,22 @@ class Index:
             if removed_count > 0:
                 logger.debug(
                     f"Removed {removed_count} item(s) from {ft} index")
-
-    def _delete_by_uid(self, folder_type, uid, alias):
+    
+    def _delete_index_entries(self, folder_type, key, value):
         """
-        Delete old index entry using UID (prevents duplicates).
+        Remove index entries matching for the same path or same UID.
         """
-        # logger.debug(f"Deleting and updating index entry for the script {alias} with UID {uid}")
+        # logger.debug(f"Deleting index entries in {folder_type} where {key} == {value}")
         self.indices[folder_type] = [
             item for item in self.indices[folder_type]
-            if item["uid"] != uid
+            if item.get(key) != value
         ]
 
     def _process_config_file(
             self, config_file, folder_type, folder_path, repo):
         """
-        Process a single configuration file (meta.json or meta.yaml) and add its data to the corresponding index.
+        Process a single configuration file (meta.json or meta.yaml) and 
+        add its data to the corresponding index when the configuration file appears to be changed.
 
         Args:
             config_file (str): Path to the configuration file.
@@ -410,8 +411,12 @@ class Index:
                     raise ValueError(
                         f"Meta validation failed for {config_file}. Fix the above error(s) and try again.")
 
-            # Validate and add to indices
-            self._delete_by_uid(folder_type, unique_id, alias)
+            # Remove stale entry for the same meta file path if exists
+            self._delete_index_entries(folder_type, "path", folder_path)
+
+            # Remove index entry with the same UID for other meta file if exists
+            self._delete_index_entries(folder_type, "uid", unique_id)
+
             self.indices[folder_type].append({
                 "uid": unique_id,
                 "tags": tags,
