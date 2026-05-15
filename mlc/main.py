@@ -233,10 +233,6 @@ def mlca():
     mlc_expand_short("apptainer")
 
 
-def mlca():
-    mlc_expand_short("apptainer")
-
-
 def mlcrr():
     mlc_expand_short("remote-run")
 
