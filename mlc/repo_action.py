@@ -426,7 +426,7 @@ class RepoAction(Action):
                             subprocess.run(
                                 ['git', '-C', repo_path, 'reset', '--hard', 'HEAD'], check=True)
                             logger.warning(
-                                "Stash apply reported conflicts after pull. Reverted partial stash apply."
+                                f"Stash apply reported conflicts after pull. Reverted partial stash apply."
                                 f" Please resolve manually with `git -C {repo_path} stash apply`.")
                             return {
                                 "return": 0,
