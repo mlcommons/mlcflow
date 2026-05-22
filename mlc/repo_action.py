@@ -410,25 +410,30 @@ class RepoAction(Action):
                         )
                         stash_created = "No local changes to save" not in stash_res.stdout
                     except subprocess.CalledProcessError as e:
+                        stash_error = (e.stderr or e.stdout or str(e)).strip()
                         return {
                             "return": 1,
-                            "error": f"Force pull failed while stashing local changes in {repo_path}: {e}"
+                            "error": f"Force pull failed while stashing local changes in {repo_path}: {stash_error}"
                         }
 
                     logger.info(
                         "Pulling latest changes...")
                     try:
                         subprocess.run(
-                            ['git', '-C', repo_path, 'pull'], check=True)
+                            ['git', '-C', repo_path, 'pull'],
+                            capture_output=True,
+                            text=True,
+                            check=True)
                     except subprocess.CalledProcessError as e:
+                        pull_error = (e.stderr or e.stdout or str(e)).strip()
                         if stash_created:
                             return {
                                 "return": 1,
-                                "error": f"Force pull failed during git pull for {repo_path}. Local changes remain in stash. Please run `git -C {repo_path} stash apply` after resolving pull issues. Details: {e}"
+                                "error": f"Force pull failed during git pull for {repo_path}. Local changes remain in stash. Please run `git -C {repo_path} stash apply` after resolving pull issues. Details: {pull_error}"
                             }
                         return {
                             "return": 1,
-                            "error": f"Force pull failed during git pull for {repo_path}: {e}"
+                            "error": f"Force pull failed during git pull for {repo_path}: {pull_error}"
                         }
                     logger.info("Repository successfully pulled.")
 
@@ -441,8 +446,14 @@ class RepoAction(Action):
                             logger.info(
                                 "Local changes restored successfully after force pull.")
                         except subprocess.CalledProcessError:
-                            subprocess.run(
-                                ['git', '-C', repo_path, 'reset', '--hard', 'HEAD'], check=True)
+                            try:
+                                subprocess.run(
+                                    ['git', '-C', repo_path, 'reset', '--hard', 'HEAD'], check=True)
+                            except subprocess.CalledProcessError as reset_error:
+                                return {
+                                    "return": 1,
+                                    "error": f"Stash apply conflicted and automatic rollback failed for {repo_path}: {reset_error}"
+                                }
                             logger.warning(
                                 f"Stash apply reported conflicts after pull. Reverted partial stash apply. "
                                 f"Please resolve manually with `git -C {repo_path} stash apply`.")
