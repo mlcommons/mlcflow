@@ -8,7 +8,7 @@ import unittest
 from mlc.action import Action
 
 
-REPO_ROOT = "/home/runner/work/mlcflow/mlcflow"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class MarkTmpCacheCliTest(unittest.TestCase):

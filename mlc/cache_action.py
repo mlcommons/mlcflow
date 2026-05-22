@@ -15,7 +15,8 @@ class CacheAction(Action):
     2. show
     3. list
     4. remove(rm)
-    5. mark-tmp
+    5. prune
+    6. mark-tmp
 
     """
 
@@ -137,7 +138,8 @@ class CacheAction(Action):
             if 'tmp' in tags:
                 continue
 
-            item.meta["tags"] = tags + ['tmp']
+            tags.append('tmp')
+            item.meta["tags"] = tags
             meta_yaml_path = os.path.join(item.path, "meta.yaml")
             meta_json_path = os.path.join(item.path, "meta.json")
 
