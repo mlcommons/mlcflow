@@ -119,8 +119,9 @@ jobs:
               -f body="$COMMENT" \
               -f commit_id="${{ github.event.pull_request.head.sha }}" \
               -f path="$FILE" \
-              -f line="$LINE" \
-              -f side="RIGHT"
+              -F line="$LINE" \
+              -f side="RIGHT" \
+              -f subject_type="line" || true
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
