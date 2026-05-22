@@ -42,9 +42,11 @@ class MarkTmpCacheCliTest(unittest.TestCase):
     def _run_cli(self):
         env = os.environ.copy()
         existing_pythonpath = env.get("PYTHONPATH")
-        env["PYTHONPATH"] = REPO_ROOT if not existing_pythonpath else REPO_ROOT + os.pathsep + existing_pythonpath
+        env["PYTHONPATH"] = REPO_ROOT if not existing_pythonpath else REPO_ROOT + \
+            os.pathsep + existing_pythonpath
         return subprocess.run(
-            [sys.executable, "-m", "mlc.main", "mark-tmp", "cache", "--tags=get,dataset,igbh"],
+            [sys.executable, "-m", "mlc.main", "mark-tmp",
+                "cache", "--tags=get,dataset,igbh"],
             cwd=self.temp_dir.name,
             env=env,
             capture_output=True,
