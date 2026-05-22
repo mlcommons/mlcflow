@@ -37,7 +37,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            if cmd[-3:] == ["status", "--porcelain", "--untracked-files=no"]:
+            if "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
                 return subprocess.CompletedProcess(cmd, 0, stdout=" M tracked.txt\n")
             return subprocess.CompletedProcess(cmd, 0, stdout="")
 
@@ -47,7 +47,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         self.assertEqual(res["return"], 0)
         self.assertIn("warning", res)
-        self.assertFalse(any(cmd[-1] == "pull" for cmd in calls))
+        self.assertFalse(any("pull" in cmd for cmd in calls))
 
     @patch.object(RepoAction, "register_repo", return_value={"return": 0})
     @patch("mlc.repo_action.subprocess.run")
@@ -56,7 +56,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            if cmd[-3:] == ["status", "--porcelain", "--untracked-files=no"]:
+            if "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
                 return subprocess.CompletedProcess(cmd, 0, stdout=" M tracked.txt\n")
             return subprocess.CompletedProcess(cmd, 0, stdout="ok")
 
@@ -66,9 +66,9 @@ class TestRepoPullForce(unittest.TestCase):
 
         self.assertEqual(res["return"], 0)
         self.assertNotIn("warning", res)
-        self.assertTrue(any(cmd[-1] == "pull" for cmd in calls))
-        self.assertTrue(any(cmd[-2:] == ["stash", "apply"] for cmd in calls))
-        self.assertTrue(any(cmd[-2:] == ["stash", "drop"] for cmd in calls))
+        self.assertTrue(any("pull" in cmd for cmd in calls))
+        self.assertTrue(any("stash" in cmd and "apply" in cmd for cmd in calls))
+        self.assertTrue(any("stash" in cmd and "drop" in cmd for cmd in calls))
 
     @patch.object(RepoAction, "register_repo", return_value={"return": 0})
     @patch("mlc.repo_action.subprocess.run")
@@ -77,9 +77,9 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            if cmd[-3:] == ["status", "--porcelain", "--untracked-files=no"]:
+            if "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
                 return subprocess.CompletedProcess(cmd, 0, stdout=" M tracked.txt\n")
-            if cmd[-2:] == ["stash", "apply"]:
+            if "stash" in cmd and "apply" in cmd:
                 raise subprocess.CalledProcessError(1, cmd)
             return subprocess.CompletedProcess(cmd, 0, stdout="ok")
 
@@ -90,8 +90,8 @@ class TestRepoPullForce(unittest.TestCase):
         self.assertEqual(res["return"], 0)
         self.assertIn("warning", res)
         self.assertIn("stash apply had conflicts", res["warning"])
-        self.assertTrue(any(cmd[-3:] == ["reset", "--hard", "HEAD"] for cmd in calls))
-        self.assertFalse(any(cmd[-2:] == ["stash", "drop"] for cmd in calls))
+        self.assertTrue(any("reset" in cmd and "--hard" in cmd and "HEAD" in cmd for cmd in calls))
+        self.assertFalse(any("stash" in cmd and "drop" in cmd for cmd in calls))
 
 
 if __name__ == "__main__":

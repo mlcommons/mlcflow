@@ -400,18 +400,36 @@ class RepoAction(Action):
 
                     logger.warning(
                         "Local changes detected. Running force pull with temporary git stash.")
-                    stash_res = subprocess.run(
-                        ['git', '-C', repo_path, 'stash', 'push', '-m', 'mlc pull repo --force'],
-                        capture_output=True,
-                        text=True,
-                        check=True
-                    )
-                    stash_created = "No local changes to save" not in stash_res.stdout
+                    stash_created = False
+                    try:
+                        stash_res = subprocess.run(
+                            ['git', '-C', repo_path, 'stash', 'push', '-m', 'mlc pull repo --force'],
+                            capture_output=True,
+                            text=True,
+                            check=True
+                        )
+                        stash_created = "No local changes to save" not in stash_res.stdout
+                    except subprocess.CalledProcessError as e:
+                        return {
+                            "return": 1,
+                            "error": f"Force pull failed while stashing local changes in {repo_path}: {e}"
+                        }
 
                     logger.info(
                         "Pulling latest changes...")
-                    subprocess.run(
-                        ['git', '-C', repo_path, 'pull'], check=True)
+                    try:
+                        subprocess.run(
+                            ['git', '-C', repo_path, 'pull'], check=True)
+                    except subprocess.CalledProcessError as e:
+                        if stash_created:
+                            return {
+                                "return": 1,
+                                "error": f"Force pull failed during git pull for {repo_path}. Local changes remain in stash. Please run `git -C {repo_path} stash apply` after resolving pull issues. Details: {e}"
+                            }
+                        return {
+                            "return": 1,
+                            "error": f"Force pull failed during git pull for {repo_path}: {e}"
+                        }
                     logger.info("Repository successfully pulled.")
 
                     if stash_created:
