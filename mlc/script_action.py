@@ -7,6 +7,7 @@ import json
 import inspect
 from .index import Index
 from . import utils
+from .error_codes import get_error_guidance
 from .logger import logger
 
 
@@ -319,6 +320,8 @@ Main Script Meta:""")
 
             if result['return'] > 0:
                 error = result.get('error', "")
+                error_guidance = get_error_guidance(
+                    result.get('error_code', result.get('return')), error)
                 _name_match = re.search(r'name\s*=\s*([^,)]+)', error)
                 _script_name = _name_match.group(1).strip() if _name_match else run_args.get(
                     'tags', run_args.get('details'))
@@ -338,7 +341,9 @@ Main Script Meta:""")
                 raise ScriptExecutionError(
                     f"Script {function_name} execution failed in {module_path}. \nError : {error}",
                     script_name=_script_name, repo_alias=_repo_alias, module_path=module_path,
-                    run_args=run_args, version_info_file=_version_info_file)
+                    run_args=run_args, version_info_file=_version_info_file,
+                    error_code=error_guidance.get('error_code') if error_guidance else None,
+                    error_guidance=error_guidance)
 
             if str(run_args.get("mlc_output")).lower() in [
                     "on", "true", "yes", "1"]:
@@ -602,10 +607,13 @@ Main Script Meta:""")
 
 class ScriptExecutionError(Exception):
     def __init__(self, message, script_name=None, repo_alias=None,
-                 module_path=None, run_args=None, version_info_file=None):
+                 module_path=None, run_args=None, version_info_file=None,
+                 error_code=None, error_guidance=None):
         super().__init__(message)
         self.script_name = script_name
         self.repo_alias = repo_alias
         self.module_path = module_path
         self.run_args = run_args or {}
         self.version_info_file = version_info_file
+        self.error_code = error_code
+        self.error_guidance = error_guidance

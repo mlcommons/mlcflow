@@ -1,0 +1,9 @@
+[2026-05-22 11:33:30,629 main.py:139 ERROR] - Script run execution failed.
+[2026-05-22 11:33:30,629 main.py:182 ERROR] - Failed script: detect,cpu
+[2026-05-22 11:33:30,629 main.py:183 ERROR] - To rerun just the failed part: mlcr detect,cpu
+[2026-05-22 11:33:30,629 main.py:188 ERROR] - Detected error code: 139
+[2026-05-22 11:33:30,629 main.py:192 ERROR] - Likely cause: A native program crashed with a segmentation fault
+[2026-05-22 11:33:30,629 main.py:195 ERROR] - Suggestion: Rerun with verbose logs to identify which native command crashed.
+[2026-05-22 11:33:30,629 main.py:195 ERROR] - Suggestion: Check native dependencies, compiler/runtime compatibility, and input files.
+[2026-05-22 11:33:30,629 main.py:205 ERROR] - Please file an issue at https://github.com/mlcommons/mlperf-automations/issues with the full console log.
+[2026-05-22 11:33:30,629 main.py:209 ERROR] - mlcflow 1.2.2+1e09e60

@@ -1,3 +1,4 @@
+import re
 from enum import Enum, auto
 
 class ErrorCode(Enum):
@@ -75,3 +76,111 @@ def get_code_type(code):
         return "warning"
     else:
         return "unknown"
+
+
+def _normalize_code(code):
+    """Convert a code value to int when possible."""
+    if code is None:
+        return None
+    if isinstance(code, int):
+        return code
+    try:
+        return int(str(code).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def detect_error_code(return_code=None, error_message=""):
+    """Detect the most useful error code from a return value or error text."""
+    normalized_return_code = _normalize_code(return_code)
+    message = error_message or ""
+
+    patterns = [
+        r'(?:error|exit|return)\s+code\s*[:=]?\s*(\d+)',
+        r'\[errno\s+(\d+)\]',
+        r'signal\s+(\d+)',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, message, re.IGNORECASE)
+        if match:
+            detected = _normalize_code(match.group(1))
+            if normalized_return_code in (None, 0, 1) or detected != normalized_return_code:
+                return detected
+
+    return normalized_return_code
+
+
+def get_error_guidance(return_code=None, error_message=""):
+    """Return actionable guidance for known error codes and failure patterns."""
+    error_code = detect_error_code(return_code, error_message)
+    guidance = {
+        "error_code": error_code,
+        "error_message": None,
+        "suggestions": [],
+    }
+
+    if error_code in [e.code for e in ErrorCode]:
+        error_info = get_error_info(error_code)
+        if isinstance(error_info, dict):
+            guidance["error_message"] = error_info["error_message"]
+
+    message = (error_message or "").lower()
+
+    if ("no space left on device" in message or
+            "disk full" in message or
+            "not enough space" in message):
+        guidance["error_message"] = guidance["error_message"] or \
+            "Likely disk space exhaustion while running the script"
+        guidance["suggestions"] = [
+            "Free disk space in the work/cache directories and retry the command.",
+            "Remove old artifacts or caches if they are no longer needed.",
+        ]
+    elif ("segmentation fault" in message or error_code in [139, -11, 11]):
+        guidance["error_message"] = guidance["error_message"] or \
+            "A native program crashed with a segmentation fault"
+        guidance["suggestions"] = [
+            "Rerun with verbose logs to identify which native command crashed.",
+            "Check native dependencies, compiler/runtime compatibility, and input files.",
+        ]
+    elif ("network" in message or
+          "connection" in message or
+          "timed out" in message or
+          "temporary failure in name resolution" in message or
+          "could not resolve host" in message or
+          error_code in [6, 7, 28, 35, 56, 60]):
+        guidance["error_message"] = guidance["error_message"] or \
+            "Likely network or download failure while running the script"
+        guidance["suggestions"] = [
+            "Check internet connectivity, proxy/firewall settings, and remote endpoint availability.",
+            "Retry the command after verifying the network connection.",
+        ]
+    elif error_code == 126:
+        guidance["error_message"] = guidance["error_message"] or \
+            "Command found but it could not be executed"
+        guidance["suggestions"] = [
+            "Check file permissions and whether the target command is executable.",
+        ]
+    elif error_code == 127:
+        guidance["error_message"] = guidance["error_message"] or \
+            "Command not found during script execution"
+        guidance["suggestions"] = [
+            "Verify that the required tool is installed and available on PATH.",
+        ]
+    elif error_code == 137:
+        guidance["error_message"] = guidance["error_message"] or \
+            "Process was terminated, often due to out-of-memory or a kill signal"
+        guidance["suggestions"] = [
+            "Check system memory limits and retry with fewer parallel jobs if possible.",
+        ]
+    elif error_code == 130:
+        guidance["error_message"] = guidance["error_message"] or \
+            "The command was interrupted by the user or the environment"
+        guidance["suggestions"] = [
+            "Retry the command if the interruption was unexpected.",
+        ]
+
+    if not guidance["error_message"] and not guidance["suggestions"]:
+        return None
+
+    return guidance
