@@ -469,11 +469,16 @@ class RepoAction(Action):
                                 apply_error.stderr or apply_error.stdout or str(apply_error)).strip()
                             try:
                                 subprocess.run(
-                                    ['git', '-C', repo_path, 'reset', '--hard', 'HEAD'], check=True)
+                                    ['git', '-C', repo_path, 'reset', '--hard', 'HEAD'],
+                                    capture_output=True,
+                                    text=True,
+                                    check=True)
                             except subprocess.CalledProcessError as reset_exception:
+                                reset_error_msg = (
+                                    reset_exception.stderr or reset_exception.stdout or str(reset_exception)).strip()
                                 return {
                                     "return": 1,
-                                    "error": f"Stash apply conflicted and automatic rollback failed for {repo_path}: {reset_exception}. Original stash apply error: {apply_error_msg}"
+                                    "error": f"Stash apply conflicted and automatic rollback failed for {repo_path}: {reset_error_msg}. Original stash apply error: {apply_error_msg}"
                                 }
                             logger.warning(
                                 f"Stash apply reported conflicts after pull. Reverted partial stash apply. "
