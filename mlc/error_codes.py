@@ -17,6 +17,9 @@ class ErrorCode(Enum):
         self.code = code
         self.description = description
 
+
+ERROR_CODES = {error.code for error in ErrorCode}
+
 class WarningCode(Enum):
     """Enum class for warning codes in MLCFlow"""
     # General warnings (1000-1007)
@@ -105,6 +108,8 @@ def detect_error_code(return_code=None, error_message=""):
         match = re.search(pattern, message, re.IGNORECASE)
         if match:
             detected = _normalize_code(match.group(1))
+            # Prefer the code extracted from the error text when the outer
+            # result only carries a generic status such as 1.
             if normalized_return_code in (None, 0, 1) or detected != normalized_return_code:
                 return detected
 
@@ -120,7 +125,7 @@ def get_error_guidance(return_code=None, error_message=""):
         "suggestions": [],
     }
 
-    if error_code in [e.code for e in ErrorCode]:
+    if error_code in ERROR_CODES:
         error_info = get_error_info(error_code)
         if isinstance(error_info, dict):
             guidance["error_message"] = error_info["error_message"]
