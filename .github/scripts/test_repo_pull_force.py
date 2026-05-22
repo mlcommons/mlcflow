@@ -37,7 +37,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            if "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
                 return subprocess.CompletedProcess(cmd, 0, stdout=" M tracked.txt\n")
             return subprocess.CompletedProcess(cmd, 0, stdout="")
 
@@ -53,11 +53,18 @@ class TestRepoPullForce(unittest.TestCase):
     @patch("mlc.repo_action.subprocess.run")
     def test_pull_force_stash_apply_and_drop(self, mock_run, _mock_register):
         calls = []
+        stash_list_call_count = 0
 
         def fake_run(cmd, **kwargs):
+            nonlocal stash_list_call_count
             calls.append(cmd)
-            if "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
                 return subprocess.CompletedProcess(cmd, 0, stdout=" M tracked.txt\n")
+            if cmd[0] == "git" and "stash" in cmd and "list" in cmd:
+                stash_list_call_count += 1
+                if stash_list_call_count == 1:
+                    return subprocess.CompletedProcess(cmd, 0, stdout="")
+                return subprocess.CompletedProcess(cmd, 0, stdout="stash@{0}: On dev: mlc pull repo --force\n")
             return subprocess.CompletedProcess(cmd, 0, stdout="ok")
 
         mock_run.side_effect = fake_run
@@ -74,11 +81,18 @@ class TestRepoPullForce(unittest.TestCase):
     @patch("mlc.repo_action.subprocess.run")
     def test_pull_force_conflict_reverts_partial_apply(self, mock_run, _mock_register):
         calls = []
+        stash_list_call_count = 0
 
         def fake_run(cmd, **kwargs):
+            nonlocal stash_list_call_count
             calls.append(cmd)
-            if "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
                 return subprocess.CompletedProcess(cmd, 0, stdout=" M tracked.txt\n")
+            if cmd[0] == "git" and "stash" in cmd and "list" in cmd:
+                stash_list_call_count += 1
+                if stash_list_call_count == 1:
+                    return subprocess.CompletedProcess(cmd, 0, stdout="")
+                return subprocess.CompletedProcess(cmd, 0, stdout="stash@{0}: On dev: mlc pull repo --force\n")
             if "stash" in cmd and "apply" in cmd:
                 raise subprocess.CalledProcessError(1, cmd)
             return subprocess.CompletedProcess(cmd, 0, stdout="ok")
