@@ -426,8 +426,8 @@ class RepoAction(Action):
                             subprocess.run(
                                 ['git', '-C', repo_path, 'reset', '--hard', 'HEAD'], check=True)
                             logger.warning(
-                                f"Stash apply reported conflicts after pull. Reverted partial stash apply."
-                                f" Please resolve manually with `git -C {repo_path} stash apply`.")
+                                f"Stash apply reported conflicts after pull. Reverted partial stash apply. "
+                                f"Please resolve manually with `git -C {repo_path} stash apply`.")
                             return {
                                 "return": 0,
                                 "warning": f"Force pull succeeded for {repo_path}, but stash apply had conflicts. Partial apply was reverted. Please apply the stash manually."
@@ -546,12 +546,21 @@ class RepoAction(Action):
             pat = run_args.get('pat')
             ssh = run_args.get('ssh')
             force = run_args.get('force')
+            ignore_on_conflict = run_args.get('ignore_on_conflict')
 
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
                 return {
                     "return": 1, "error": "Only one among the three flags(branch, checkout and tag) could be specified"}
 
-            res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh, force=force)
+            res = self.pull_repo(
+                repo_url,
+                branch,
+                checkout,
+                tag,
+                pat,
+                ssh,
+                ignore_on_conflict=ignore_on_conflict,
+                force=force)
             if res['return'] > 0:
                 return res
 
