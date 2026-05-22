@@ -409,7 +409,8 @@ class RepoAction(Action):
                             check=True
                         )
                         stash_res = subprocess.run(
-                            ['git', '-C', repo_path, 'stash', 'push', '-m', 'mlc pull repo --force'],
+                            ['git', '-C', repo_path, 'stash', 'push',
+                                '-m', 'mlc pull repo --force'],
                             capture_output=True,
                             text=True,
                             check=True
@@ -469,7 +470,8 @@ class RepoAction(Action):
                                 apply_error.stderr or apply_error.stdout or str(apply_error)).strip()
                             try:
                                 subprocess.run(
-                                    ['git', '-C', repo_path, 'reset', '--hard', 'HEAD'],
+                                    ['git', '-C', repo_path,
+                                        'reset', '--hard', 'HEAD'],
                                     capture_output=True,
                                     text=True,
                                     check=True)
