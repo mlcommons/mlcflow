@@ -15,6 +15,7 @@ class CacheAction(Action):
     2. show
     3. list
     4. remove(rm)
+    5. mark-tmp
 
     """
 
@@ -100,6 +101,64 @@ class CacheAction(Action):
         i['target_name'] = "cache"
         #logger.debug(f"Removing cache with input: {i}")
         return self.parent.rm(i)
+
+    def mark_tmp(self, i):
+        """
+    ####################################################################################################################
+    Target: Cache
+    Action: Mark Tmp (mark-tmp)
+    ####################################################################################################################
+
+    The `mark-tmp` action marks one or more cache entries as `tmp` without removing the cache contents.
+
+    Syntax:
+
+    mlc mark-tmp cache --tags=<list_of_tags_used_to_run_the_particular_script>
+
+    Example Command:
+
+    mlc mark-tmp cache --tags=get,dataset,igbh
+
+        """
+        i['target_name'] = "cache"
+        res = self.search(i)
+        if res['return'] > 0:
+            return res
+
+        if len(res['list']) == 0:
+            logger.warning(f"No cache found for {i}")
+            return {'return': 0, "warnings": [
+                {"code": "EMPTY_TARGET", "description": f"No cache found for {i}"}]}
+
+        updated_count = 0
+
+        for item in res['list']:
+            tags = item.meta.get("tags", [])
+            if 'tmp' in tags:
+                continue
+
+            item.meta["tags"] = tags + ['tmp']
+            meta_yaml_path = os.path.join(item.path, "meta.yaml")
+            meta_json_path = os.path.join(item.path, "meta.json")
+
+            if os.path.exists(meta_yaml_path):
+                save_result = utils.save_yaml(meta_yaml_path, meta=item.meta)
+            else:
+                save_result = utils.save_json(meta_json_path, meta=item.meta)
+
+            if save_result['return'] > 0:
+                return save_result
+
+            self.get_index().update(item.meta, "cache", item.path, item.repo)
+            updated_count += 1
+
+        logger.info(f"Marked {updated_count} cache item(s) as tmp")
+
+        return {
+            'return': 0,
+            'message': f"Marked {updated_count} cache item(s) as tmp",
+            'list': res['list']
+        }
 
     def show(self, run_args):
         """

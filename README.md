@@ -58,7 +58,7 @@ Each target has its own set of specific actions to tailor automation workflows a
 | Target | Action          |
 |--------|-----------------|
 | script    | run, find/search, rm, mv, cp, add, test, docker-run, show, experiment, doc   |
-| cache    | find/search, rm, show  |
+| cache    | find/search, rm, show, list, prune, mark-tmp  |
 | repo    | pull, search, rm, list, find/search , add        |
 
 
@@ -155,4 +155,3 @@ classDiagram
     Item o-- Repo
     Automation o-- Action
 ```
-
