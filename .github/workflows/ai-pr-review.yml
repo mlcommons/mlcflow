@@ -114,14 +114,18 @@ jobs:
             LINE=$(echo $c | jq -r '.line')
             COMMENT=$(echo $c | jq -r '.comment')
 
+            if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
+              echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
+              continue
+            fi
+
             gh api \
               repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
               -f body="$COMMENT" \
               -f commit_id="${{ github.event.pull_request.head.sha }}" \
               -f path="$FILE" \
               -F line="$LINE" \
-              -f side="RIGHT" \
-              -f subject_type="line" || true
+              -f side="RIGHT" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
