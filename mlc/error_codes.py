@@ -19,6 +19,11 @@ class ErrorCode(Enum):
 
 
 ERROR_CODES = {error.code for error in ErrorCode}
+ERROR_CODE_PATTERNS = [
+    re.compile(r'(?:error|exit|return)\s+code\s*[:=]?\s*(\d+)', re.IGNORECASE),
+    re.compile(r'\[errno\s+(\d+)\]', re.IGNORECASE),
+    re.compile(r'signal\s+(\d+)', re.IGNORECASE),
+]
 
 class WarningCode(Enum):
     """Enum class for warning codes in MLCFlow"""
@@ -98,14 +103,8 @@ def detect_error_code(return_code=None, error_message=""):
     normalized_return_code = _normalize_code(return_code)
     message = error_message or ""
 
-    patterns = [
-        r'(?:error|exit|return)\s+code\s*[:=]?\s*(\d+)',
-        r'\[errno\s+(\d+)\]',
-        r'signal\s+(\d+)',
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, message, re.IGNORECASE)
+    for pattern in ERROR_CODE_PATTERNS:
+        match = pattern.search(message)
         if match:
             detected = _normalize_code(match.group(1))
             # Prefer the code extracted from the error text when the outer
