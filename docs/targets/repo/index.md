@@ -103,6 +103,7 @@ mlc pull repo mlcommons@mlperf-automations
 - The `--branch` flag can be used if a user needs to check out a specific branch after cloning. The user must provide the branch name. This flag will only work when cloning a new repository.
 - The `--tag` flag can be used to check out a particular release tag.
 - `--pat=<access_token>` or `--ssh` flag can be used to clone a private repository.
+- The `--force` flag can be used when local tracked changes exist. It stashes local changes before pull, then applies the stash after pull. If conflicts occur while applying stash, MLCFlow reverts the partial stash apply and asks you to apply the stash manually.
 
 Examples of `pull` action for `repo` target could be found inside the GitHub action workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
 
@@ -168,4 +169,3 @@ mlc rm repo mlcommons@mlperf-automations
 </details>
 
 An example of the `rm` action for the `repo` target can be found in the GitHub Actions workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).
-

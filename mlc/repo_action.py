@@ -323,7 +323,7 @@ class RepoAction(Action):
                 url).replace(".git", "")}
 
     def pull_repo(self, repo_url, branch=None, checkout=None, tag=None,
-                  pat=None, ssh=None, ignore_on_conflict=False, repo_path=None):
+                  pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False):
 
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path  # either the value will be from 'MLC_REPOS'
@@ -391,11 +391,47 @@ class RepoAction(Action):
                     status_command, capture_output=True, text=True)
 
                 if local_changes.stdout.strip():
+                    if not force:
+                        logger.warning(
+                            "There are local changes in the repository. Please commit or stash them before checking out.")
+                        print(local_changes.stdout.strip())
+                        return {
+                            "return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
+
                     logger.warning(
-                        "There are local changes in the repository. Please commit or stash them before checking out.")
-                    print(local_changes.stdout.strip())
-                    return {
-                        "return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
+                        "Local changes detected. Running force pull with temporary git stash.")
+                    stash_res = subprocess.run(
+                        ['git', '-C', repo_path, 'stash', 'push', '-m', 'mlc pull repo --force'],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    stash_created = "No local changes to save" not in stash_res.stdout
+
+                    logger.info(
+                        "Pulling latest changes...")
+                    subprocess.run(
+                        ['git', '-C', repo_path, 'pull'], check=True)
+                    logger.info("Repository successfully pulled.")
+
+                    if stash_created:
+                        try:
+                            subprocess.run(
+                                ['git', '-C', repo_path, 'stash', 'apply'], check=True)
+                            subprocess.run(
+                                ['git', '-C', repo_path, 'stash', 'drop'], check=True)
+                            logger.info(
+                                "Local changes restored successfully after force pull.")
+                        except subprocess.CalledProcessError:
+                            subprocess.run(
+                                ['git', '-C', repo_path, 'reset', '--hard', 'HEAD'], check=True)
+                            logger.warning(
+                                "Stash apply reported conflicts after pull. Reverted partial stash apply."
+                                f" Please resolve manually with `git -C {repo_path} stash apply`.")
+                            return {
+                                "return": 0,
+                                "warning": f"Force pull succeeded for {repo_path}, but stash apply had conflicts. Partial apply was reverted. Please apply the stash manually."
+                            }
                 else:
                     logger.info(
                         "No local changes detected. Pulling latest changes...")
@@ -468,6 +504,7 @@ class RepoAction(Action):
     - `--branch <branch_name>`: Checks out a specific branch **while cloning** a new repository.
     - `--tag <release_tag>`: Checks out a particular release tag.
     - `--pat <access_token>` or `--ssh`: Clones a private repository using a personal access token or SSH.
+    - `--force`: For existing repositories with local tracked changes, stashes changes before pull and reapplies them after pull.
 
     Example Output:
 
@@ -498,7 +535,7 @@ class RepoAction(Action):
                         repo_object.path, os.W_OK):
                     repo_folder_name = os.path.basename(repo_object.path)
                     res = self.pull_repo(
-                        repo_folder_name, repo_path=repo_object.path)
+                        repo_folder_name, repo_path=repo_object.path, force=run_args.get('force'))
                     if res['return'] > 0:
                         return res
         else:
@@ -508,12 +545,13 @@ class RepoAction(Action):
 
             pat = run_args.get('pat')
             ssh = run_args.get('ssh')
+            force = run_args.get('force')
 
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
                 return {
                     "return": 1, "error": "Only one among the three flags(branch, checkout and tag) could be specified"}
 
-            res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh)
+            res = self.pull_repo(repo_url, branch, checkout, tag, pat, ssh, force=force)
             if res['return'] > 0:
                 return res
 
