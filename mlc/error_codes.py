@@ -110,7 +110,7 @@ def detect_error_code(return_code=None, error_message=""):
             detected = _normalize_code(match.group(1))
             # Prefer the code extracted from the error text when the outer
             # result only carries a generic status such as 1.
-            if normalized_return_code in (None, 0, 1) or detected != normalized_return_code:
+            if normalized_return_code in (None, 0, 1):
                 return detected
 
     return normalized_return_code
@@ -141,6 +141,8 @@ def get_error_guidance(return_code=None, error_message=""):
             "Free disk space in the work/cache directories and retry the command.",
             "Remove old artifacts or caches if they are no longer needed.",
         ]
+    # 139 = 128 + SIGSEGV(11), while some tools report the raw signal number
+    # 11 or its negative form -11.
     elif ("segmentation fault" in message or error_code in [139, -11, 11]):
         guidance["error_message"] = guidance["error_message"] or \
             "A native program crashed with a segmentation fault"
@@ -148,6 +150,9 @@ def get_error_guidance(return_code=None, error_message=""):
             "Rerun with verbose logs to identify which native command crashed.",
             "Check native dependencies, compiler/runtime compatibility, and input files.",
         ]
+    # Common downloader/network failure codes used by curl and similar tools:
+    # 6/7 resolve/connect failures, 28 timeout, 35 TLS/connect issue,
+    # 56 connection reset/read failure, 60 certificate validation failure.
     elif ("network" in message or
           "connection" in message or
           "timed out" in message or
