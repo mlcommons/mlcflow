@@ -377,24 +377,36 @@ Main Script Meta:""")
     Flags Available:
 
     1. --docker_dt or --docker_detached:
-        Runs the specified script inside a Docker container in detached mode (e.g., `mlc docker run --tags=detect,os --docker_dt).
+        Runs the specified script inside a Docker container in detached mode.
         By default, the Docker container is launched in interactive mode.
     2. --docker_cache:
-        Disabling this flag forces Docker to build all layers from scratch, ignoring cached layers. (e.g., mlc docker run --tags=detect,os --docker_cache=no)
-        By default, the value is set to true/yes.
+        Disabling this flag forces Docker to build all layers from scratch, ignoring cached layers (default: yes)
     3. --docker_rebuild:
-        Enables rebuilding the Docker container even if an existing container with the same tag is present. (e.g., mlc docker run --tags=detect,os --docker_rebuild)
-        By default, the value is set to False.
-    4. --dockerfile_recreate:
-        Forces recreation of the **Dockerfile** during execution. (e.g., mlc docker run --tags=detect,os --docker_rebuild --dockerfile_recreate)
-        By default, the value is set to False.
+        Rebuilds the Docker image even if one with the same tag already exists (default: False)
+    4. --docker_noregenerate:
+        Skip regeneration of the Dockerfile during execution (default: False)
+    5. --docker_image_repo:
+        Custom Docker image repository name
+    6. --docker_verbose:
+        Enable verbose output during Docker operations
+    7. --docker_silent:
+        Suppress output during Docker operations
+    8. --docker_host_mlc_repos:
+        Mount host MLC repos inside the container
+    9. --docker_upload:
+        Push the built Docker image after execution
+    10. --docker_run_cmd_prefix:
+        Prefix to prepend to the run command inside the container
 
     Example Command:
 
     mlc docker script --tags=detect,os -j
+    mlcd detect,os -j
 
         """
         return self.call_script_module_function("docker", run_args)
+
+    docker.__doc__ = docker_run.__doc__
 
     def remote_run(self, run_args):
         """
@@ -409,13 +421,32 @@ Main Script Meta:""")
     Flags Available:
 
     1. --remote_host:
-        IP or hostnanme for the remote machine
+        IP or hostname for the remote machine (default: localhost)
     2. --remote_port:
-        ssh port for the remote machineIP or hostnanme for the remote machine
+        SSH port for the remote machine (default: 22)
+    3. --remote_user:
+        Username for SSH login on the remote machine
+    4. --remote_password:
+        Password for SSH authentication
+    5. --remote_ssh_key_file:
+        Path to the SSH private key file for authentication
+    6. --remote_skip_host_verify:
+        Skip SSH host key verification
+    7. --remote_python_venv:
+        Name of the Python virtual environment on the remote machine (default: mlcflow)
+    8. --remote_pull_mlc_repos:
+        Pull MLC repos on the remote machine before running
+    9. --remote_copy_directory:
+        Remote directory to copy files to (default: mlc-remote-artifacts)
+    10. --remote_pre_run_cmds:
+        Commands to run on the remote machine before the main script
+    11. --remote_client_refresh:
+        Refresh the SSH client connection
 
     Example Command:
 
     mlc remote-run script --tags=detect,os -j
+    mlcrr detect,os -j
 
         """
         return self.call_script_module_function("remote_run", run_args)
@@ -539,12 +570,23 @@ Main Script Meta:""")
     Action: Experiment
     ####################################################################################################################
 
-    The `experiment` action currently does the function same as of run script, proper workflow will be added in future.
-    experiment-specific functionality.
+    The `experiment` action automates exploration runs of MLC scripts.
+
+    Flags Available:
+
+    1. --exp_tags:
+        Comma-separated extra tags for the experiment run
+    2. --exp_skip_state_save:
+        Skip saving the system state during the experiment (default: False)
+    3. --exp.<key>=<value>:
+        Pass experiment-specific parameters using the `exp.` prefix (e.g., --exp.batch_size=32)
+
+    In addition, all flags supported by the `run` action are also available.
 
     Example Command:
 
     mlc experiment script --tags=detect,os -j
+    mlce detect,os -j
 
         """
         return self.call_script_module_function("experiment", run_args)
@@ -561,9 +603,27 @@ Main Script Meta:""")
     Flags Available:
 
     1. --remote_host:
-        IP or hostname for the remote machine
+        IP or hostname for the remote machine (default: localhost)
     2. --remote_port:
-        ssh port for the remote machine
+        SSH port for the remote machine (default: 22)
+    3. --remote_user:
+        Username for SSH login on the remote machine
+    4. --remote_password:
+        Password for SSH authentication
+    5. --remote_ssh_key_file:
+        Path to the SSH private key file for authentication
+    6. --remote_skip_host_verify:
+        Skip SSH host key verification
+    7. --remote_python_venv:
+        Name of the Python virtual environment on the remote machine (default: mlcflow)
+    8. --remote_pull_mlc_repos:
+        Pull MLC repos on the remote machine before running
+    9. --remote_copy_directory:
+        Remote directory to copy files to (default: mlc-remote-artifacts)
+    10. --remote_pre_run_cmds:
+        Commands to run on the remote machine before the main script
+    11. --remote_client_refresh:
+        Refresh the SSH client connection
 
     Example Command:
 
@@ -586,9 +646,27 @@ Main Script Meta:""")
     Flags Available:
 
     1. --remote_host:
-        IP or hostname for the remote machine
+        IP or hostname for the remote machine (default: localhost)
     2. --remote_port:
-        ssh port for the remote machine
+        SSH port for the remote machine (default: 22)
+    3. --remote_user:
+        Username for SSH login on the remote machine
+    4. --remote_password:
+        Password for SSH authentication
+    5. --remote_ssh_key_file:
+        Path to the SSH private key file for authentication
+    6. --remote_skip_host_verify:
+        Skip SSH host key verification
+    7. --remote_python_venv:
+        Name of the Python virtual environment on the remote machine (default: mlcflow)
+    8. --remote_pull_mlc_repos:
+        Pull MLC repos on the remote machine before running
+    9. --remote_copy_directory:
+        Remote directory to copy files to (default: mlc-remote-artifacts)
+    10. --remote_pre_run_cmds:
+        Commands to run on the remote machine before the main script
+    11. --remote_client_refresh:
+        Refresh the SSH client connection
 
     Example Command:
 

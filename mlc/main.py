@@ -348,7 +348,7 @@ def build_parser(pre_args):
 
     # General commands
     for action in ['run', 'pull', 'test', 'add', 'show', 'list',
-                   'find', 'search', 'rm', 'cp', 'mv', 'help', 'prune']:
+                   'find', 'search', 'rm', 'cp', 'mv', 'help', 'prune', 'mark-tmp']:
         p = subparsers.add_parser(action, add_help=False)
         p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
         p.add_argument(
@@ -495,7 +495,7 @@ def main():
     | Target  | Actions                                                   |
     |---------|-----------------------------------------------------------|
     | script  | run, find/search, rm, mv, cp, add, test, docker-run, show |
-    | cache   | find/search, rm, show                                     |
+    | cache   | find/search, rm, show, list, prune, mark-tmp              |
     | repo    | pull, search, rm, list, find/search                       |
 
     Example:
@@ -528,6 +528,8 @@ def main():
 
     pre_parser = build_pre_parser()
     pre_args, remaining_args = pre_parser.parse_known_args()
+    if pre_args.action:
+        pre_args.action = pre_args.action.replace("-", "_")
 
     parser = build_parser(pre_args)
     # Force full parsing for reindex command even without target, or if there
@@ -570,11 +572,13 @@ def main():
                     help_text += method.__doc__
         elif pre_args.action and pre_args.target:
             actions = get_action(pre_args.target, default_parent)
+            action_name = pre_args.action.replace("-", "_")
             try:
-                method = getattr(actions, pre_args.action)
+                method = getattr(actions, action_name)
                 help_text += actions.__doc__
-                help_text += method.__doc__
-            except BaseException:
+                if method.__doc__:
+                    help_text += method.__doc__
+            except AttributeError:
                 logger.error(
                     f"Error: '{pre_args.action}' is not supported for {pre_args.target}.")
         if help_text != "":
