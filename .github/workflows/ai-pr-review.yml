@@ -108,8 +108,9 @@ jobs:
 
       - name: Post inline review comments
         if: env.EMPTY_DIFF != 'true'
+        continue-on-error: true
         run: |
-          jq -c '.comments[]' ai_output.json | while read c; do
+          jq -c '.comments[]?' ai_output.json | while read c; do
             FILE=$(echo $c | jq -r '.file')
             LINE=$(echo $c | jq -r '.line')
             COMMENT=$(echo $c | jq -r '.comment')
