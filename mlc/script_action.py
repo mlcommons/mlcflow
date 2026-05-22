@@ -342,7 +342,8 @@ Main Script Meta:""")
                     f"Script {function_name} execution failed in {module_path}. \nError : {error}",
                     script_name=_script_name, repo_alias=_repo_alias, module_path=module_path,
                     run_args=run_args, version_info_file=_version_info_file,
-                    error_code=error_guidance.get('error_code') if error_guidance else None,
+                    error_code=error_guidance.get(
+                        'error_code') if error_guidance else None,
                     error_guidance=error_guidance)
 
             if str(run_args.get("mlc_output")).lower() in [
