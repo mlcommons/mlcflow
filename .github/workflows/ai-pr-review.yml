@@ -125,7 +125,8 @@ jobs:
               -f commit_id="${{ github.event.pull_request.head.sha }}" \
               -f path="$FILE" \
               -F line="$LINE" \
-              -f side="RIGHT" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
+              -f side="RIGHT" \
+              -f subject_type="line" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
