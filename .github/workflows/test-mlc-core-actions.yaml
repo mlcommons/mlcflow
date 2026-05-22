@@ -99,6 +99,10 @@ jobs:
           exit 1
         fi
         mlc pull repo
+
+    - name: Test 3b - pull repo --force handling
+      run: |
+        python .github/scripts/test_repo_pull_force.py
     
     - name: Test 4 - list repo - List the existing repositories
       run: |
