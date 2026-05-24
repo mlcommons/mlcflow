@@ -10,16 +10,16 @@ from . import utils
 from .logger import logger
 
 _SCRIPT_EXIT_CODE_HINTS: dict[int, str] = {
-    1:"General error. Review the script output above for details.",
-    2:"Shell misuse or invalid argument passed to the script.",
-    13:"Permission denied. Check file or directory permissions.",
-    28:"No space left on device. Free up disk space and retry.",
-    126:"Command cannot execute. Check execute permissions on the script.",
-    127:"Command not found. Ensure all required dependencies are installed and on PATH.",
-    130:"Script interrupted by user (Ctrl+C / SIGINT).",
-    137:"Process killed (SIGKILL). Possible out-of-memory condition.",
-    139:"Segmentation fault in native run. Check your binary or native library.",
-    143:"Script terminated externally (SIGTERM).",
+    1: "General error. Review the script output above for details.",
+    2: "Shell misuse or invalid argument passed to the script.",
+    13: "Permission denied. Check file or directory permissions.",
+    28: "No space left on device. Free up disk space and retry.",
+    126: "Command cannot execute. Check execute permissions on the script.",
+    127: "Command not found. Ensure all required dependencies are installed and on PATH.",
+    130: "Script interrupted by user (Ctrl+C / SIGINT).",
+    137: "Process killed (SIGKILL). Possible out-of-memory condition.",
+    139: "Segmentation fault in native run. Check your binary or native library.",
+    143: "Script terminated externally (SIGTERM).",
 }
 
 
@@ -39,6 +39,8 @@ def _get_exit_code_hint(return_code: int) -> str:
         f"Script exited with code {return_code}. "
         "See the output above for more details.",
     )
+
+
 class ScriptAction(Action):
     """
     ####################################################################################################################
@@ -341,13 +343,14 @@ Main Script Meta:""")
                 _repo_alias = _repo_match.group(1) if _repo_match else None
                 _script_name = run_args.get('tags', run_args.get('details'))
                 raise ScriptExecutionError(
-                                f"Script {function_name} execution failed in {module_path}. \nError : {error}",
-                                script_name=_script_name,
-                                repo_alias=_repo_alias,
-                                module_path=module_path,
-                                run_args=run_args,
-                                version_info_file=_version_info_file,
-                                return_code=result.get("return", -1), )
+                    f"Script {function_name} execution failed in {
+                        module_path}. \nError : {error}",
+                    script_name=_script_name,
+                    repo_alias=_repo_alias,
+                    module_path=module_path,
+                    run_args=run_args,
+                    version_info_file=_version_info_file,
+                    return_code=result.get("return", -1), )
 
             if result['return'] > 0:
                 error = result.get('error', "")
@@ -368,7 +371,8 @@ Main Script Meta:""")
                     except Exception:
                         _version_info_file = None
                 raise ScriptExecutionError(
-                    f"Script {function_name} execution failed in {module_path}. \nError : {error}",
+                    f"Script {function_name} execution failed in {
+                        module_path}. \nError : {error}",
                     script_name=_script_name, repo_alias=_repo_alias, module_path=module_path,
                     run_args=run_args, version_info_file=_version_info_file)
 
@@ -719,14 +723,15 @@ class ScriptExecutionError(Exception):
         module_path=None,
         run_args=None,
         version_info_file=None,
-        return_code: int = -1, 
+        return_code: int = -1,
     ):
         hint = _get_exit_code_hint(return_code) if return_code != -1 else ""
-        full_message = f"{message}\n[Exit code {return_code}] {hint}" if hint else message
+        full_message = f"{message}\n[Exit code {return_code}] {
+            hint}" if hint else message
         super().__init__(full_message)
         self.script_name = script_name
         self.repo_alias = repo_alias
         self.module_path = module_path
         self.run_args = run_args or {}
         self.version_info_file = version_info_file
-        self.return_code = return_code 
+        self.return_code = return_code
