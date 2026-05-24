@@ -1,0 +1,49 @@
+name: Test error code hints
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  test-error-code-hints:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install mlcflow
+        run: pip install -e .
+
+      - name: Test exit code hint helper
+        run: |
+          python -c "
+          from mlc.script_action import _get_exit_code_hint, ScriptExecutionError
+
+          # Known codes return specific hints
+          assert 'Segmentation fault' in _get_exit_code_hint(139)
+          assert 'disk space' in _get_exit_code_hint(28).lower()
+          assert 'Network error' in _get_exit_code_hint(6)
+          assert 'Network error' in _get_exit_code_hint(7)
+          assert 'PATH' in _get_exit_code_hint(127)
+
+          # Unknown code returns generic fallback with the code number
+          hint = _get_exit_code_hint(999)
+          assert '999' in hint
+
+          # ScriptExecutionError embeds hint in message
+          err = ScriptExecutionError('test failed', return_code=139)
+          assert 'Segmentation fault' in str(err)
+          assert err.return_code == 139
+
+          # return_code=-1 means no hint appended
+          err2 = ScriptExecutionError('test failed')
+          assert str(err2) == 'test failed'
+
+          print('All assertions passed.')
+          "
