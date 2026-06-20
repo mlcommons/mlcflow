@@ -33,7 +33,8 @@ class ActionInvalidMetaSearchTest(unittest.TestCase):
         a.parent = None
         return a
 
-    def _seed_stale_index_entry(self, action, folder_name, uid="fake-uid-000", tags=None):
+    def _seed_stale_index_entry(
+            self, action, folder_name, uid="fake-uid-000", tags=None):
         """
         Bypass the filesystem scanner by directly injecting a stale cache index
         entry that points to a directory with no meta.json.  This replicates the
@@ -57,7 +58,6 @@ class ActionInvalidMetaSearchTest(unittest.TestCase):
         }
         action.get_index().indices["cache"] = [entry]
         return stale_dir
-
 
     def test_search_fetch_all_with_unknown_target_returns_empty_list(self):
         action = self._new_action()
@@ -98,7 +98,8 @@ class ActionInvalidMetaSearchTest(unittest.TestCase):
         with open(os.path.join(add_res["path"], "meta.json"), "w") as f:
             json.dump([], f)
 
-        res = action.search({"target_name": "cache", "details": "bad-meta-alias"})
+        res = action.search(
+            {"target_name": "cache", "details": "bad-meta-alias"})
 
         self.assertEqual(res["return"], 0)
         self.assertEqual(len(res["list"]), 0)
@@ -113,17 +114,17 @@ class ActionInvalidMetaSearchTest(unittest.TestCase):
             action, "bad-whisper-cache", uid="not-a-real-uid", tags=["x", "y"]
         )
 
-        res = action.search({"target_name": "cache", "details": "bad-whisper-cache"})
+        res = action.search(
+            {"target_name": "cache", "details": "bad-whisper-cache"})
 
         self.assertEqual(res["return"], 0)
         self.assertEqual(len(res["list"]), 0)
-        
 
     def test_search_meta_validation_prevents_corrupt_items_in_alias_path(self):
         """
         Regression test for the Whisper inference stale-folder bug.
         Regression test for the Whisper dataset stale-folder bug.
-        Simulates a crashed/incomplete download where the index entry persists but meta.json is missing, 
+        Simulates a crashed/incomplete download where the index entry persists but meta.json is missing,
         ensuring the search guard safely skips it.
         """
         action = self._new_action()
@@ -132,7 +133,8 @@ class ActionInvalidMetaSearchTest(unittest.TestCase):
             action, "whisper-dataset", uid="fake-whisper-uid-123", tags=["x", "y"]
         )
 
-        res = action.search({"target_name": "cache", "details": "whisper-dataset"})
+        res = action.search(
+            {"target_name": "cache", "details": "whisper-dataset"})
 
         self.assertEqual(res["return"], 0)
         self.assertEqual(
