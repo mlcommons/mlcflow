@@ -1,3 +1,6 @@
+from mlc.script_action import ScriptExecutionError
+from mlc.main import _report_error, logger
+from mlc.error_codes import get_error_guidance
 import io
 import logging
 import os
@@ -6,10 +9,6 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..")))
-
-from mlc.error_codes import get_error_guidance
-from mlc.main import _report_error, logger
-from mlc.script_action import ScriptExecutionError
 
 
 class ErrorGuidanceTest(unittest.TestCase):
@@ -21,7 +20,8 @@ class ErrorGuidanceTest(unittest.TestCase):
         self.assertIsNotNone(guidance)
         self.assertEqual(guidance["error_code"], 28)
         self.assertIn("disk space", guidance["error_message"].lower())
-        self.assertTrue(any("Free disk space" in s for s in guidance["suggestions"]))
+        self.assertTrue(
+            any("Free disk space" in s for s in guidance["suggestions"]))
 
     def test_detects_segmentation_fault_errors(self):
         guidance = get_error_guidance(139, "Segmentation fault (core dumped)")
