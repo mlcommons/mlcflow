@@ -6,7 +6,7 @@ on:
       - main
       - dev
     paths:
-      - 'docs/install/mlcflow_linux.sh'
+      - 'docs/install/mlcflow_unix_installer.sh'
       - '.github/workflows/test-installer-curl.yml'
   workflow_dispatch:
 
@@ -111,7 +111,7 @@ jobs:
             BRANCH="anandhu-eng-patch-1" #"dev"
           fi
           
-          INSTALLER_URL="https://raw.githubusercontent.com/${OWNER}/${REPO}/refs/heads/${BRANCH}/docs/install/mlcflow_linux.sh"
+          INSTALLER_URL="https://raw.githubusercontent.com/${OWNER}/${REPO}/refs/heads/${BRANCH}/docs/install/mlcflow_unix_installer.sh"
           echo "INSTALLER_URL=$INSTALLER_URL" >> $GITHUB_ENV
           echo "✅ Installer URL: $INSTALLER_URL"
 
@@ -119,7 +119,7 @@ jobs:
       # Test Case: Install via Curl-Pipe Method
       # =====================================================================
       # This is the primary test that validates the installer using the exact
-      # method that users will use: curl <url>/mlcflow_linux.sh | bash -s -- <flags>
+      # method that users will use: curl <url>/mlcflow_unix_installer.sh | bash -s -- <flags>
       - name: "Test: ${{ matrix.description }}"
         run: |
           echo "=========================================="
@@ -366,7 +366,7 @@ jobs:
             BRANCH="anandhu-eng-patch-1" #"dev"
           fi
           
-          INSTALLER_URL="https://raw.githubusercontent.com/${OWNER}/${REPO}/refs/heads/${BRANCH}/docs/install/mlcflow_linux.sh"
+          INSTALLER_URL="https://raw.githubusercontent.com/${OWNER}/${REPO}/refs/heads/${BRANCH}/docs/install/mlcflow_unix_installer.sh"
           echo "INSTALLER_URL=$INSTALLER_URL" >> $GITHUB_ENV
           echo "✅ Installer URL: $INSTALLER_URL"
 
@@ -494,7 +494,7 @@ jobs:
           echo "This CI workflow validates the MLCFlow installer by downloading"
           echo "directly from GitHub and using the exact distribution method that"
           echo "users will use in production:"
-          echo "  curl -sSL <github-raw-url>/mlcflow_linux.sh | bash"
+          echo "  curl -sSL <github-raw-url>/mlcflow_unix_installer.sh | bash"
           echo ""
           echo "✅ Test Coverage:"
           echo "   - Native GitHub runners (Ubuntu, macOS)"
