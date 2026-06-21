@@ -155,6 +155,7 @@ def _report_error(e):
         script_name = e.script_name
         repo_alias = e.repo_alias
         run_args = e.run_args
+        error_guidance = e.error_guidance or {}
 
         if script_name:
             # Build rerun command with user-facing inputs only
@@ -180,6 +181,18 @@ def _report_error(e):
             rerun_cmd = " ".join(rerun_parts)
             logger.error(f"Failed script: {script_name}")
             logger.error(f"To rerun just the failed part: {rerun_cmd}")
+
+        if error_guidance:
+            error_code = error_guidance.get("error_code")
+            if error_code is not None:
+                logger.error(f"Detected error code: {error_code}")
+
+            error_message = error_guidance.get("error_message")
+            if error_message:
+                logger.error(f"Likely cause: {error_message}")
+
+            for suggestion in error_guidance.get("suggestions", []):
+                logger.error(f"Suggestion: {suggestion}")
 
         if e.version_info_file:
             logger.error(f"Dependency versions: {e.version_info_file}")
