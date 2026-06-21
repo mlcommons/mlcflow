@@ -18,6 +18,8 @@ On February 9, 2025, MLCFlow released its first stable version, 1.0.0.
 ### Key Features
 Building upon the core idea of CMind—wrapping native scripts with Python wrappers and YAML metadata—MLCFlow focuses exclusively on key automation components: **Scripts**, along with its complementary modules: **Cache**, **Docker**, and **Experiments**. This targeted design simplifies both implementation and interface, enabling a more user-friendly experience.
 
+- **Smart Error Messages**: When a script fails, MLCFlow now detects the exit code and displays a human-readable suggestion — for example, flagging network issues, disk space problems, permission errors, or segmentation faults — so you spend less time debugging.
+
 ---
 
 ### Status

@@ -2,5 +2,5 @@ build
 dist
 *egg-info
 __pycache__
-
+.vscode
 .mlc-log.txt
