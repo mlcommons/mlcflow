@@ -185,6 +185,15 @@ class Action:
             self._index = Index(self.repos_path, self.repos)
         return self._index
 
+    def _item_from_index_entry(self, res, target_name):
+        """Create an Item from an index entry and skip entries with invalid meta."""
+        it = Item(res['path'], res['repo'])
+        if not isinstance(it.meta, dict):
+            logger.warning(
+                f"Skipping {target_name} item at {it.path}: missing or invalid meta")
+            return None
+        return it
+
     def __init__(self):
         setup_logging(log_path=os.getcwd(), log_file='.mlc-log.txt')
         self.logger = logger
@@ -728,8 +737,13 @@ class Action:
         # For targets like cache, sometimes user would need to clear the entire cache folder present in the system
         # this helps to fetch entire data pertaining to particular target
         if fetch_all:
+            if not target_index:
+                return {'return': 0, 'list': result}
+
             for res in target_index:
-                result.append(Item(res['path'], res['repo']))
+                it = self._item_from_index_entry(res, target)
+                if it:
+                    result.append(it)
             return {'return': 0, 'list': result}
 
         if not uid and not alias and i.get('details'):
@@ -775,14 +789,16 @@ class Action:
                 for res in target_index:
                     if (res["uid"] == uid or (alias and res["alias"] == alias)) and (
                             not item_repo or item_repo == res['repo']):
-                        it = Item(res['path'], res['repo'])
-                        result.append(it)
-                        found = True
+                        it = self._item_from_index_entry(res, target)
+                        if it:
+                            result.append(it)
+                            found = True
                 if not found and folder_name:
                     for res in target_index:
                         if os.path.basename(res["path"]) == folder_name:
-                            it = Item(res['path'], res['repo'])
-                            result.append(it)
+                            it = self._item_from_index_entry(res, target)
+                            if it:
+                                result.append(it)
             else:
                 tags = i.get("tags")
                 if tags:
@@ -803,11 +819,12 @@ class Action:
                 n_tags = [p[1:] for p in n_tags_]
                 p_tags = list(set(tags_to_match) - set(n_tags_))
                 for res in target_index:
-                    c_tags = res["tags"]
+                    c_tags = res.get("tags") or []
                     if (exact_tags_match and set(p_tags) == set(c_tags)) or (not exact_tags_match and set(
                             p_tags).issubset(set(c_tags)) and set(n_tags).isdisjoint(set(c_tags))):
-                        it = Item(res['path'], res['repo'])
-                        result.append(it)
+                        it = self._item_from_index_entry(res, target)
+                        if it:
+                            result.append(it)
         return {'return': 0, 'list': result}
 
     find = search

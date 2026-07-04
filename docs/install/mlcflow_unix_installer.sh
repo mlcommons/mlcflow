@@ -379,9 +379,18 @@ prompt_repo_details() {
 pull_repo() {
     log_info "Pulling automation repo:"
     log_info "  Repo   : ${MLC_REPO}"
-    log_info "  Branch : ${MLC_BRANCH}"
+    log_info "  Branch : ${MLC_BRANCH:-(default)}"
 
-    mlc pull repo "${MLC_REPO}" --checkout="${MLC_BRANCH}"
+    # Initialize the command array with base arguments
+    local cmd=(mlc pull repo "${MLC_REPO}")
+
+    # Append the checkout flag only if MLC_BRANCH is not empty
+    if [ -n "${MLC_BRANCH}" ]; then
+        cmd+=(--checkout="${MLC_BRANCH}")
+    fi
+
+    # Execute the command array safely
+    "${cmd[@]}"
 }
 
 # ------------------------------------------------------------------------------

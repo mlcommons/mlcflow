@@ -3,10 +3,10 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-green)](https://github.com/mlcommons/mlcflow/blob/main/LICENSE.md)
 [![Downloads](https://static.pepy.tech/badge/mlcflow)](https://pepy.tech/project/mlcflow)
 
-[![MLC core actions test](https://github.com/mlcommons/mlcflow/actions/workflows/test-mlc-core-actions.yaml/badge.svg)](https://github.com/mlcommons/mlcflow/actions/workflows/test-mlc-core-actions.yaml)
-[![MLC script automation features test](https://github.com/mlcommons/mlperf-automations/actions/workflows/test-mlc-script-features.yml/badge.svg?cache-bust=1)](https://github.com/mlcommons/mlperf-automations/actions/workflows/test-mlc-script-features.yml)
-[![MLPerf inference resnet50](https://github.com/mlcommons/mlcflow/actions/workflows/mlperf-inference-resnet50.yml/badge.svg)](https://github.com/mlcommons/mlcflow/actions/workflows/mlperf-inference-resnet50.yml)
-[![MLPerf inference bert (deepsparse, tf, onnxruntime, pytorch)](https://github.com/mlcommons/mlcflow/actions/workflows/mlperf-inference-bert.yml/badge.svg)](https://github.com/mlcommons/mlcflow/actions/workflows/mlperf-inference-bert.yml)
+[![MLC core actions test](https://github.com/mlcommons/mlcflow/actions/workflows/test-mlc-core-actions.yaml/badge.svg?branch=dev)](https://github.com/mlcommons/mlcflow/actions/workflows/test-mlc-core-actions.yaml)
+[![MLC script automation features test](https://github.com/mlcommons/mlperf-automations/actions/workflows/test-mlc-script-features.yml/badge.svg?branch=dev)](https://github.com/mlcommons/mlperf-automations/actions/workflows/test-mlc-script-features.yml)
+[![MLPerf inference resnet50](https://github.com/mlcommons/mlcflow/actions/workflows/mlperf-inference-resnet50.yml/badge.svg?branch=dev)](https://github.com/mlcommons/mlcflow/actions/workflows/mlperf-inference-resnet50.yml)
+[![MLPerf inference bert (deepsparse, tf, onnxruntime, pytorch)](https://github.com/mlcommons/mlcflow/actions/workflows/mlperf-inference-bert.yml/badge.svg?branch=dev)](https://github.com/mlcommons/mlcflow/actions/workflows/mlperf-inference-bert.yml)
 
 
 MLCFlow is a versatile CLI and Python interface developed by MLCommons in collaboration with a dedicated team of volunteers (see [Contributors](https://github.com/mlcommons/mlcflow/blob/main/CONTRIBUTORS.md)). It serves as a streamlined replacement for the [CMind](https://github.com/mlcommons/ck/tree/master/cm) tool, designed to drive the automation workflows of MLPerf benchmarks more efficiently. You can use this tool for any of your workflow automation tasks. 
