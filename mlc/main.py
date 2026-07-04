@@ -507,7 +507,7 @@ def main():
 
     | Target  | Actions                                                   |
     |---------|-----------------------------------------------------------|
-    | script  | run, find/search, rm, mv, cp, add, test, docker-run, show |
+    | script  | run, find/search, rm, mv, cp, add, test, docker-run, apptainer, show |
     | cache   | find/search, rm, show, list, prune, mark-tmp              |
     | repo    | pull, search, rm, list, find/search                       |
 

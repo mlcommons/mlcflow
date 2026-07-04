@@ -26,8 +26,9 @@ class ScriptAction(Action):
     6.  Copy(cp)
     7.  Run
     8.  Docker
-    9.  Test
-    10. Experiment
+    9.  Apptainer
+    10. Test
+    11. Experiment
 
     Scripts in MLCFlow can be identified using different methods:
 
@@ -413,6 +414,14 @@ Main Script Meta:""")
         return self.call_script_module_function("docker", run_args)
 
     docker.__doc__ = docker_run.__doc__
+
+    def apptainer(self, run_args):
+        return self.apptainer_run(run_args)
+
+    def apptainer_run(self, run_args):
+        return self.call_script_module_function("apptainer", run_args)
+
+    apptainer.__doc__ = docker_run.__doc__
 
     def remote_run(self, run_args):
         """
