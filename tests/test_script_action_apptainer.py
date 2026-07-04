@@ -21,7 +21,8 @@ class ScriptActionApptainerTest(unittest.TestCase):
             result = action.apptainer(run_args)
 
         self.assertEqual(result, expected)
-        call_script_module_function.assert_called_once_with("apptainer", run_args)
+        call_script_module_function.assert_called_once_with(
+            "apptainer", run_args)
 
 
 if __name__ == "__main__":
