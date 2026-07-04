@@ -13,10 +13,15 @@ from .script_action import ScriptAction
 from .cache_action import CacheAction
 from .cfg_action import CfgAction
 from .experiment_action import ExperimentAction
+from .typo_mixin import TypoMixin
 
 from .item import Item
 from .action_factory import get_action
 from .logger import logger, logging
+
+
+class TypoArgumentParser(TypoMixin, argparse.ArgumentParser):
+    """ArgumentParser that suggests close matches when the user mistype a command or target."""
 
 
 class Automation:
@@ -330,7 +335,7 @@ def convert_hyphen_to_underscore_in_args():
 
 
 def build_pre_parser():
-    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser = TypoArgumentParser(add_help=False)
     pre_parser.add_argument(
         "action",
         nargs="?",
@@ -352,7 +357,7 @@ def build_pre_parser():
 
 
 def build_parser(pre_args):
-    parser = argparse.ArgumentParser(
+    parser = TypoArgumentParser(
         prog="mlc",
         description="Manage repos, scripts, and caches.",
         add_help=False)
