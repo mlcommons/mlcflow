@@ -155,6 +155,8 @@ bash mlcflow_linux.sh --yes --quiet
 | `--quiet` | Minimal output (errors/warnings only) | Normal logging |
 | `--help` | Display help message and exit | - |
 
+> **Shared home note**: when using the default virtual environment path (`~/mlcflow`), the installer reuses it only if it matches the detected Python major/minor and architecture. If it is incompatible, the installer automatically switches to a suffix-based environment such as `~/mlcflow_x86_64_py3.12`.
+
 ## SUDO and Privilege Handling
 
 The installer automatically detects your privilege level and handles system package installation accordingly. **You do not need to explicitly specify sudo** - the script handles it internally.

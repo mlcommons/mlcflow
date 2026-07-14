@@ -275,7 +275,11 @@ ensure_python() {
     fi
 
     PY_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+    PY_MAJOR_MINOR=$(python3 -c 'import sys; print("{}.{}".format(*sys.version_info[:2]))')
+    PY_ARCH=$(python3 -c 'import platform; print(platform.machine())')
     log_info "Detected Python version: $PY_VERSION"
+    log_debug "Detected Python major.minor: $PY_MAJOR_MINOR"
+    log_debug "Detected Python architecture: $PY_ARCH"
 
     if version_ge "$PY_VERSION" "$MIN_PYTHON_VERSION"; then
         log_info "Python version is compatible."
@@ -324,7 +328,54 @@ handle_python_install() {
 # Virtual Environment
 # ------------------------------------------------------------------------------
 
+is_venv_compatible() {
+    local venv_dir="$1"
+    local expected_py_major_minor="$2"
+    local expected_arch="$3"
+    local venv_python="$venv_dir/bin/python3"
+
+    if [ ! -x "$venv_python" ]; then
+        venv_python="$venv_dir/bin/python"
+    fi
+    if [ ! -x "$venv_python" ]; then
+        return 1
+    fi
+
+    local venv_py_major_minor
+    local venv_arch
+    venv_py_major_minor=$("$venv_python" -c 'import sys; print("{}.{}".format(*sys.version_info[:2]))' 2>/dev/null) || return 1
+    venv_arch=$("$venv_python" -c 'import platform; print(platform.machine())' 2>/dev/null) || return 1
+
+    [ "$venv_py_major_minor" = "$expected_py_major_minor" ] && [ "$venv_arch" = "$expected_arch" ]
+}
+
+resolve_default_venv_dir() {
+    local shared_venv_dir="${DEFAULT_VENV_DIR}_${PY_ARCH}_py${PY_MAJOR_MINOR}"
+
+    if [ -d "$DEFAULT_VENV_DIR" ]; then
+        if is_venv_compatible "$DEFAULT_VENV_DIR" "$PY_MAJOR_MINOR" "$PY_ARCH"; then
+            log_info "Reusing default virtual environment: $DEFAULT_VENV_DIR"
+            VENV_DIR="$DEFAULT_VENV_DIR"
+            return
+        fi
+
+        log_warn "Default virtual environment is incompatible with Python ${PY_MAJOR_MINOR} (${PY_ARCH})."
+        VENV_DIR="$shared_venv_dir"
+        log_info "Using platform/python-specific virtual environment: $VENV_DIR"
+        return
+    fi
+
+    if [ -d "$shared_venv_dir" ] && is_venv_compatible "$shared_venv_dir" "$PY_MAJOR_MINOR" "$PY_ARCH"; then
+        VENV_DIR="$shared_venv_dir"
+        log_info "Reusing platform/python-specific virtual environment: $VENV_DIR"
+    fi
+}
+
 setup_venv() {
+    if [ "$VENV_DIR" = "$DEFAULT_VENV_DIR" ]; then
+        resolve_default_venv_dir
+    fi
+
     log_info "Setting up virtual environment at: $VENV_DIR"
 
     if [ -d "$VENV_DIR" ]; then
@@ -425,4 +476,6 @@ main() {
     echo "  mlc --help"
 }
 
-main
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main
+fi
