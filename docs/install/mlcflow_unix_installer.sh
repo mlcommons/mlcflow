@@ -68,7 +68,7 @@ log_error() {
 }
 
 log_debug() {
-    $VERBOSE || return
+    $VERBOSE || return 0
     echo -e "${COLOR_BLUE}[DEBUG]${COLOR_RESET} $1"
 }
 
