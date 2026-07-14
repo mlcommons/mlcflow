@@ -55,7 +55,7 @@ else
 fi
 
 log_info() {
-    $QUIET && return
+    $QUIET && return 0
     echo -e "${COLOR_GREEN}[INFO]${COLOR_RESET} $1"
 }
 
