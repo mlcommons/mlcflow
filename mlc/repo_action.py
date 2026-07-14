@@ -360,15 +360,18 @@ class RepoAction(Action):
                 repo_path = os.path.join(repo_base_path, repo_download_name)
 
         try:
-            # Compute depth argument: --shallow implies depth=1; explicit --depth=N takes precedence
+            # Compute depth argument: --shallow implies depth=1; explicit
+            # --depth=N takes precedence
             clone_depth = None
             if depth is not None:
                 try:
                     clone_depth = int(depth)
                 except (TypeError, ValueError):
-                    return {"return": 1, "error": f"Invalid value for --depth: {depth!r}. Must be a positive integer."}
+                    return {
+                        "return": 1, "error": f"Invalid value for --depth: {depth!r}. Must be a positive integer."}
                 if clone_depth < 1:
-                    return {"return": 1, "error": f"Invalid value for --depth: {clone_depth}. Must be a positive integer."}
+                    return {
+                        "return": 1, "error": f"Invalid value for --depth: {clone_depth}. Must be a positive integer."}
             elif shallow:
                 clone_depth = 1
 
@@ -620,7 +623,8 @@ class RepoAction(Action):
                         repo_object.path, os.W_OK):
                     repo_folder_name = os.path.basename(repo_object.path)
                     res = self.pull_repo(
-                        repo_folder_name, repo_path=repo_object.path, force=run_args.get('force'),
+                        repo_folder_name, repo_path=repo_object.path, force=run_args.get(
+                            'force'),
                         shallow=run_args.get('shallow', False),
                         depth=run_args.get('depth'),
                         extra_git_args=run_args.get('extra_git_args'))
