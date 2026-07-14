@@ -2,6 +2,7 @@ from .action import Action
 import os
 import subprocess
 import re
+import shlex
 import yaml
 import json
 import shutil
@@ -323,7 +324,8 @@ class RepoAction(Action):
                 url).replace(".git", "")}
 
     def pull_repo(self, repo_url, branch=None, checkout=None, tag=None,
-                  pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False):
+                  pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False,
+                  shallow=False, depth=None, extra_git_args=None):
 
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path  # either the value will be from 'MLC_REPOS'
@@ -358,20 +360,38 @@ class RepoAction(Action):
                 repo_path = os.path.join(repo_base_path, repo_download_name)
 
         try:
+            # Compute depth argument: --shallow implies depth=1; explicit --depth=N takes precedence
+            clone_depth = None
+            if depth is not None:
+                try:
+                    clone_depth = int(depth)
+                except (TypeError, ValueError):
+                    return {"return": 1, "error": f"Invalid value for --depth: {depth!r}. Must be a positive integer."}
+                if clone_depth < 1:
+                    return {"return": 1, "error": f"Invalid value for --depth: {clone_depth}. Must be a positive integer."}
+            elif shallow:
+                clone_depth = 1
+
+            # Parse extra_git_args into a list
+            extra_args = []
+            if extra_git_args:
+                if isinstance(extra_git_args, list):
+                    extra_args = extra_git_args
+                else:
+                    extra_args = shlex.split(str(extra_git_args))
+
             # If the directory doesn't exist, clone it
             if not os.path.exists(repo_path):
                 logger.info(f"Cloning repository {repo_url} to {repo_path}...")
 
-                # Build clone command without branch if not provided
-                clone_command = ['git', 'clone', repo_url, repo_path]
+                # Build clone command
+                clone_command = ['git', 'clone']
                 if branch:
-                    clone_command = [
-                        'git',
-                        'clone',
-                        '--branch',
-                        branch,
-                        repo_url,
-                        repo_path]
+                    clone_command += ['--branch', branch]
+                if clone_depth is not None:
+                    clone_command += ['--depth', str(clone_depth)]
+                clone_command += extra_args
+                clone_command += [repo_url, repo_path]
 
                 subprocess.run(clone_command, check=True)
 
@@ -433,8 +453,11 @@ class RepoAction(Action):
                     logger.info(
                         "Pulling latest changes...")
                     try:
+                        pull_command = ['git', '-C', repo_path, 'pull']
+                        if clone_depth is not None:
+                            pull_command += ['--depth', str(clone_depth)]
                         subprocess.run(
-                            ['git', '-C', repo_path, 'pull'],
+                            pull_command,
                             capture_output=True,
                             text=True,
                             check=True)
@@ -492,8 +515,10 @@ class RepoAction(Action):
                 else:
                     logger.info(
                         "No local changes detected. Pulling latest changes...")
-                    subprocess.run(
-                        ['git', '-C', repo_path, 'pull'], check=True)
+                    pull_command = ['git', '-C', repo_path, 'pull']
+                    if clone_depth is not None:
+                        pull_command += ['--depth', str(clone_depth)]
+                    subprocess.run(pull_command, check=True)
                     logger.info("Repository successfully pulled.")
 
             if tag:
@@ -562,6 +587,9 @@ class RepoAction(Action):
     - `--tag <release_tag>`: Checks out a particular release tag.
     - `--pat <access_token>` or `--ssh`: Clones a private repository using a personal access token or SSH.
     - `--force`: For existing repositories with local tracked changes, stashes changes before pull and reapplies them after pull.
+    - `--shallow`: Perform a shallow clone/pull with `--depth=1` (fastest for a fresh copy without history).
+    - `--depth=N`: Perform a shallow clone/pull with the specified history depth (e.g. `--depth=5`).
+    - `--extra_git_args=<args>`: Pass additional arguments to the `git clone` command (e.g. `--extra_git_args="--filter=blob:none"`).
 
     Example Output:
 
@@ -592,7 +620,10 @@ class RepoAction(Action):
                         repo_object.path, os.W_OK):
                     repo_folder_name = os.path.basename(repo_object.path)
                     res = self.pull_repo(
-                        repo_folder_name, repo_path=repo_object.path, force=run_args.get('force'))
+                        repo_folder_name, repo_path=repo_object.path, force=run_args.get('force'),
+                        shallow=run_args.get('shallow', False),
+                        depth=run_args.get('depth'),
+                        extra_git_args=run_args.get('extra_git_args'))
                     if res['return'] > 0:
                         return res
         else:
@@ -604,6 +635,9 @@ class RepoAction(Action):
             ssh = run_args.get('ssh')
             force = run_args.get('force')
             ignore_on_conflict = run_args.get('ignore_on_conflict')
+            shallow = run_args.get('shallow', False)
+            depth = run_args.get('depth')
+            extra_git_args = run_args.get('extra_git_args')
 
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
                 return {
@@ -617,7 +651,10 @@ class RepoAction(Action):
                 pat,
                 ssh,
                 ignore_on_conflict=ignore_on_conflict,
-                force=force)
+                force=force,
+                shallow=shallow,
+                depth=depth,
+                extra_git_args=extra_git_args)
             if res['return'] > 0:
                 return res
 
