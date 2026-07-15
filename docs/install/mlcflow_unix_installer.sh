@@ -361,6 +361,10 @@ resolve_default_venv_dir() {
 
         log_warn "Default virtual environment is incompatible with Python ${PY_MAJOR_MINOR} (${PY_ARCH})."
         VENV_DIR="$shared_venv_dir"
+        if [ -d "$shared_venv_dir" ] && ! is_venv_compatible "$shared_venv_dir" "$PY_MAJOR_MINOR" "$PY_ARCH"; then
+            log_warn "Removing stale/incompatible virtual environment: $shared_venv_dir"
+            rm -rf "$shared_venv_dir"
+        fi
         log_info "Using platform/python-specific virtual environment: $VENV_DIR"
         return
     fi

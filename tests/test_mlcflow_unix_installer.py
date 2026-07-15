@@ -53,6 +53,22 @@ mkdir -p "$DEFAULT_VENV_DIR"
     assert "_py" in resolved
 
 
+def test_resolve_default_venv_dir_removes_stale_shared_env_when_default_incompatible(tmp_path):
+    """When the default venv is incompatible and the suffixed venv already exists
+    but is itself stale/broken, the stale suffixed dir must be removed so that
+    setup_venv can create a fresh one rather than silently reusing a broken env."""
+    setup_snippet = """
+mkdir -p "$DEFAULT_VENV_DIR"
+SHARED_VENV_DIR="${DEFAULT_VENV_DIR}_${PY_ARCH}_py${PY_MAJOR_MINOR}"
+mkdir -p "$SHARED_VENV_DIR"
+"""
+    resolved = _resolve_venv_dir(tmp_path, setup_snippet)
+    expected_suffix = f"{tmp_path / 'mlcflow'}_{platform.machine()}_py{sys.version_info[0]}.{sys.version_info[1]}"
+    assert resolved == expected_suffix
+    # The stale shared dir should have been removed so setup_venv creates it fresh
+    assert not Path(expected_suffix).exists()
+
+
 def test_resolve_default_venv_dir_reuses_compatible_suffixed_env(tmp_path):
     setup_snippet = """
 SHARED_VENV_DIR="${DEFAULT_VENV_DIR}_${PY_ARCH}_py${PY_MAJOR_MINOR}"
