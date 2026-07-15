@@ -323,6 +323,18 @@ class RepoAction(Action):
             return {"return": 0, "value": os.path.basename(
                 url).replace(".git", "")}
 
+    def _is_shallow_repo(self, repo_path):
+        """Return True if the git repository at *repo_path* is a shallow clone."""
+        try:
+            result = subprocess.run(
+                ['git', '-C', repo_path, 'rev-parse', '--is-shallow-repository'],
+                capture_output=True,
+                text=True,
+            )
+            return result.returncode == 0 and result.stdout.strip() == 'true'
+        except Exception:
+            return False
+
     def pull_repo(self, repo_url, branch=None, checkout=None, tag=None,
                   pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False,
                   shallow=False, depth=None, extra_git_args=None):
@@ -458,7 +470,13 @@ class RepoAction(Action):
                     try:
                         pull_command = ['git', '-C', repo_path, 'pull']
                         if clone_depth is not None:
-                            pull_command += ['--depth', str(clone_depth)]
+                            if self._is_shallow_repo(repo_path):
+                                pull_command += ['--depth', str(clone_depth)]
+                            else:
+                                logger.warning(
+                                    f"--depth/--shallow ignored for pull on non-shallow repo {repo_path}. "
+                                    "Re-clone with --shallow to create a shallow copy."
+                                )
                         subprocess.run(
                             pull_command,
                             capture_output=True,
@@ -520,7 +538,13 @@ class RepoAction(Action):
                         "No local changes detected. Pulling latest changes...")
                     pull_command = ['git', '-C', repo_path, 'pull']
                     if clone_depth is not None:
-                        pull_command += ['--depth', str(clone_depth)]
+                        if self._is_shallow_repo(repo_path):
+                            pull_command += ['--depth', str(clone_depth)]
+                        else:
+                            logger.warning(
+                                f"--depth/--shallow ignored for pull on non-shallow repo {repo_path}. "
+                                "Re-clone with --shallow to create a shallow copy."
+                            )
                     subprocess.run(pull_command, check=True)
                     logger.info("Repository successfully pulled.")
 
@@ -590,8 +614,8 @@ class RepoAction(Action):
     - `--tag <release_tag>`: Checks out a particular release tag.
     - `--pat <access_token>` or `--ssh`: Clones a private repository using a personal access token or SSH.
     - `--force`: For existing repositories with local tracked changes, stashes changes before pull and reapplies them after pull.
-    - `--shallow`: Perform a shallow clone/pull with `--depth=1` (fastest for a fresh copy without history).
-    - `--depth=N`: Perform a shallow clone/pull with the specified history depth (e.g. `--depth=5`). For existing non-shallow repositories, `--depth` is only effective for subsequent pull operations if the repository was originally cloned with a depth limit.
+    - `--shallow`: Perform a shallow clone with `--depth=1` (fastest for a fresh copy without history). For existing repos, only applied if the repo is already shallow; otherwise ignored with a warning.
+    - `--depth=N`: Perform a shallow clone/pull with the specified history depth (e.g. `--depth=5`). For existing repos, `--depth` is only applied when the repository is already a shallow clone; passing `--depth` to a full-history clone would corrupt it and is therefore silently ignored with a warning.
     - `--extra_git_args=<args>`: Pass additional arguments to the `git clone` command (e.g. `--extra_git_args="--filter=blob:none"`). Only applies when cloning a new repository; not used for pull on existing repos. Accepts only trusted input — arguments are passed directly to git without further validation.
 
     Example Output:
