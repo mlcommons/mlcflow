@@ -332,7 +332,7 @@ class RepoAction(Action):
                 text=True,
             )
             return result.returncode == 0 and result.stdout.strip() == 'true'
-        except Exception:
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
             return False
 
     def pull_repo(self, repo_url, branch=None, checkout=None, tag=None,
@@ -615,7 +615,7 @@ class RepoAction(Action):
     - `--pat <access_token>` or `--ssh`: Clones a private repository using a personal access token or SSH.
     - `--force`: For existing repositories with local tracked changes, stashes changes before pull and reapplies them after pull.
     - `--shallow`: Perform a shallow clone with `--depth=1` (fastest for a fresh copy without history). For existing repos, only applied if the repo is already shallow; otherwise ignored with a warning.
-    - `--depth=N`: Perform a shallow clone/pull with the specified history depth (e.g. `--depth=5`). For existing repos, `--depth` is only applied when the repository is already a shallow clone; passing `--depth` to a full-history clone would corrupt it and is therefore silently ignored with a warning.
+    - `--depth=N`: Perform a shallow clone/pull with the specified history depth (e.g. `--depth=5`). For existing repos, `--depth` is only applied when the repository is already a shallow clone; passing `--depth` to a full-history clone would corrupt it and is therefore ignored with a warning.
     - `--extra_git_args=<args>`: Pass additional arguments to the `git clone` command (e.g. `--extra_git_args="--filter=blob:none"`). Only applies when cloning a new repository; not used for pull on existing repos. Accepts only trusted input — arguments are passed directly to git without further validation.
 
     Example Output:

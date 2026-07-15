@@ -104,7 +104,7 @@ mlc pull repo mlcommons@mlperf-automations
 - The `--tag` flag can be used to check out a particular release tag.
 - `--pat=<access_token>` or `--ssh` flag can be used to clone a private repository.
 - The `--force` flag can be used when local tracked changes exist. It stashes local changes before pull, then applies the stash after pull. If conflicts occur while applying stash, MLCFlow reverts the partial stash apply and asks you to apply the stash manually.
-- The `--shallow` flag performs a shallow clone with `--depth=1`, downloading only the latest snapshot without full history. For existing repositories, it is only applied if the repo is already a shallow clone; otherwise it is silently ignored with a warning.
+- The `--shallow` flag performs a shallow clone with `--depth=1`, downloading only the latest snapshot without full history. For existing repositories, it is only applied if the repo is already a shallow clone; otherwise it is ignored with a warning.
 - The `--depth=N` flag performs a shallow clone/pull with the specified history depth (e.g. `--depth=5`). For existing repositories, `--depth` is only applied when the repository is already a shallow clone — passing it to a full-history clone would corrupt the repo and is therefore ignored with a warning.
 - The `--extra_git_args=<args>` option passes additional arguments directly to the `git clone` command when cloning a new repository (e.g. `--extra_git_args="--filter=blob:none"`). It is not applied to pull operations on existing repositories. Only pass trusted values — arguments are forwarded to git without further validation.
 
