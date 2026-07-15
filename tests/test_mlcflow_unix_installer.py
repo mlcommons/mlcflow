@@ -31,9 +31,10 @@ echo "{marker}$VENV_DIR"
 
     for line in reversed(result.stdout.splitlines()):
         if line.startswith(marker):
-            return line[len(marker) :]
+            return line[len(marker):]
 
-    raise AssertionError(f"Could not parse resolved venv path from output:\n{result.stdout}")
+    raise AssertionError(
+        f"Could not parse resolved venv path from output:\n{result.stdout}")
 
 
 def test_resolve_default_venv_dir_prefers_compatible_default(tmp_path):
@@ -44,7 +45,8 @@ python3 -m venv "$DEFAULT_VENV_DIR"
     assert resolved == str(tmp_path / "mlcflow")
 
 
-def test_resolve_default_venv_dir_uses_suffix_for_incompatible_default(tmp_path):
+def test_resolve_default_venv_dir_uses_suffix_for_incompatible_default(
+        tmp_path):
     setup_snippet = """
 mkdir -p "$DEFAULT_VENV_DIR"
 """
@@ -53,7 +55,8 @@ mkdir -p "$DEFAULT_VENV_DIR"
     assert "_py" in resolved
 
 
-def test_resolve_default_venv_dir_removes_stale_shared_env_when_default_incompatible(tmp_path):
+def test_resolve_default_venv_dir_removes_stale_shared_env_when_default_incompatible(
+        tmp_path):
     """When the default venv is incompatible and the suffixed venv already exists
     but is itself stale/broken, the stale suffixed dir must be removed so that
     setup_venv can create a fresh one rather than silently reusing a broken env."""
@@ -65,7 +68,8 @@ mkdir -p "$SHARED_VENV_DIR"
     resolved = _resolve_venv_dir(tmp_path, setup_snippet)
     expected_suffix = f"{tmp_path / 'mlcflow'}_{platform.machine()}_py{sys.version_info[0]}.{sys.version_info[1]}"
     assert resolved == expected_suffix
-    # The stale shared dir should have been removed so setup_venv creates it fresh
+    # The stale shared dir should have been removed so setup_venv creates it
+    # fresh
     assert not Path(expected_suffix).exists()
 
 
