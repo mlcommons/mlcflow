@@ -44,6 +44,12 @@ class RepoAction(Action):
         self.parent = parent
         self.__dict__.update(vars(parent))
 
+    def _build_pull_command(self, repo_path, branch=None):
+        pull_command = ['git', '-C', repo_path, 'pull', '--ff-only']
+        if branch:
+            pull_command.extend(['origin', branch])
+        return pull_command
+
     def add(self, run_args):
         """
     ####################################################################################################################
@@ -434,7 +440,7 @@ class RepoAction(Action):
                         "Pulling latest changes...")
                     try:
                         subprocess.run(
-                            ['git', '-C', repo_path, 'pull'],
+                            self._build_pull_command(repo_path, branch),
                             capture_output=True,
                             text=True,
                             check=True)
@@ -493,7 +499,7 @@ class RepoAction(Action):
                     logger.info(
                         "No local changes detected. Pulling latest changes...")
                     subprocess.run(
-                        ['git', '-C', repo_path, 'pull'], check=True)
+                        self._build_pull_command(repo_path, branch), check=True)
                     logger.info("Repository successfully pulled.")
 
             if tag:
