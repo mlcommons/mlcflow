@@ -136,20 +136,28 @@ class RepoAction(Action):
         )
 
     def _format_pull_error(self, repo_path, error_message, stash_created=False,
-                           force=False, during_git_pull=True):
+                           force=False, failure_phase="git pull"):
         """Format strict pull errors, preserving stash recovery guidance when needed."""
         prefix = "Force pull failed" if force else "Pull failed"
-        if during_git_pull:
-            prefix = f"{prefix} during git pull"
+        if failure_phase:
+            prefix = f"{prefix} during {failure_phase}"
+
+        resolution = ""
+        lowered_error = error_message.lower()
+        if "not possible to fast-forward" in lowered_error:
+            resolution = (
+                " Check whether the local and remote branches have diverged "
+                "and reconcile them manually before retrying."
+            )
 
         if stash_created:
             return (
                 f"{prefix} for {repo_path}. "
                 f"{self._format_stash_restore_guidance(repo_path)} "
-                f"Details: {error_message}"
+                f"Details: {error_message}{resolution}"
             )
 
-        return f"{prefix} for {repo_path}: {error_message}"
+        return f"{prefix} for {repo_path}: {error_message}{resolution}"
 
     @staticmethod
     def _subprocess_error_message(error):
@@ -595,7 +603,7 @@ class RepoAction(Action):
                                 str(e),
                                 stash_created=stash_created,
                                 force=True,
-                                during_git_pull=False)
+                                failure_phase="branch checkout")
                         }
                     except subprocess.CalledProcessError as e:
                         pull_error = self._subprocess_error_message(e)
@@ -659,9 +667,12 @@ class RepoAction(Action):
                             capture_output=True,
                             text=True,
                             check=True)
-                    except RuntimeError:
-                        # _checkout_pull_branch already formats contextual checkout errors.
-                        raise
+                    except RuntimeError as e:
+                        return {
+                            "return": 1,
+                            "error": self._format_pull_error(
+                                repo_path, str(e), failure_phase="branch checkout")
+                        }
                     except subprocess.CalledProcessError as e:
                         pull_error = self._subprocess_error_message(e)
                         return {

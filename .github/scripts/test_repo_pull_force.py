@@ -286,6 +286,7 @@ class TestRepoPullForce(unittest.TestCase):
         self.assertEqual(res["return"], 1)
         self.assertIn("Pull failed during git pull", res["error"])
         self.assertIn("Not possible to fast-forward", res["error"])
+        self.assertIn("branches have diverged", res["error"])
         pull_calls = [
             kwargs for cmd, kwargs in calls
             if cmd[:4] == ['git', '-C', self.repo_path, 'pull']
