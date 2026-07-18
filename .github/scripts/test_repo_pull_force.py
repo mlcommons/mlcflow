@@ -32,7 +32,7 @@ class TestRepoPullForce(unittest.TestCase):
 
     @patch.object(RepoAction, "register_repo", return_value={"return": 0})
     @patch("mlc.repo_action.subprocess.run")
-    def test_pull_existing_repo_with_branch_uses_explicit_ff_only_pull(
+    def test_pull_existing_repo_with_branch_uses_regular_pull_by_default(
             self, mock_run, _mock_register):
         calls = []
 
@@ -52,7 +52,46 @@ class TestRepoPullForce(unittest.TestCase):
 
         self.assertEqual(res["return"], 0)
         self.assertIn(
+            ['git', '-C', self.repo_path, 'pull'],
+            calls,
+        )
+        self.assertNotIn(
             ['git', '-C', self.repo_path, 'pull', '--ff-only', 'origin', 'dev'],
+            calls,
+        )
+
+    @patch.object(RepoAction, "register_repo", return_value={"return": 0})
+    @patch("mlc.repo_action.subprocess.run")
+    def test_pull_existing_repo_with_branch_uses_explicit_ff_only_pull_for_internal_calls(
+            self, mock_run, _mock_register):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok")
+
+        mock_run.side_effect = fake_run
+
+        res = self.repo_action.pull_repo(
+            "mlcommons@test-repo",
+            branch="dev",
+            repo_path=self.repo_path,
+            fast_forward_only=True,
+        )
+
+        self.assertEqual(res["return"], 0)
+        self.assertIn(
+            ['git', '-C', self.repo_path, 'checkout', 'dev'],
+            calls,
+        )
+        self.assertIn(
+            ['git', '-C', self.repo_path, 'pull', '--ff-only', 'origin', 'dev'],
+            calls,
+        )
+        self.assertNotIn(
+            ['git', '-C', self.repo_path, 'pull'],
             calls,
         )
 

@@ -45,8 +45,11 @@ class RepoAction(Action):
         self.parent = parent
         self.__dict__.update(vars(parent))
 
-    def _build_pull_command(self, repo_path, branch=None, clone_depth=None):
-        pull_command = ['git', '-C', repo_path, 'pull', '--ff-only']
+    def _build_pull_command(self, repo_path, branch=None, clone_depth=None,
+                            fast_forward_only=False):
+        pull_command = ['git', '-C', repo_path, 'pull']
+        if fast_forward_only:
+            pull_command.append('--ff-only')
         if clone_depth is not None:
             if self._is_shallow_repo(repo_path):
                 pull_command.extend(['--depth', str(clone_depth)])
@@ -55,9 +58,30 @@ class RepoAction(Action):
                     f"--depth/--shallow ignored for pull on non-shallow repo {repo_path}. "
                     "Re-clone with --shallow to create a shallow copy."
                 )
-        if branch:
+        if branch and fast_forward_only:
             pull_command.extend(['origin', branch])
         return pull_command
+
+    def _checkout_pull_branch(self, repo_path, branch):
+        checkout_command = ['git', '-C', repo_path, 'checkout', branch]
+        try:
+            subprocess.run(
+                checkout_command,
+                capture_output=True,
+                text=True,
+                check=True)
+        except subprocess.CalledProcessError:
+            subprocess.run(
+                ['git', '-C', repo_path, 'fetch', 'origin', branch],
+                capture_output=True,
+                text=True,
+                check=True)
+            subprocess.run(
+                ['git', '-C', repo_path, 'checkout', '-b',
+                    branch, '--track', f'origin/{branch}'],
+                capture_output=True,
+                text=True,
+                check=True)
 
     def add(self, run_args):
         """
@@ -351,7 +375,7 @@ class RepoAction(Action):
 
     def pull_repo(self, repo_url, branch=None, checkout=None, tag=None,
                   pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False,
-                  shallow=False, depth=None, extra_git_args=None):
+                  shallow=False, depth=None, extra_git_args=None, fast_forward_only=False):
 
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path  # either the value will be from 'MLC_REPOS'
@@ -482,9 +506,11 @@ class RepoAction(Action):
                     logger.info(
                         "Pulling latest changes...")
                     try:
+                        if fast_forward_only and branch:
+                            self._checkout_pull_branch(repo_path, branch)
                         subprocess.run(
                             self._build_pull_command(
-                                repo_path, branch, clone_depth),
+                                repo_path, branch, clone_depth, fast_forward_only),
                             capture_output=True,
                             text=True,
                             check=True)
@@ -542,9 +568,11 @@ class RepoAction(Action):
                 else:
                     logger.info(
                         "No local changes detected. Pulling latest changes...")
+                    if fast_forward_only and branch:
+                        self._checkout_pull_branch(repo_path, branch)
                     subprocess.run(
                         self._build_pull_command(
-                            repo_path, branch, clone_depth),
+                            repo_path, branch, clone_depth, fast_forward_only),
                         check=True)
                     logger.info("Repository successfully pulled.")
 
@@ -651,7 +679,8 @@ class RepoAction(Action):
                             'force'),
                         shallow=run_args.get('shallow', False),
                         depth=run_args.get('depth'),
-                        extra_git_args=run_args.get('extra_git_args'))
+                        extra_git_args=run_args.get('extra_git_args'),
+                        fast_forward_only=run_args.get('fast_forward_only', False))
                     if res['return'] > 0:
                         return res
         else:
@@ -666,6 +695,7 @@ class RepoAction(Action):
             shallow = run_args.get('shallow', False)
             depth = run_args.get('depth')
             extra_git_args = run_args.get('extra_git_args')
+            fast_forward_only = run_args.get('fast_forward_only', False)
 
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
                 return {
@@ -682,7 +712,8 @@ class RepoAction(Action):
                 force=force,
                 shallow=shallow,
                 depth=depth,
-                extra_git_args=extra_git_args)
+                extra_git_args=extra_git_args,
+                fast_forward_only=fast_forward_only)
             if res['return'] > 0:
                 return res
 
