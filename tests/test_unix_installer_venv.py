@@ -25,6 +25,15 @@ def normalize_architecture(machine):
 
 
 class UnixInstallerVenvTest(unittest.TestCase):
+    def _strip_final_main_call(self, installer_contents):
+        lines = installer_contents.rstrip().splitlines()
+        self.assertEqual(
+            lines[-1].strip(),
+            "main",
+            msg="Expected installer script to end with a standalone main call.",
+        )
+        return "\n".join(lines[:-1]) + "\n"
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
@@ -36,16 +45,7 @@ class UnixInstallerVenvTest(unittest.TestCase):
             installer_contents = installer_file.read()
         self.installer_contents = installer_contents
 
-        self.assertTrue(
-            installer_contents.rstrip().endswith("main"),
-            msg="Expected installer script to end with a standalone main call.",
-        )
-
-        stripped_installer_contents = installer_contents.rstrip()
-        if stripped_installer_contents.endswith("\nmain"):
-            installer_without_main = stripped_installer_contents.rsplit("\nmain", 1)[0] + "\n"
-        else:
-            installer_without_main = stripped_installer_contents[:-len("main")] + "\n"
+        installer_without_main = self._strip_final_main_call(installer_contents)
         with open(self.sourced_installer_path, "w", encoding="utf-8") as installer_file:
             installer_file.write(installer_without_main)
 
@@ -101,11 +101,7 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         integration_installer_path = os.path.join(
             self.temp_dir.name, "mlcflow_unix_installer_integration_test.sh"
         )
-        stripped_installer_contents = self.installer_contents.rstrip()
-        if stripped_installer_contents.endswith("\nmain"):
-            installer_prefix = stripped_installer_contents.rsplit("\nmain", 1)[0]
-        else:
-            installer_prefix = stripped_installer_contents[:-len("main")]
+        installer_prefix = self._strip_final_main_call(self.installer_contents).rstrip()
         stubbed_functions = textwrap.dedent("""
             detect_os() {
                 OS_ID="ubuntu"

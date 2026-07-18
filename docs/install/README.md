@@ -258,7 +258,10 @@ deactivate
 If the requested virtual environment directory already exists but was created
 for a different platform or Python minor version, the installer will keep the
 existing directory untouched and create or reuse a compatible sibling such as
-`~/mlcflow_x86_64_py3.11` or `~/mlcflow_aarch64_py3.12`.
+`~/mlcflow_x86_64_py3.11` or `~/mlcflow_aarch64_py3.12`. The suffix always
+matches the current platform and Python minor version, so rerunning the
+installer on the same platform will reuse that sibling path when it is
+compatible.
 
 ## Troubleshooting
 
