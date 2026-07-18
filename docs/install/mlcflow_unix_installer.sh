@@ -56,7 +56,7 @@ else
 fi
 
 log_info() {
-    $QUIET && return
+    $QUIET && return 0
     echo -e "${COLOR_GREEN}[INFO]${COLOR_RESET} $1"
 }
 
@@ -69,7 +69,7 @@ log_error() {
 }
 
 log_debug() {
-    $VERBOSE || return
+    $VERBOSE || return 0
     echo -e "${COLOR_BLUE}[DEBUG]${COLOR_RESET} $1"
 }
 
@@ -276,7 +276,11 @@ ensure_python() {
     fi
 
     PY_VERSION=$("$PYTHON_CMD" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+    PY_MAJOR_MINOR="$(get_python_major_minor_version)"
+    PY_ARCH="$(normalize_architecture "$("$PYTHON_CMD" -c 'import platform; print(platform.machine())')")"
     log_info "Detected Python version: $PY_VERSION"
+    log_debug "Detected Python major.minor: $PY_MAJOR_MINOR"
+    log_debug "Detected Python architecture: $PY_ARCH"
 
     if version_ge "$PY_VERSION" "$MIN_PYTHON_VERSION"; then
         log_info "Python version is compatible."
@@ -326,7 +330,9 @@ handle_python_install() {
 # ------------------------------------------------------------------------------
 
 normalize_architecture() {
-    case "$(uname -m)" in
+    local architecture="${1:-$(uname -m)}"
+
+    case "$architecture" in
         x86_64|amd64)
             echo "x86_64"
             ;;
@@ -334,7 +340,7 @@ normalize_architecture() {
             echo "aarch64"
             ;;
         *)
-            uname -m
+            echo "$architecture"
             ;;
     esac
 }
@@ -356,10 +362,13 @@ get_venv_suffix() {
 
 is_compatible_venv() {
     local venv_dir="$1"
-    local venv_python="$venv_dir/bin/python"
+    local venv_python="$venv_dir/bin/python3"
     local current_signature
     local venv_signature
 
+    if [ ! -x "$venv_python" ]; then
+        venv_python="$venv_dir/bin/python"
+    fi
     if [ ! -x "$venv_python" ]; then
         return 1
     fi
@@ -379,12 +388,54 @@ is_compatible_venv() {
 resolve_venv_dir() {
     local requested_venv_dir="$1"
     local resolved_venv_dir="$requested_venv_dir"
+    local compatible_venv_dir="${requested_venv_dir}$(get_venv_suffix)"
 
-    if [ -d "$requested_venv_dir" ] && ! is_compatible_venv "$requested_venv_dir"; then
-        resolved_venv_dir="${requested_venv_dir}$(get_venv_suffix)"
+    if [ -d "$requested_venv_dir" ]; then
+        if is_compatible_venv "$requested_venv_dir"; then
+            echo "$resolved_venv_dir"
+            return
+        fi
+
+        resolved_venv_dir="$compatible_venv_dir"
+        if [ -d "$resolved_venv_dir" ] && ! is_compatible_venv "$resolved_venv_dir"; then
+            log_warn "Removing stale/incompatible virtual environment: $resolved_venv_dir"
+            rm -rf "$resolved_venv_dir"
+        fi
+        echo "$resolved_venv_dir"
+        return
+    fi
+
+    if [ -d "$compatible_venv_dir" ] && is_compatible_venv "$compatible_venv_dir"; then
+        resolved_venv_dir="$compatible_venv_dir"
     fi
 
     echo "$resolved_venv_dir"
+}
+
+is_venv_compatible() {
+    is_compatible_venv "$1"
+}
+
+resolve_default_venv_dir() {
+    local shared_venv_dir="${DEFAULT_VENV_DIR}$(get_venv_suffix)"
+
+    VENV_DIR="$(resolve_venv_dir "$DEFAULT_VENV_DIR")"
+
+    if [ "$VENV_DIR" = "$DEFAULT_VENV_DIR" ] && [ -d "$DEFAULT_VENV_DIR" ]; then
+        log_info "Reusing default virtual environment: $DEFAULT_VENV_DIR"
+        return
+    fi
+
+    if [ "$VENV_DIR" != "$DEFAULT_VENV_DIR" ]; then
+        if [ -d "$DEFAULT_VENV_DIR" ]; then
+            log_warn "Default virtual environment is incompatible with Python ${PY_MAJOR_MINOR} (${PY_ARCH})."
+        fi
+        if [ "$VENV_DIR" = "$shared_venv_dir" ] && [ -d "$shared_venv_dir" ]; then
+            log_info "Reusing platform/python-specific virtual environment: $VENV_DIR"
+        else
+            log_info "Using platform/python-specific virtual environment: $VENV_DIR"
+        fi
+    fi
 }
 
 setup_venv() {
@@ -493,4 +544,6 @@ main() {
     echo "  mlc --help"
 }
 
-main
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+    main
+fi

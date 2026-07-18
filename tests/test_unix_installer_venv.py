@@ -27,29 +27,9 @@ def normalize_architecture(machine):
 
 
 class UnixInstallerVenvTest(unittest.TestCase):
-    def _strip_final_main_call(self, installer_contents):
-        lines = installer_contents.rstrip().splitlines()
-        self.assertEqual(
-            lines[-1].strip(),
-            "main",
-            msg="Expected installer script to end with a standalone main call.",
-        )
-        return "\n".join(lines[:-1]) + "\n"
-
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
-        self.sourced_installer_path = os.path.join(
-            self.temp_dir.name, "mlcflow_unix_installer_for_test.sh"
-        )
-
-        with open(INSTALLER_PATH, "r", encoding="utf-8") as installer_file:
-            installer_contents = installer_file.read()
-        self.installer_contents = installer_contents
-
-        installer_without_main = self._strip_final_main_call(installer_contents)
-        with open(self.sourced_installer_path, "w", encoding="utf-8") as installer_file:
-            installer_file.write(installer_without_main)
 
     def _expected_suffix(self):
         return (
@@ -65,7 +45,7 @@ VENV_DIR={venv_dir}
 setup_venv
 printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
 """.format(
-            installer=shlex.quote(self.sourced_installer_path),
+            installer=shlex.quote(INSTALLER_PATH),
             venv_dir=shlex.quote(venv_dir),
         )
 
@@ -103,8 +83,8 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         integration_installer_path = os.path.join(
             self.temp_dir.name, "mlcflow_unix_installer_integration_test.sh"
         )
-        installer_prefix = self._strip_final_main_call(self.installer_contents).rstrip()
-        stubbed_functions = textwrap.dedent("""
+        stubbed_functions = textwrap.dedent(
+            """
             detect_os() {
                 OS_ID="ubuntu"
                 OS_VERSION="test"
@@ -130,9 +110,18 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
             pull_repo() {
                 :
             }
-        """).strip()
+            """
+        ).strip()
+        with open(INSTALLER_PATH, "r", encoding="utf-8") as installer_file:
+            installer_contents = installer_file.read().rstrip()
         with open(integration_installer_path, "w", encoding="utf-8") as installer_file:
-            installer_file.write(installer_prefix + "\n" + stubbed_functions + "\nmain\n")
+            installer_file.write(
+                installer_contents.replace(
+                    'if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then\n    main\nfi',
+                    stubbed_functions
+                    + '\n\nif [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then\n    main\nfi',
+                )
+            )
         return integration_installer_path
 
     def test_installer_main_runs_setup_venv_with_stubbed_dependencies(self):
