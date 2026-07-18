@@ -87,8 +87,7 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         integration_installer_path = os.path.join(
             self.temp_dir.name, "mlcflow_unix_installer_integration_test.sh"
         )
-        stubbed_functions = textwrap.dedent(
-            """
+        stubbed_functions = textwrap.dedent("""
             detect_os() {
                 OS_ID="ubuntu"
                 OS_VERSION="test"
@@ -114,8 +113,7 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
             pull_repo() {
                 :
             }
-            """
-        ).strip()
+            """).strip()
         with open(INSTALLER_PATH, "r", encoding="utf-8") as installer_file:
             installer_contents = installer_file.read().rstrip()
         main_guard = textwrap.dedent(

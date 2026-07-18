@@ -532,9 +532,19 @@ class RepoAction(Action):
             extra_args = []
             if extra_git_args:
                 if isinstance(extra_git_args, list):
+                    if not all(isinstance(arg, str) for arg in extra_git_args):
+                        return {
+                            "return": 1,
+                            "error": "--extra_git_args list entries must all be strings."
+                        }
                     extra_args = extra_git_args
+                elif isinstance(extra_git_args, str):
+                    extra_args = shlex.split(extra_git_args)
                 else:
-                    extra_args = shlex.split(str(extra_git_args))
+                    return {
+                        "return": 1,
+                        "error": "--extra_git_args must be provided as a string or list of strings."
+                    }
 
             # If the directory doesn't exist, clone it
             if not os.path.exists(repo_path):
