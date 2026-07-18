@@ -114,7 +114,7 @@ jobs:
           response = requests.post(
               "https://api.openai.com/v1/responses",
               headers={
-                  "Authorization": f"******",
+                  "Authorization": f"Bearer {OPENAI_API_KEY}",
                   "Content-Type": "application/json"
               },
               json={
