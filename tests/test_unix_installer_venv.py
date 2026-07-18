@@ -118,13 +118,22 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         ).strip()
         with open(INSTALLER_PATH, "r", encoding="utf-8") as installer_file:
             installer_contents = installer_file.read().rstrip()
+        main_guard = textwrap.dedent(
+            """
+            if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+                main
+            fi
+            """
+        ).strip()
+        replacement = (
+            stubbed_functions
+            + "\n\n"
+            + main_guard
+        )
+        self.assertIn(main_guard, installer_contents)
         with open(integration_installer_path, "w", encoding="utf-8") as installer_file:
             installer_file.write(
-                installer_contents.replace(
-                    'if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then\n    main\nfi',
-                    stubbed_functions
-                    + '\n\nif [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then\n    main\nfi',
-                )
+                installer_contents.replace(main_guard, replacement)
             )
         return integration_installer_path
 
