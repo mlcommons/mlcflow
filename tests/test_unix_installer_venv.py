@@ -40,10 +40,9 @@ class UnixInstallerVenvTest(unittest.TestCase):
             installer_file.write(installer_without_main)
 
     def _expected_suffix(self):
-        return "_{}_py{}.{}".format(
-            normalize_architecture(platform.machine()),
-            sys.version_info[0],
-            sys.version_info[1],
+        return (
+            f"_{normalize_architecture(platform.machine())}"
+            f"_py{sys.version_info[0]}.{sys.version_info[1]}"
         )
 
     def _run_setup_venv(self, venv_dir):

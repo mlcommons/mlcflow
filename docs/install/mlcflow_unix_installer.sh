@@ -380,10 +380,10 @@ resolve_venv_dir() {
 setup_venv() {
     local requested_venv_dir="$VENV_DIR"
     VENV_DIR="$(resolve_venv_dir "$VENV_DIR")"
+    log_info "Setting up virtual environment at: $VENV_DIR"
     if [ "$VENV_DIR" != "$requested_venv_dir" ]; then
         log_warn "Existing virtual environment at $requested_venv_dir is incompatible. Using $VENV_DIR instead."
     fi
-    log_info "Setting up virtual environment at: $VENV_DIR"
 
     if [ -d "$VENV_DIR" ] && is_compatible_venv "$VENV_DIR"; then
         log_info "Reusing existing virtual environment."
