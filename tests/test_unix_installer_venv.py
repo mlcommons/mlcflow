@@ -10,6 +10,8 @@ import unittest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INSTALLER_PATH = os.path.join(REPO_ROOT, "docs", "install", "mlcflow_unix_installer.sh")
+# Keep this in sync with docs/install/mlcflow_unix_installer.sh:
+# normalize_architecture() and get_python_compatibility_signature().
 COMPATIBILITY_SIGNATURE_CODE = (
     'import platform, sys; '
     'print("{}|{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))'
