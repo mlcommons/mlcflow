@@ -49,11 +49,17 @@ jobs:
           DIFF = open("pr.diff").read()[:15000]
 
           prompt = f"""
-          Review this incremental pull request diff.
+          Review this incremental pull request diff for a public engineering repository.
 
           Tasks:
-          1. Write a concise PR summary (overall risks, design issues).
-          2. Provide inline review comments with:
+          1. Write a professional PR summary in 2-4 sentences that:
+             - explains the main change clearly
+             - notes any material risk or follow-up
+             - avoids hype, praise, or filler
+             - says plainly when risk is low
+          2. Provide inline review comments only for concrete, actionable issues.
+             Return an empty comments list when there are no such issues.
+             Each inline comment must include:
              - file
              - line
              - comment
@@ -102,7 +108,7 @@ jobs:
         run: |
           SUMMARY=$(jq -r '.summary' ai_output.json)
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "## 🤖 AI PR Review Summary\n\n$SUMMARY"
+            --body "## 🤖 AI Peer Review\n\n$SUMMARY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
