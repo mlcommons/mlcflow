@@ -576,7 +576,7 @@ def main():
             else:
                 pre_args.target, pre_args.action = pre_args.action, None
             actions = get_action(pre_args.target, default_parent)
-            help_text += actions.__doc__
+            help_text += actions.__doc__ or ""
             # iterate through every method
             for method_name, method in inspect.getmembers(
                     actions.__class__, inspect.isfunction):
@@ -588,7 +588,7 @@ def main():
             action_name = pre_args.action.replace("-", "_")
             try:
                 method = getattr(actions, action_name)
-                help_text += actions.__doc__
+                help_text += actions.__doc__ or ""
                 if method.__doc__:
                     help_text += method.__doc__
             except AttributeError:
