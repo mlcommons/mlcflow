@@ -4,6 +4,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 
 
@@ -11,7 +12,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INSTALLER_PATH = os.path.join(REPO_ROOT, "docs", "install", "mlcflow_unix_installer.sh")
 COMPATIBILITY_SIGNATURE_CODE = (
     'import platform, sys; '
-    'print(f"{platform.machine()}|{sys.version_info[0]}.{sys.version_info[1]}")'
+    'print("{}|{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))'
 )
 
 
@@ -40,7 +41,11 @@ class UnixInstallerVenvTest(unittest.TestCase):
             msg="Expected installer script to end with a standalone main call.",
         )
 
-        installer_without_main = installer_contents.rsplit("\nmain", 1)[0] + "\n"
+        stripped_installer_contents = installer_contents.rstrip()
+        if stripped_installer_contents.endswith("\nmain"):
+            installer_without_main = stripped_installer_contents.rsplit("\nmain", 1)[0] + "\n"
+        else:
+            installer_without_main = stripped_installer_contents[:-len("main")] + "\n"
         with open(self.sourced_installer_path, "w", encoding="utf-8") as installer_file:
             installer_file.write(installer_without_main)
 
@@ -96,34 +101,38 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         integration_installer_path = os.path.join(
             self.temp_dir.name, "mlcflow_unix_installer_integration_test.sh"
         )
-        installer_prefix = self.installer_contents.rsplit("\nmain", 1)[0]
-        stubbed_functions = """
-detect_os() {
-    OS_ID="ubuntu"
-    OS_VERSION="test"
-    PKG_MANAGER="apt"
-}
+        stripped_installer_contents = self.installer_contents.rstrip()
+        if stripped_installer_contents.endswith("\nmain"):
+            installer_prefix = stripped_installer_contents.rsplit("\nmain", 1)[0]
+        else:
+            installer_prefix = stripped_installer_contents[:-len("main")]
+        stubbed_functions = textwrap.dedent("""
+            detect_os() {
+                OS_ID="ubuntu"
+                OS_VERSION="test"
+                PKG_MANAGER="apt"
+            }
 
-check_missing_dependencies() {
-    MISSING_DEPS=()
-}
+            check_missing_dependencies() {
+                MISSING_DEPS=()
+            }
 
-ensure_python() {
-    :
-}
+            ensure_python() {
+                :
+            }
 
-install_mlcflow() {
-    :
-}
+            install_mlcflow() {
+                :
+            }
 
-prompt_repo_details() {
-    :
-}
+            prompt_repo_details() {
+                :
+            }
 
-pull_repo() {
-    :
-}
-"""
+            pull_repo() {
+                :
+            }
+        """).strip()
         with open(integration_installer_path, "w", encoding="utf-8") as installer_file:
             installer_file.write(installer_prefix + "\n" + stubbed_functions + "\nmain\n")
         return integration_installer_path

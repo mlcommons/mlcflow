@@ -340,12 +340,12 @@ normalize_architecture() {
 }
 
 get_python_major_minor_version() {
-    "$PYTHON_CMD" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
+    "$PYTHON_CMD" -c 'import sys; print("{}.{}".format(sys.version_info[0], sys.version_info[1]))'
 }
 
 # $1 should be a Python executable (for example python3 or <venv>/bin/python).
 get_python_compatibility_signature() {
-    "$1" -c 'import platform, sys; print(f"{platform.machine()}|{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null
+    "$1" -c 'import platform, sys; print("{}|{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))' 2>/dev/null
 }
 
 get_venv_suffix() {
