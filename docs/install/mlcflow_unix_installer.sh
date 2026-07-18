@@ -338,7 +338,7 @@ normalize_architecture() {
     esac
 }
 
-get_python_minor_version() {
+get_python_major_minor_version() {
     python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
 }
 
@@ -356,7 +356,9 @@ is_compatible_venv() {
         return 1
     fi
 
-    current_signature="$(get_python_compatibility_signature python3)"
+    if ! current_signature="$(get_python_compatibility_signature python3)"; then
+        return 1
+    fi
     if ! venv_signature="$(get_python_compatibility_signature "$venv_python")"; then
         return 1
     fi
@@ -369,7 +371,7 @@ resolve_venv_dir() {
     local resolved_venv_dir="$requested_venv_dir"
 
     if [ -d "$requested_venv_dir" ] && ! is_compatible_venv "$requested_venv_dir"; then
-        resolved_venv_dir="${requested_venv_dir}_$(normalize_architecture)_py$(get_python_minor_version)"
+        resolved_venv_dir="${requested_venv_dir}_$(normalize_architecture)_py$(get_python_major_minor_version)"
     fi
 
     echo "$resolved_venv_dir"

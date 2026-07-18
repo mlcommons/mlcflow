@@ -75,6 +75,33 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         _, resolved_path, activated_path = result_lines[-1].split(":", 2)
         return resolved_path, activated_path, completed.stdout
 
+    def _compatibility_signature(self, python_executable):
+        completed = subprocess.run(
+            [
+                python_executable,
+                "-c",
+                "import platform, sys; print(f\"{platform.machine()}|{sys.version_info[0]}.{sys.version_info[1]}\")",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return completed.stdout.strip()
+
+    def test_setup_venv_creates_requested_path_from_scratch(self):
+        venv_dir = os.path.join(self.temp_dir.name, "mlcflow")
+
+        resolved_path, activated_path, stdout = self._run_setup_venv(venv_dir)
+
+        self.assertEqual(resolved_path, venv_dir)
+        self.assertEqual(activated_path, venv_dir)
+        self.assertIn("Setting up virtual environment at", stdout)
+        self.assertTrue(os.path.exists(os.path.join(venv_dir, "bin", "python")))
+        self.assertEqual(
+            self._compatibility_signature(os.path.join(venv_dir, "bin", "python")),
+            self._compatibility_signature(sys.executable),
+        )
+
     def test_setup_venv_reuses_compatible_existing_venv(self):
         venv_dir = os.path.join(self.temp_dir.name, "mlcflow")
         subprocess.run(
@@ -88,6 +115,10 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         self.assertEqual(resolved_path, venv_dir)
         self.assertEqual(activated_path, venv_dir)
         self.assertIn("Reusing existing virtual environment.", stdout)
+        self.assertEqual(
+            self._compatibility_signature(os.path.join(venv_dir, "bin", "python")),
+            self._compatibility_signature(sys.executable),
+        )
 
     def test_setup_venv_uses_arch_and_python_suffix_for_incompatible_dir(self):
         venv_dir = os.path.join(self.temp_dir.name, "mlcflow")
@@ -100,6 +131,10 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         self.assertEqual(activated_path, expected_path)
         self.assertIn("is incompatible. Using", stdout)
         self.assertTrue(os.path.exists(os.path.join(expected_path, "bin", "python")))
+        self.assertEqual(
+            self._compatibility_signature(os.path.join(expected_path, "bin", "python")),
+            self._compatibility_signature(sys.executable),
+        )
 
 
 if __name__ == "__main__":
