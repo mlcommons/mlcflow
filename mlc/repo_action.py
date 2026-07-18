@@ -72,6 +72,13 @@ class RepoAction(Action):
         First tries to checkout an existing local branch. If that fails, fetches
         the branch from origin and creates a new tracking branch. Raises
         RuntimeError with contextual guidance when the branch cannot be prepared.
+
+        Args:
+            repo_path: Local repository path.
+            branch: Branch name to prepare before pulling.
+
+        Raises:
+            RuntimeError: If the branch cannot be fetched or checked out.
         """
         try:
             subprocess.run(
@@ -111,6 +118,7 @@ class RepoAction(Action):
 
     @staticmethod
     def _subprocess_error_message(error):
+        """Return the most helpful message from a subprocess-related error."""
         return (error.stderr or error.stdout or str(error)).strip()
 
     def add(self, run_args):
