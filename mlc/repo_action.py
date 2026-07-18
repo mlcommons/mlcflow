@@ -73,9 +73,6 @@ class RepoAction(Action):
         the branch from origin and creates a new tracking branch. Raises
         RuntimeError with contextual guidance when the branch cannot be prepared.
         """
-        def _subprocess_error_message(error):
-            return (error.stderr or error.stdout or str(error)).strip()
-
         try:
             subprocess.run(
                 ['git', '-C', repo_path, 'checkout', branch],
@@ -92,7 +89,7 @@ class RepoAction(Action):
             except subprocess.CalledProcessError as fetch_error:
                 raise RuntimeError(
                     f"Failed to fetch branch '{branch}' in {repo_path}: "
-                    f"{_subprocess_error_message(fetch_error)}. "
+                    f"{self._subprocess_error_message(fetch_error)}. "
                     "Ensure the branch exists on origin and that the repository is reachable."
                 ) from fetch_error
 
@@ -105,11 +102,16 @@ class RepoAction(Action):
                     check=True)
             except subprocess.CalledProcessError as tracking_error:
                 raise RuntimeError(
-                    f"Failed to prepare branch '{branch}' in {repo_path}. "
-                    f"Initial checkout failed with: {_subprocess_error_message(checkout_error)}. "
-                    f"Creating the tracking branch then failed with: {_subprocess_error_message(tracking_error)}. "
+                    f"Initial checkout of '{branch}' failed in {repo_path}. "
+                    "After fetching from origin, creating a tracking branch also failed. "
+                    f"Initial error: {self._subprocess_error_message(checkout_error)}. "
+                    f"Tracking branch error: {self._subprocess_error_message(tracking_error)}. "
                     "Check that the branch name is correct and that your local checkout can track origin."
                 ) from tracking_error
+
+    @staticmethod
+    def _subprocess_error_message(error):
+        return (error.stderr or error.stdout or str(error)).strip()
 
     def add(self, run_args):
         """
