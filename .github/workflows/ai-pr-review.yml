@@ -72,10 +72,10 @@ jobs:
                   return text
 
               lines = text.splitlines()
-              if lines:
-                  lines = lines[1:]
-              if lines and lines[-1].strip() == "```":
-                  lines = lines[:-1]
+              if len(lines) < 2 or lines[-1].strip() != "```":
+                  return text
+
+              lines = lines[1:-1]
 
               return "\n".join(lines).strip()
 

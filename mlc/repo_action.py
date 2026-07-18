@@ -183,7 +183,7 @@ class RepoAction(Action):
 
     @staticmethod
     def _subprocess_error_message(error):
-        """Return the most helpful message from a subprocess-related error."""
+        """Return stderr, then stdout, then str(error), whichever is populated first."""
         return (error.stderr or error.stdout or str(error)).strip()
 
     def add(self, run_args):
@@ -521,7 +521,7 @@ class RepoAction(Action):
                     clone_depth = int(depth)
                 except (TypeError, ValueError):
                     return {
-                        "return": 1, "error": f"Invalid value for --depth: {depth!r}. Must be a positive integer."}
+                        "return": 1, "error": f"Invalid value for --depth: {depth}. Must be a positive integer."}
                 if clone_depth < 1:
                     return {
                         "return": 1, "error": f"Invalid value for --depth: {clone_depth}. Must be a positive integer."}
