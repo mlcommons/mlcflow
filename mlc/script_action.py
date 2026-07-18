@@ -244,7 +244,8 @@ Main Script Meta:""")
                 "automation": "repo",
                 "action": "pull",
                 "repo": "mlcommons@mlperf-automations",
-                "branch": "dev"
+                "branch": "dev",
+                "fast_forward_only": True
             })
 
             if result['return'] == 0:
