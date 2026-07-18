@@ -6,7 +6,8 @@ from mlc.script_action import ScriptAction
 
 
 class _Parent:
-    repos_path = tempfile.gettempdir()
+    def __init__(self):
+        self.repos_path = tempfile.gettempdir()
 
 
 class ScriptActionApptainerTest(unittest.TestCase):
@@ -27,6 +28,7 @@ class ScriptActionApptainerTest(unittest.TestCase):
 
     def test_auto_pull_uses_fast_forward_only_for_mlperf_automations(self):
         action = ScriptAction(_Parent())
+        self.assertEqual(action.repos_path, tempfile.gettempdir())
 
         with patch.object(
                 ScriptAction,

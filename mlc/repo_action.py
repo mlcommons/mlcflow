@@ -58,10 +58,10 @@ class RepoAction(Action):
                     f"--depth/--shallow ignored for pull on non-shallow repo {repo_path}. "
                     "Re-clone with --shallow to create a shallow copy."
                 )
-        # Preserve the historical CLI behavior for existing repositories:
-        # standard `mlc pull repo` continues to run a plain `git pull`
-        # without forcing `origin <branch>`, while the internal strict
-        # auto-pull path applies the branch argument explicitly.
+        # Preserve the historical existing-repo behavior of a plain
+        # `git pull` by default. The branch argument is only forwarded to
+        # `git pull` when the internal strict path explicitly opts into
+        # fast-forward-only updates.
         if branch and fast_forward_only:
             pull_command.extend(['origin', branch])
         return pull_command
@@ -84,7 +84,8 @@ class RepoAction(Action):
                 error_message = (
                     fetch_error.stderr or fetch_error.stdout or str(fetch_error)).strip()
                 raise RuntimeError(
-                    f"Failed to fetch branch '{branch}' in {repo_path}: {error_message}"
+                    f"Failed to fetch branch '{branch}' in {repo_path}: {error_message}. "
+                    "Ensure the branch exists on origin and that the repository is reachable."
                 ) from fetch_error
 
             try:
@@ -102,7 +103,8 @@ class RepoAction(Action):
                 raise RuntimeError(
                     f"Failed to prepare branch '{branch}' in {repo_path}. "
                     f"Initial checkout failed with: {checkout_message}. "
-                    f"Creating the tracking branch then failed with: {tracking_message}"
+                    f"Creating the tracking branch then failed with: {tracking_message}. "
+                    "Check that the branch name is correct and that your local checkout can track origin."
                 ) from tracking_error
 
     def add(self, run_args):
