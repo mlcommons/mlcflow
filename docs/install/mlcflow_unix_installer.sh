@@ -20,6 +20,7 @@ MIN_PYTHON_VERSION="3.7"
 DEFAULT_VENV_DIR="$HOME/mlcflow"
 DEFAULT_REPO="mlcommons@mlperf-automations"
 DEFAULT_BRANCH="dev"
+PYTHON_CMD="python3"
 
 UPGRADE=false
 ASSUME_YES=false
@@ -205,11 +206,11 @@ require_root_if_needed() {
 }
 
 have_pip_module() {
-    python3 -m pip --version >/dev/null 2>&1
+    "$PYTHON_CMD" -m pip --version >/dev/null 2>&1
 }
 
 have_venv_module() {
-    python3 -c 'import venv' >/dev/null 2>&1
+    "$PYTHON_CMD" -c 'import venv' >/dev/null 2>&1
 }
 
 check_missing_dependencies() {
@@ -264,17 +265,17 @@ version_ge() {
 }
 
 ensure_python() {
-    if ! command -v python3 >/dev/null 2>&1; then
+    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
         log_warn "Python3 not found."
         handle_python_install
     fi
 
-    if ! command -v python3 >/dev/null 2>&1; then
+    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
         log_error "Python3 is still unavailable after attempted installation."
         exit 1
     fi
 
-    PY_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+    PY_VERSION=$("$PYTHON_CMD" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
     log_info "Detected Python version: $PY_VERSION"
 
     if version_ge "$PY_VERSION" "$MIN_PYTHON_VERSION"; then
@@ -339,11 +340,15 @@ normalize_architecture() {
 }
 
 get_python_major_minor_version() {
-    python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
+    "$PYTHON_CMD" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
 }
 
 get_python_compatibility_signature() {
     "$1" -c 'import platform, sys; print(f"{platform.machine()}|{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null
+}
+
+get_venv_suffix() {
+    echo "_$(normalize_architecture)_py$(get_python_major_minor_version)"
 }
 
 is_compatible_venv() {
@@ -356,7 +361,7 @@ is_compatible_venv() {
         return 1
     fi
 
-    if ! current_signature="$(get_python_compatibility_signature python3)"; then
+    if ! current_signature="$(get_python_compatibility_signature "$PYTHON_CMD")"; then
         return 1
     fi
     if ! venv_signature="$(get_python_compatibility_signature "$venv_python")"; then
@@ -371,7 +376,7 @@ resolve_venv_dir() {
     local resolved_venv_dir="$requested_venv_dir"
 
     if [ -d "$requested_venv_dir" ] && ! is_compatible_venv "$requested_venv_dir"; then
-        resolved_venv_dir="${requested_venv_dir}_$(normalize_architecture)_py$(get_python_major_minor_version)"
+        resolved_venv_dir="${requested_venv_dir}$(get_venv_suffix)"
     fi
 
     echo "$resolved_venv_dir"
@@ -388,7 +393,7 @@ setup_venv() {
     if [ -d "$VENV_DIR" ] && is_compatible_venv "$VENV_DIR"; then
         log_info "Reusing existing virtual environment."
     else
-        python3 -m venv "$VENV_DIR"
+        "$PYTHON_CMD" -m venv "$VENV_DIR"
     fi
 
     # Activate venv
@@ -401,16 +406,16 @@ setup_venv() {
 # ------------------------------------------------------------------------------
 
 install_mlcflow() {
-    if python3 -m pip show mlcflow >/dev/null 2>&1; then
+    if "$PYTHON_CMD" -m pip show mlcflow >/dev/null 2>&1; then
         if $UPGRADE; then
             log_info "Upgrading mlcflow..."
-            python3 -m pip install --upgrade mlcflow
+            "$PYTHON_CMD" -m pip install --upgrade mlcflow
         else
             log_info "mlcflow already installed. Skipping."
         fi
     else
         log_info "Installing mlcflow..."
-        python3 -m pip install mlcflow
+        "$PYTHON_CMD" -m pip install mlcflow
     fi
 }
 

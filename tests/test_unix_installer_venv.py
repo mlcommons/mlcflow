@@ -9,6 +9,10 @@ import unittest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INSTALLER_PATH = os.path.join(REPO_ROOT, "docs", "install", "mlcflow_unix_installer.sh")
+COMPATIBILITY_SIGNATURE_CODE = (
+    'import platform, sys; '
+    'print(f"{platform.machine()}|{sys.version_info[0]}.{sys.version_info[1]}")'
+)
 
 
 def normalize_architecture(machine):
@@ -79,7 +83,7 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
             [
                 python_executable,
                 "-c",
-                "import platform, sys; print(f\"{platform.machine()}|{sys.version_info[0]}.{sys.version_info[1]}\")",
+                COMPATIBILITY_SIGNATURE_CODE,
             ],
             capture_output=True,
             text=True,
