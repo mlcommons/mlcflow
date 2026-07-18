@@ -10,6 +10,7 @@ from .logger import logger
 from urllib.parse import urlparse
 from .repo import Repo
 from .index import Index
+from filelock import FileLock, Timeout
 
 
 class RepoAction(Action):
@@ -173,16 +174,18 @@ class RepoAction(Action):
         # Get the path to the repos.json file in $HOME/MLC
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
 
-        with open(repos_file_path, 'r') as f:
-            repos_list = json.load(f)
+        repos_lock_file = repos_file_path + ".lock"
+        with FileLock(repos_lock_file, timeout=60):
+            with open(repos_file_path, 'r') as f:
+                repos_list = json.load(f)
 
-        if repo_path not in repos_list:
-            repos_list.append(repo_path)
-            logger.info(f"Added new repo path: {repo_path}")
+            if repo_path not in repos_list:
+                repos_list.append(repo_path)
+                logger.info(f"Added new repo path: {repo_path}")
 
-        with open(repos_file_path, 'w') as f:
-            json.dump(repos_list, f, indent=2)
-            logger.info(f"Updated repos.json at {repos_file_path}")
+            with open(repos_file_path, 'w') as f:
+                json.dump(repos_list, f, indent=2)
+                logger.info(f"Updated repos.json at {repos_file_path}")
 
         self.repos = self.load_repos_and_meta()
         repo_obj = next(
@@ -358,180 +361,182 @@ class RepoAction(Action):
                 repo_path = os.path.join(repo_base_path, repo_download_name)
 
         try:
-            # If the directory doesn't exist, clone it
-            if not os.path.exists(repo_path):
-                logger.info(f"Cloning repository {repo_url} to {repo_path}...")
+            repo_lock_file = repo_path + ".lock"
+            with FileLock(repo_lock_file, timeout=300):
+                # If the directory doesn't exist, clone it
+                if not os.path.exists(repo_path):
+                    logger.info(f"Cloning repository {repo_url} to {repo_path}...")
 
-                # Build clone command without branch if not provided
-                clone_command = ['git', 'clone', repo_url, repo_path]
-                if branch:
-                    clone_command = [
-                        'git',
-                        'clone',
-                        '--branch',
-                        branch,
-                        repo_url,
-                        repo_path]
+                    # Build clone command without branch if not provided
+                    clone_command = ['git', 'clone', repo_url, repo_path]
+                    if branch:
+                        clone_command = [
+                            'git',
+                            'clone',
+                            '--branch',
+                            branch,
+                            repo_url,
+                            repo_path]
 
-                subprocess.run(clone_command, check=True)
+                    subprocess.run(clone_command, check=True)
 
-            else:
-                logger.info(
-                    f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
-
-                # Check for local changes
-                status_command = [
-                    'git',
-                    '-C',
-                    repo_path,
-                    'status',
-                    '--porcelain',
-                    '--untracked-files=no']
-                local_changes = subprocess.run(
-                    status_command, capture_output=True, text=True)
-
-                if local_changes.stdout.strip():
-                    if not force:
-                        logger.warning(
-                            "There are local changes in the repository. Please commit or stash them before checking out.")
-                        print(local_changes.stdout.strip())
-                        return {
-                            "return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
-
-                    logger.warning(
-                        "Local changes detected. Running force pull with temporary git stash.")
-                    stash_created = False
-                    try:
-                        stash_before = subprocess.run(
-                            ['git', '-C', repo_path, 'stash', 'list'],
-                            capture_output=True,
-                            text=True,
-                            check=True
-                        )
-                        stash_res = subprocess.run(
-                            ['git', '-C', repo_path, 'stash', 'push',
-                                '-m', 'mlc pull repo --force'],
-                            capture_output=True,
-                            text=True,
-                            check=True
-                        )
-                        stash_after = subprocess.run(
-                            ['git', '-C', repo_path, 'stash', 'list'],
-                            capture_output=True,
-                            text=True,
-                            check=True
-                        )
-                        stash_created = len(stash_after.stdout.splitlines()
-                                            ) > len(stash_before.stdout.splitlines())
-                    except subprocess.CalledProcessError as e:
-                        stash_error = (e.stderr or e.stdout or str(e)).strip()
-                        return {
-                            "return": 1,
-                            "error": f"Force pull failed while stashing local changes in {repo_path}: {stash_error}"
-                        }
-
+                else:
                     logger.info(
-                        "Pulling latest changes...")
-                    try:
-                        subprocess.run(
-                            ['git', '-C', repo_path, 'pull'],
-                            capture_output=True,
-                            text=True,
-                            check=True)
-                    except subprocess.CalledProcessError as e:
-                        pull_error = (e.stderr or e.stdout or str(e)).strip()
-                        if stash_created:
+                        f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
+
+                    # Check for local changes
+                    status_command = [
+                        'git',
+                        '-C',
+                        repo_path,
+                        'status',
+                        '--porcelain',
+                        '--untracked-files=no']
+                    local_changes = subprocess.run(
+                        status_command, capture_output=True, text=True)
+
+                    if local_changes.stdout.strip():
+                        if not force:
+                            logger.warning(
+                                "There are local changes in the repository. Please commit or stash them before checking out.")
+                            print(local_changes.stdout.strip())
+                            return {
+                                "return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
+
+                        logger.warning(
+                            "Local changes detected. Running force pull with temporary git stash.")
+                        stash_created = False
+                        try:
+                            stash_before = subprocess.run(
+                                ['git', '-C', repo_path, 'stash', 'list'],
+                                capture_output=True,
+                                text=True,
+                                check=True
+                            )
+                            stash_res = subprocess.run(
+                                ['git', '-C', repo_path, 'stash', 'push',
+                                    '-m', 'mlc pull repo --force'],
+                                capture_output=True,
+                                text=True,
+                                check=True
+                            )
+                            stash_after = subprocess.run(
+                                ['git', '-C', repo_path, 'stash', 'list'],
+                                capture_output=True,
+                                text=True,
+                                check=True
+                            )
+                            stash_created = len(stash_after.stdout.splitlines()
+                                                ) > len(stash_before.stdout.splitlines())
+                        except subprocess.CalledProcessError as e:
+                            stash_error = (e.stderr or e.stdout or str(e)).strip()
                             return {
                                 "return": 1,
-                                "error": f"Force pull failed during git pull for {repo_path}. Local changes remain in stash. Please run `git -C {repo_path} stash apply` after resolving pull issues. Details: {pull_error}"
+                                "error": f"Force pull failed while stashing local changes in {repo_path}: {stash_error}"
                             }
-                        return {
-                            "return": 1,
-                            "error": f"Force pull failed during git pull for {repo_path}: {pull_error}"
-                        }
-                    logger.info("Repository successfully pulled.")
 
-                    if stash_created:
+                        logger.info(
+                            "Pulling latest changes...")
                         try:
                             subprocess.run(
-                                ['git', '-C', repo_path, 'stash', 'apply'],
+                                ['git', '-C', repo_path, 'pull'],
                                 capture_output=True,
                                 text=True,
                                 check=True)
-                            subprocess.run(
-                                ['git', '-C', repo_path, 'stash', 'drop'],
-                                capture_output=True,
-                                text=True,
-                                check=True)
-                            logger.info(
-                                "Local changes restored successfully after force pull.")
-                        except subprocess.CalledProcessError as apply_error:
-                            apply_error_msg = (
-                                apply_error.stderr or apply_error.stdout or str(apply_error)).strip()
+                        except subprocess.CalledProcessError as e:
+                            pull_error = (e.stderr or e.stdout or str(e)).strip()
+                            if stash_created:
+                                return {
+                                    "return": 1,
+                                    "error": f"Force pull failed during git pull for {repo_path}. Local changes remain in stash. Please run `git -C {repo_path} stash apply` after resolving pull issues. Details: {pull_error}"
+                                }
+                            return {
+                                "return": 1,
+                                "error": f"Force pull failed during git pull for {repo_path}: {pull_error}"
+                            }
+                        logger.info("Repository successfully pulled.")
+
+                        if stash_created:
                             try:
                                 subprocess.run(
-                                    ['git', '-C', repo_path,
-                                        'reset', '--hard', 'HEAD'],
+                                    ['git', '-C', repo_path, 'stash', 'apply'],
                                     capture_output=True,
                                     text=True,
                                     check=True)
-                            except subprocess.CalledProcessError as reset_exception:
-                                reset_error_msg = (
-                                    reset_exception.stderr or reset_exception.stdout or str(reset_exception)).strip()
+                                subprocess.run(
+                                    ['git', '-C', repo_path, 'stash', 'drop'],
+                                    capture_output=True,
+                                    text=True,
+                                    check=True)
+                                logger.info(
+                                    "Local changes restored successfully after force pull.")
+                            except subprocess.CalledProcessError as apply_error:
+                                apply_error_msg = (
+                                    apply_error.stderr or apply_error.stdout or str(apply_error)).strip()
+                                try:
+                                    subprocess.run(
+                                        ['git', '-C', repo_path,
+                                            'reset', '--hard', 'HEAD'],
+                                        capture_output=True,
+                                        text=True,
+                                        check=True)
+                                except subprocess.CalledProcessError as reset_exception:
+                                    reset_error_msg = (
+                                        reset_exception.stderr or reset_exception.stdout or str(reset_exception)).strip()
+                                    return {
+                                        "return": 1,
+                                        "error": f"Stash apply conflicted and automatic rollback failed for {repo_path}: {reset_error_msg}. Original stash apply error: {apply_error_msg}"
+                                    }
+                                logger.warning(
+                                    f"Stash apply reported conflicts after pull. Reverted partial stash apply. "
+                                    f"Please resolve manually with `git -C {repo_path} stash apply`.")
                                 return {
-                                    "return": 1,
-                                    "error": f"Stash apply conflicted and automatic rollback failed for {repo_path}: {reset_error_msg}. Original stash apply error: {apply_error_msg}"
+                                    "return": 0,
+                                    "warning": f"Force pull succeeded for {repo_path}, but stash apply had conflicts. Partial apply was reverted. Please apply the stash manually."
                                 }
-                            logger.warning(
-                                f"Stash apply reported conflicts after pull. Reverted partial stash apply. "
-                                f"Please resolve manually with `git -C {repo_path} stash apply`.")
-                            return {
-                                "return": 0,
-                                "warning": f"Force pull succeeded for {repo_path}, but stash apply had conflicts. Partial apply was reverted. Please apply the stash manually."
-                            }
-                else:
-                    logger.info(
-                        "No local changes detected. Pulling latest changes...")
+                    else:
+                        logger.info(
+                            "No local changes detected. Pulling latest changes...")
+                        subprocess.run(
+                            ['git', '-C', repo_path, 'pull'], check=True)
+                        logger.info("Repository successfully pulled.")
+
+                if tag:
+                    checkout = "tags/" + tag
+
+                # Checkout to a specific branch or commit if --checkout is provided
+                if checkout or tag:
+                    logger.info(f"Checking out to {checkout} in {repo_path}...")
                     subprocess.run(
-                        ['git', '-C', repo_path, 'pull'], check=True)
-                    logger.info("Repository successfully pulled.")
+                        ['git', '-C', repo_path, 'checkout', checkout], check=True)
 
-            if tag:
-                checkout = "tags/" + tag
+                # if not tag:
+                #    subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
+                #    logger.info("Repository successfully pulled.")
 
-            # Checkout to a specific branch or commit if --checkout is provided
-            if checkout or tag:
-                logger.info(f"Checking out to {checkout} in {repo_path}...")
-                subprocess.run(
-                    ['git', '-C', repo_path, 'checkout', checkout], check=True)
+                logger.info("Registering the repo in repos.json")
 
-            # if not tag:
-            #    subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
-            #    logger.info("Repository successfully pulled.")
+                # check the meta file to obtain uids
+                meta_file_path = os.path.join(repo_path, 'meta.yaml')
+                if not os.path.exists(meta_file_path):
+                    logger.warning(
+                        f"meta.yaml not found in {repo_path}. Repo pulled but not registered in MLC repos. Skipping...")
+                    return {"return": 0}
 
-            logger.info("Registering the repo in repos.json")
+                try:
+                    with open(meta_file_path, 'r') as meta_file:
+                        meta_data = yaml.safe_load(meta_file)
+                        meta_data["path"] = repo_path
+                except yaml.YAMLError as e:
+                    logger.error(f"Error loading YAML configuration: {e}")
+                    return {"return": 1,
+                            "error": f"Syntax error in {meta_file_path}: {e}"}
 
-            # check the meta file to obtain uids
-            meta_file_path = os.path.join(repo_path, 'meta.yaml')
-            if not os.path.exists(meta_file_path):
-                logger.warning(
-                    f"meta.yaml not found in {repo_path}. Repo pulled but not registered in MLC repos. Skipping...")
+                r = self.register_repo(repo_path, meta_data, ignore_on_conflict)
+                if r['return'] > 0:
+                    return r
+
                 return {"return": 0}
-
-            try:
-                with open(meta_file_path, 'r') as meta_file:
-                    meta_data = yaml.safe_load(meta_file)
-                    meta_data["path"] = repo_path
-            except yaml.YAMLError as e:
-                logger.error(f"Error loading YAML configuration: {e}")
-                return {"return": 1,
-                        "error": f"Syntax error in {meta_file_path}: {e}"}
-
-            r = self.register_repo(repo_path, meta_data, ignore_on_conflict)
-            if r['return'] > 0:
-                return r
-
-            return {"return": 0}
 
         except subprocess.CalledProcessError as e:
             return {'return': 1, 'error': f"Git command failed: {e}"}
@@ -781,16 +786,18 @@ def rm_repo(repo_path, repos_file_path, force_remove):
 def unregister_repo(repo_path, repos_file_path):
     logger.info(f"Unregistering the repo in path {repo_path}")
 
-    with open(repos_file_path, 'r') as f:
-        repos_list = json.load(f)
+    repos_lock_file = repos_file_path + ".lock"
+    with FileLock(repos_lock_file, timeout=60):
+        with open(repos_file_path, 'r') as f:
+            repos_list = json.load(f)
 
-    if repo_path in repos_list:
-        repos_list.remove(repo_path)
-        with open(repos_file_path, 'w') as f:
-            json.dump(repos_list, f, indent=2)
-        logger.info(f"Path: {repo_path} has been removed.")
-    else:
-        logger.info(
-            f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
+        if repo_path in repos_list:
+            repos_list.remove(repo_path)
+            with open(repos_file_path, 'w') as f:
+                json.dump(repos_list, f, indent=2)
+            logger.info(f"Path: {repo_path} has been removed.")
+        else:
+            logger.info(
+                f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
 
     return {'return': 0}
