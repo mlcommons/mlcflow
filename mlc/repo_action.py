@@ -67,6 +67,15 @@ class RepoAction(Action):
         return pull_command
 
     def _checkout_pull_branch(self, repo_path, branch):
+        """Ensure *branch* is checked out locally before a strict pull.
+
+        First tries to checkout an existing local branch. If that fails, fetches
+        the branch from origin and creates a new tracking branch. Raises
+        RuntimeError with contextual guidance when the branch cannot be prepared.
+        """
+        def _subprocess_error_message(error):
+            return (error.stderr or error.stdout or str(error)).strip()
+
         try:
             subprocess.run(
                 ['git', '-C', repo_path, 'checkout', branch],
@@ -81,10 +90,9 @@ class RepoAction(Action):
                     text=True,
                     check=True)
             except subprocess.CalledProcessError as fetch_error:
-                error_message = (
-                    fetch_error.stderr or fetch_error.stdout or str(fetch_error)).strip()
                 raise RuntimeError(
-                    f"Failed to fetch branch '{branch}' in {repo_path}: {error_message}. "
+                    f"Failed to fetch branch '{branch}' in {repo_path}: "
+                    f"{_subprocess_error_message(fetch_error)}. "
                     "Ensure the branch exists on origin and that the repository is reachable."
                 ) from fetch_error
 
@@ -96,14 +104,10 @@ class RepoAction(Action):
                     text=True,
                     check=True)
             except subprocess.CalledProcessError as tracking_error:
-                tracking_message = (
-                    tracking_error.stderr or tracking_error.stdout or str(tracking_error)).strip()
-                checkout_message = (
-                    checkout_error.stderr or checkout_error.stdout or str(checkout_error)).strip()
                 raise RuntimeError(
                     f"Failed to prepare branch '{branch}' in {repo_path}. "
-                    f"Initial checkout failed with: {checkout_message}. "
-                    f"Creating the tracking branch then failed with: {tracking_message}. "
+                    f"Initial checkout failed with: {_subprocess_error_message(checkout_error)}. "
+                    f"Creating the tracking branch then failed with: {_subprocess_error_message(tracking_error)}. "
                     "Check that the branch name is correct and that your local checkout can track origin."
                 ) from tracking_error
 
