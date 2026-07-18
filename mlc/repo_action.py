@@ -14,6 +14,9 @@ from .index import Index
 
 
 class RepoAction(Action):
+    GIT_MISSING_BRANCH_PHRASE = "did not match any file(s) known to git"
+    GIT_FAST_FORWARD_FAILURE_PHRASE = "not possible to fast-forward"
+
     """
     ####################################################################################################################
     Repo Action
@@ -90,9 +93,12 @@ class RepoAction(Action):
             checkout_error_message = self._subprocess_error_message(
                 checkout_error)
             lowered_checkout_error = checkout_error_message.lower()
+            # Git uses the same exit code for many checkout failures, so we
+            # only fall back to fetch+track when stderr matches Git's standard
+            # "pathspec ... did not match any file(s) known to git" wording.
             missing_local_branch = (
                 "pathspec" in lowered_checkout_error
-                and "did not match any file(s) known to git" in lowered_checkout_error
+                and self.GIT_MISSING_BRANCH_PHRASE in lowered_checkout_error
             )
             if not missing_local_branch:
                 raise RuntimeError(
@@ -144,7 +150,9 @@ class RepoAction(Action):
 
         resolution = ""
         lowered_error = error_message.lower()
-        if "not possible to fast-forward" in lowered_error:
+        # Git reports ff-only failures via stderr text instead of a distinct
+        # exit code, so use the canonical phrase to add actionable guidance.
+        if self.GIT_FAST_FORWARD_FAILURE_PHRASE in lowered_error:
             resolution = (
                 " Check whether the local and remote branches have diverged "
                 "and reconcile them manually before retrying."
