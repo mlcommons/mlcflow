@@ -59,8 +59,9 @@ class RepoAction(Action):
                     "Re-clone with --shallow to create a shallow copy."
                 )
         # Preserve the historical CLI behavior for existing repositories:
-        # branch-specific pulls are only used by the internal strict auto-pull
-        # path that opts into fast-forward-only updates.
+        # the branch argument is only applied to the pull command by the
+        # internal strict auto-pull path that opts into fast-forward-only
+        # updates.
         if branch and fast_forward_only:
             pull_command.extend(['origin', branch])
         return pull_command
@@ -87,11 +88,8 @@ class RepoAction(Action):
                     check=True)
             except subprocess.CalledProcessError as e:
                 error_message = (e.stderr or e.stdout or str(e)).strip()
-                raise subprocess.CalledProcessError(
-                    e.returncode,
-                    e.cmd,
-                    output=e.output,
-                    stderr=f"Failed to prepare branch '{branch}' in {repo_path}: {error_message}"
+                raise RuntimeError(
+                    f"Failed to prepare branch '{branch}' in {repo_path}: {error_message}"
                 ) from e
 
     def add(self, run_args):
@@ -624,6 +622,8 @@ class RepoAction(Action):
 
             return {"return": 0}
 
+        except RuntimeError as e:
+            return {'return': 1, 'error': str(e)}
         except subprocess.CalledProcessError as e:
             return {'return': 1, 'error': f"Git command failed: {e}"}
         except Exception as e:
