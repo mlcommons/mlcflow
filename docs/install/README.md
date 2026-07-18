@@ -255,6 +255,11 @@ deactivate
 - **Automation Repository**: `~/MLC/repos/mlcommons@mlperf-automations/`
 - **MLC Cache**: `~/MLC/repos/`
 
+If the requested virtual environment directory already exists but was created
+for a different platform or Python minor version, the installer will keep the
+existing directory untouched and create or reuse a compatible sibling such as
+`~/mlcflow_x86_64_py3.11` or `~/mlcflow_aarch64_py3.12`.
+
 ## Troubleshooting
 
 ### "Python version < 3.7"

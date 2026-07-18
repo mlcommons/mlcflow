@@ -324,10 +324,66 @@ handle_python_install() {
 # Virtual Environment
 # ------------------------------------------------------------------------------
 
+normalize_architecture() {
+    case "$(uname -m)" in
+        x86_64|amd64)
+            echo "x86_64"
+            ;;
+        aarch64|arm64)
+            echo "aarch64"
+            ;;
+        *)
+            uname -m
+            ;;
+    esac
+}
+
+get_python_minor_version() {
+    python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
+}
+
+get_python_compatibility_signature() {
+    "$1" -c 'import platform, sys; print(f"{platform.machine()}|{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null
+}
+
+is_compatible_venv() {
+    local venv_dir="$1"
+    local venv_python="$venv_dir/bin/python"
+    local current_signature
+    local venv_signature
+
+    if [ ! -x "$venv_python" ]; then
+        return 1
+    fi
+
+    current_signature="$(get_python_compatibility_signature python3)"
+    if ! venv_signature="$(get_python_compatibility_signature "$venv_python")"; then
+        return 1
+    fi
+
+    [ "$venv_signature" = "$current_signature" ]
+}
+
+resolve_venv_dir() {
+    local requested_venv_dir="$1"
+    local resolved_venv_dir="$requested_venv_dir"
+
+    if [ -d "$requested_venv_dir" ] && ! is_compatible_venv "$requested_venv_dir"; then
+        resolved_venv_dir="${requested_venv_dir}_$(normalize_architecture)_py$(get_python_minor_version)"
+    fi
+
+    echo "$resolved_venv_dir"
+}
+
 setup_venv() {
+    local requested_venv_dir="$VENV_DIR"
+    VENV_DIR="$(resolve_venv_dir "$VENV_DIR")"
+    if [ "$VENV_DIR" != "$requested_venv_dir" ]; then
+        log_warn "Existing virtual environment at $requested_venv_dir is incompatible. Using $VENV_DIR instead."
+    fi
     log_info "Setting up virtual environment at: $VENV_DIR"
 
-    if [ -d "$VENV_DIR" ]; then
+    if [ -d "$VENV_DIR" ] && is_compatible_venv "$VENV_DIR"; then
         log_info "Reusing existing virtual environment."
     else
         python3 -m venv "$VENV_DIR"
