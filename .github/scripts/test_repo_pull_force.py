@@ -30,6 +30,14 @@ class TestRepoPullForce(unittest.TestCase):
         else:
             os.environ["MLC_REPOS"] = self.old_mlc_repos
 
+    def _is_git_status_porcelain_command(self, cmd):
+        return (
+            cmd[0] == "git"
+            and "status" in cmd
+            and "--porcelain" in cmd
+            and "--untracked-files=no" in cmd
+        )
+
     @patch.object(RepoAction, "register_repo", return_value={"return": 0})
     @patch("mlc.repo_action.subprocess.run")
     def test_pull_existing_repo_with_branch_uses_regular_pull_by_default(
@@ -38,7 +46,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if self._is_git_status_porcelain_command(cmd):
                 return subprocess.CompletedProcess(cmd, 0, stdout="")
             return subprocess.CompletedProcess(cmd, 0, stdout="ok")
 
@@ -68,7 +76,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if self._is_git_status_porcelain_command(cmd):
                 return subprocess.CompletedProcess(cmd, 0, stdout="")
             return subprocess.CompletedProcess(cmd, 0, stdout="ok")
 
@@ -131,7 +139,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if self._is_git_status_porcelain_command(cmd):
                 return subprocess.CompletedProcess(
                     cmd, 0, stdout=" M tracked.txt\n")
             return subprocess.CompletedProcess(cmd, 0, stdout="")
@@ -156,7 +164,7 @@ class TestRepoPullForce(unittest.TestCase):
         def fake_run(cmd, **kwargs):
             nonlocal stash_list_call_count
             calls.append(cmd)
-            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if self._is_git_status_porcelain_command(cmd):
                 return subprocess.CompletedProcess(
                     cmd, 0, stdout=" M tracked.txt\n")
             if cmd[0] == "git" and "stash" in cmd and "list" in cmd:
@@ -191,7 +199,7 @@ class TestRepoPullForce(unittest.TestCase):
         def fake_run(cmd, **kwargs):
             nonlocal stash_list_call_count
             calls.append(cmd)
-            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if self._is_git_status_porcelain_command(cmd):
                 return subprocess.CompletedProcess(
                     cmd, 0, stdout=" M tracked.txt\n")
             if cmd[0] == "git" and "stash" in cmd and "list" in cmd:
@@ -231,7 +239,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             nonlocal stash_list_call_count
-            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if self._is_git_status_porcelain_command(cmd):
                 return subprocess.CompletedProcess(
                     cmd, 0, stdout=" M tracked.txt\n")
             if cmd[0] == "git" and "stash" in cmd and "list" in cmd:
@@ -265,7 +273,7 @@ class TestRepoPullForce(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             calls.append((cmd, kwargs))
-            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+            if self._is_git_status_porcelain_command(cmd):
                 return subprocess.CompletedProcess(cmd, 0, stdout="")
             if cmd[:5] == ['git', '-C', self.repo_path, 'checkout', 'dev']:
                 return subprocess.CompletedProcess(cmd, 0, stdout="Switched")

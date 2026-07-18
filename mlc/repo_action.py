@@ -90,9 +90,9 @@ class RepoAction(Action):
                 text=True,
                 check=True)
         except subprocess.CalledProcessError as checkout_error:
-            checkout_error_message = self._subprocess_error_message(
+            checkout_error_text = self._subprocess_error_message(
                 checkout_error)
-            lowered_checkout_error = checkout_error_message.lower()
+            lowered_checkout_error = checkout_error_text.lower()
             # Git uses the same exit code for many checkout failures, so we
             # only fall back to fetch+track when stderr includes both
             # "pathspec" and Git's usual missing-ref phrase
@@ -104,7 +104,7 @@ class RepoAction(Action):
             if not missing_local_branch:
                 raise RuntimeError(
                     f"Cannot switch to branch '{branch}' in {repo_path}: "
-                    f"{checkout_error_message}"
+                    f"{checkout_error_text}"
                 ) from checkout_error
             try:
                 subprocess.run(
@@ -130,7 +130,7 @@ class RepoAction(Action):
                 raise RuntimeError(
                     f"Initial checkout of '{branch}' failed in {repo_path}. "
                     "After fetching from origin, creating a tracking branch also failed. "
-                    f"Initial error: {checkout_error_message}. "
+                    f"Initial error: {checkout_error_text}. "
                     f"Tracking branch error: {self._subprocess_error_message(tracking_error)}. "
                     "Check that the branch name is correct and that your local checkout can track origin."
                 ) from tracking_error
@@ -144,7 +144,19 @@ class RepoAction(Action):
 
     def _format_pull_error(self, repo_path, error_message, stash_created=False,
                            force=False, failure_phase="git pull"):
-        """Format strict pull errors, preserving stash recovery guidance when needed."""
+        """Format a pull failure message.
+
+        Args:
+            repo_path: Repository path being updated.
+            error_message: Original stderr/stdout-derived git failure text.
+            stash_created: Whether local changes were stashed for a force pull.
+            force: Whether the failure happened on a force-pull path.
+            failure_phase: Phase label such as ``git pull`` or
+                ``branch checkout``.
+
+        Returns:
+            A user-facing error string with optional recovery guidance.
+        """
         prefix = "Force pull failed" if force else "Pull failed"
         if failure_phase:
             prefix = f"{prefix} during {failure_phase}"
