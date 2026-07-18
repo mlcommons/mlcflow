@@ -48,6 +48,37 @@ jobs:
           OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
           DIFF = open("pr.diff").read()[:15000]
 
+          def extract_response_text(data):
+              output_text = data.get("output_text")
+              if isinstance(output_text, str) and output_text.strip():
+                  return output_text.strip()
+
+              texts = []
+              for item in data.get("output", []):
+                  for content in item.get("content", []):
+                      text = content.get("text")
+                      if isinstance(text, str) and text.strip():
+                          texts.append(text.strip())
+                      elif isinstance(text, dict):
+                          value = text.get("value")
+                          if isinstance(value, str) and value.strip():
+                              texts.append(value.strip())
+
+              return "\n".join(texts).strip()
+
+          def strip_code_fences(text):
+              text = text.strip()
+              if not text.startswith("```"):
+                  return text
+
+              lines = text.splitlines()
+              if lines:
+                  lines = lines[1:]
+              if lines and lines[-1].strip() == "```":
+                  lines = lines[:-1]
+
+              return "\n".join(lines).strip()
+
           prompt = f"""
           Review this incremental pull request diff for a public engineering repository.
 
@@ -83,18 +114,25 @@ jobs:
           response = requests.post(
               "https://api.openai.com/v1/responses",
               headers={
-                  "Authorization": f"Bearer {OPENAI_API_KEY}",
+                  "Authorization": f"******",
                   "Content-Type": "application/json"
               },
               json={
                   "model": "gpt-4.1-mini",
                   "input": prompt,
                   "temperature": 0.2
-              }
+              },
+              timeout=60
           )
 
+          response.raise_for_status()
           data = response.json()
-          text = data["output"][0]["content"][0]["text"]
+          text = strip_code_fences(extract_response_text(data))
+          if not text:
+              raise RuntimeError(
+                  "OpenAI review response did not contain any text output: "
+                  + json.dumps(data)[:1000]
+              )
 
           parsed = json.loads(text)
           with open("ai_output.json", "w") as f:
