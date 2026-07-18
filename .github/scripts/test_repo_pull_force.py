@@ -124,7 +124,9 @@ class TestRepoPullForce(unittest.TestCase):
             self.repo_action._checkout_pull_branch(self.repo_path, "dev")
 
         self.assertIn("Cannot switch to branch 'dev'", str(context.exception))
-        self.assertIn("resolve your current index first", str(context.exception))
+        self.assertIn(
+            "resolve your current index first", str(
+                context.exception))
         self.assertFalse(any("fetch" in cmd for cmd in calls))
         self.assertFalse(
             any(cmd[:6] == ['git', '-C', self.repo_path, 'checkout', '-b', 'dev']
