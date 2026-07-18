@@ -33,6 +33,7 @@ class UnixInstallerVenvTest(unittest.TestCase):
 
         with open(INSTALLER_PATH, "r", encoding="utf-8") as installer_file:
             installer_contents = installer_file.read()
+        self.installer_contents = installer_contents
 
         self.assertTrue(
             installer_contents.rstrip().endswith("main"),
@@ -91,6 +92,65 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         )
         return completed.stdout.strip()
 
+    def _write_installer_with_stubbed_main_dependencies(self):
+        integration_installer_path = os.path.join(
+            self.temp_dir.name, "mlcflow_unix_installer_integration_test.sh"
+        )
+        installer_prefix = self.installer_contents.rsplit("\nmain", 1)[0]
+        stubbed_functions = """
+detect_os() {
+    OS_ID="ubuntu"
+    OS_VERSION="test"
+    PKG_MANAGER="apt"
+}
+
+check_missing_dependencies() {
+    MISSING_DEPS=()
+}
+
+ensure_python() {
+    :
+}
+
+install_mlcflow() {
+    :
+}
+
+prompt_repo_details() {
+    :
+}
+
+pull_repo() {
+    :
+}
+"""
+        with open(integration_installer_path, "w", encoding="utf-8") as installer_file:
+            installer_file.write(installer_prefix + "\n" + stubbed_functions + "\nmain\n")
+        return integration_installer_path
+
+    def test_installer_main_runs_setup_venv_with_stubbed_dependencies(self):
+        venv_dir = os.path.join(self.temp_dir.name, "mlcflow")
+        os.makedirs(venv_dir, exist_ok=True)
+        expected_path = venv_dir + self._expected_suffix()
+        installer_path = self._write_installer_with_stubbed_main_dependencies()
+
+        completed = subprocess.run(
+            ["bash", installer_path, "--yes", "--venv-dir", venv_dir],
+            cwd=self.temp_dir.name,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+        self.assertIn("Installation completed successfully.", completed.stdout)
+        self.assertIn(expected_path, completed.stdout)
+        self.assertTrue(os.path.exists(os.path.join(expected_path, "bin", "python")))
+        self.assertEqual(
+            self._compatibility_signature(os.path.join(expected_path, "bin", "python")),
+            self._compatibility_signature(sys.executable),
+        )
+
     def test_setup_venv_creates_requested_path_from_scratch(self):
         venv_dir = os.path.join(self.temp_dir.name, "mlcflow")
 
@@ -132,7 +192,7 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
 
         self.assertEqual(resolved_path, expected_path)
         self.assertEqual(activated_path, expected_path)
-        self.assertIn("is incompatible. Using", stdout)
+        self.assertIn("is incompatible with current Python/platform. Using", stdout)
         self.assertTrue(os.path.exists(os.path.join(expected_path, "bin", "python")))
         self.assertEqual(
             self._compatibility_signature(os.path.join(expected_path, "bin", "python")),

@@ -343,6 +343,7 @@ get_python_major_minor_version() {
     "$PYTHON_CMD" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
 }
 
+# $1 should be a Python executable (for example python3 or <venv>/bin/python).
 get_python_compatibility_signature() {
     "$1" -c 'import platform, sys; print(f"{platform.machine()}|{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null
 }
@@ -387,7 +388,7 @@ setup_venv() {
     VENV_DIR="$(resolve_venv_dir "$VENV_DIR")"
     log_info "Setting up virtual environment at: $VENV_DIR"
     if [ "$VENV_DIR" != "$requested_venv_dir" ]; then
-        log_warn "Existing virtual environment at $requested_venv_dir is incompatible. Using $VENV_DIR instead."
+        log_warn "Virtual environment at $requested_venv_dir is incompatible with current Python/platform. Using $VENV_DIR instead."
     fi
 
     if [ -d "$VENV_DIR" ] && is_compatible_venv "$VENV_DIR"; then
