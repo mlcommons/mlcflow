@@ -94,8 +94,9 @@ class RepoAction(Action):
                 checkout_error)
             lowered_checkout_error = checkout_error_message.lower()
             # Git uses the same exit code for many checkout failures, so we
-            # only fall back to fetch+track when stderr matches Git's standard
-            # "pathspec ... did not match any file(s) known to git" wording.
+            # only fall back to fetch+track when stderr includes both
+            # "pathspec" and Git's usual missing-ref phrase
+            # "did not match any file(s) known to git".
             missing_local_branch = (
                 "pathspec" in lowered_checkout_error
                 and self.GIT_MISSING_BRANCH_PHRASE in lowered_checkout_error
@@ -151,7 +152,8 @@ class RepoAction(Action):
         resolution = ""
         lowered_error = error_message.lower()
         # Git reports ff-only failures via stderr text instead of a distinct
-        # exit code, so use the canonical phrase to add actionable guidance.
+        # exit code, so use this case-insensitive substring from the standard
+        # "Not possible to fast-forward, aborting." message to add guidance.
         if self.GIT_FAST_FORWARD_FAILURE_PHRASE in lowered_error:
             resolution = (
                 " Check whether the local and remote branches have diverged "
