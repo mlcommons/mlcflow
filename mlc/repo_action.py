@@ -14,9 +14,6 @@ from .index import Index
 
 
 class RepoAction(Action):
-    GIT_MISSING_BRANCH_PHRASE = "did not match any file(s) known to git"
-    GIT_FAST_FORWARD_FAILURE_PHRASE = "not possible to fast-forward"
-
     """
     ####################################################################################################################
     Repo Action
@@ -42,6 +39,9 @@ class RepoAction(Action):
     - repo uid and repo alias for a particular MLC repository can be found inside the meta.yml file.
 
     """
+
+    GIT_MISSING_BRANCH_PHRASE = "did not match any file(s) known to git"
+    GIT_FAST_FORWARD_FAILURE_PHRASE = "not possible to fast-forward"
 
     def __init__(self, parent=None):
         # super().__init__(parent)
