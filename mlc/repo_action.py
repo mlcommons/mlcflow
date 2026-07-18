@@ -58,30 +58,41 @@ class RepoAction(Action):
                     f"--depth/--shallow ignored for pull on non-shallow repo {repo_path}. "
                     "Re-clone with --shallow to create a shallow copy."
                 )
+        # Preserve the historical CLI behavior for existing repositories:
+        # branch-specific pulls are only used by the internal strict auto-pull
+        # path that opts into fast-forward-only updates.
         if branch and fast_forward_only:
             pull_command.extend(['origin', branch])
         return pull_command
 
     def _checkout_pull_branch(self, repo_path, branch):
-        checkout_command = ['git', '-C', repo_path, 'checkout', branch]
         try:
             subprocess.run(
-                checkout_command,
+                ['git', '-C', repo_path, 'checkout', branch],
                 capture_output=True,
                 text=True,
                 check=True)
         except subprocess.CalledProcessError:
-            subprocess.run(
-                ['git', '-C', repo_path, 'fetch', 'origin', branch],
-                capture_output=True,
-                text=True,
-                check=True)
-            subprocess.run(
-                ['git', '-C', repo_path, 'checkout', '-b',
-                    branch, '--track', f'origin/{branch}'],
-                capture_output=True,
-                text=True,
-                check=True)
+            try:
+                subprocess.run(
+                    ['git', '-C', repo_path, 'fetch', 'origin', branch],
+                    capture_output=True,
+                    text=True,
+                    check=True)
+                subprocess.run(
+                    ['git', '-C', repo_path, 'checkout', '-b',
+                        branch, '--track', f'origin/{branch}'],
+                    capture_output=True,
+                    text=True,
+                    check=True)
+            except subprocess.CalledProcessError as e:
+                error_message = (e.stderr or e.stdout or str(e)).strip()
+                raise subprocess.CalledProcessError(
+                    e.returncode,
+                    e.cmd,
+                    output=e.output,
+                    stderr=f"Failed to prepare branch '{branch}' in {repo_path}: {error_message}"
+                ) from e
 
     def add(self, run_args):
         """

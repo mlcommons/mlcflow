@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -5,7 +6,7 @@ from mlc.script_action import ScriptAction
 
 
 class _Parent:
-    repos_path = "/tmp"
+    repos_path = tempfile.gettempdir()
 
 
 class ScriptActionApptainerTest(unittest.TestCase):
