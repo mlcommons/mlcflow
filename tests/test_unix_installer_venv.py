@@ -9,7 +9,11 @@ import unittest
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INSTALLER_PATH = os.path.join(REPO_ROOT, "docs", "install", "mlcflow_unix_installer.sh")
+INSTALLER_PATH = os.path.join(
+    REPO_ROOT,
+    "docs",
+    "install",
+    "mlcflow_unix_installer.sh")
 # Keep this in sync with docs/install/mlcflow_unix_installer.sh:
 # normalize_architecture() and get_python_compatibility_signature().
 COMPATIBILITY_SIGNATURE_CODE = (
@@ -141,9 +145,15 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         self.assertEqual(completed.returncode, 0, msg=completed.stderr)
         self.assertIn("Installation completed successfully.", completed.stdout)
         self.assertIn(expected_path, completed.stdout)
-        self.assertTrue(os.path.exists(os.path.join(expected_path, "bin", "python")))
+        self.assertTrue(
+            os.path.exists(
+                os.path.join(
+                    expected_path,
+                    "bin",
+                    "python")))
         self.assertEqual(
-            self._compatibility_signature(os.path.join(expected_path, "bin", "python")),
+            self._compatibility_signature(
+                os.path.join(expected_path, "bin", "python")),
             self._compatibility_signature(sys.executable),
         )
 
@@ -155,9 +165,15 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         self.assertEqual(resolved_path, venv_dir)
         self.assertEqual(activated_path, venv_dir)
         self.assertIn("Setting up virtual environment at", stdout)
-        self.assertTrue(os.path.exists(os.path.join(venv_dir, "bin", "python")))
+        self.assertTrue(
+            os.path.exists(
+                os.path.join(
+                    venv_dir,
+                    "bin",
+                    "python")))
         self.assertEqual(
-            self._compatibility_signature(os.path.join(venv_dir, "bin", "python")),
+            self._compatibility_signature(
+                os.path.join(venv_dir, "bin", "python")),
             self._compatibility_signature(sys.executable),
         )
 
@@ -175,7 +191,8 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
         self.assertEqual(activated_path, venv_dir)
         self.assertIn("Reusing existing virtual environment.", stdout)
         self.assertEqual(
-            self._compatibility_signature(os.path.join(venv_dir, "bin", "python")),
+            self._compatibility_signature(
+                os.path.join(venv_dir, "bin", "python")),
             self._compatibility_signature(sys.executable),
         )
 
@@ -188,10 +205,18 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
 
         self.assertEqual(resolved_path, expected_path)
         self.assertEqual(activated_path, expected_path)
-        self.assertIn("is incompatible with current Python/platform. Using", stdout)
-        self.assertTrue(os.path.exists(os.path.join(expected_path, "bin", "python")))
+        self.assertIn(
+            "is incompatible with current Python/platform. Using",
+            stdout)
+        self.assertTrue(
+            os.path.exists(
+                os.path.join(
+                    expected_path,
+                    "bin",
+                    "python")))
         self.assertEqual(
-            self._compatibility_signature(os.path.join(expected_path, "bin", "python")),
+            self._compatibility_signature(
+                os.path.join(expected_path, "bin", "python")),
             self._compatibility_signature(sys.executable),
         )
 

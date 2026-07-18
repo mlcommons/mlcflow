@@ -57,7 +57,8 @@ def test_resolve_default_venv_dir_prefers_compatible_default(tmp_path):
     assert resolved == str(tmp_path / "mlcflow")
 
 
-def test_resolve_default_venv_dir_uses_suffix_for_incompatible_default(tmp_path):
+def test_resolve_default_venv_dir_uses_suffix_for_incompatible_default(
+        tmp_path):
     setup_snippet = """
     mkdir -p "$DEFAULT_VENV_DIR"
     """
