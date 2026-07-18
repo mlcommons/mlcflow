@@ -365,7 +365,8 @@ class RepoAction(Action):
             with FileLock(repo_lock_file, timeout=300):
                 # If the directory doesn't exist, clone it
                 if not os.path.exists(repo_path):
-                    logger.info(f"Cloning repository {repo_url} to {repo_path}...")
+                    logger.info(
+                        f"Cloning repository {repo_url} to {repo_path}...")
 
                     # Build clone command without branch if not provided
                     clone_command = ['git', 'clone', repo_url, repo_path]
@@ -429,7 +430,8 @@ class RepoAction(Action):
                             stash_created = len(stash_after.stdout.splitlines()
                                                 ) > len(stash_before.stdout.splitlines())
                         except subprocess.CalledProcessError as e:
-                            stash_error = (e.stderr or e.stdout or str(e)).strip()
+                            stash_error = (
+                                e.stderr or e.stdout or str(e)).strip()
                             return {
                                 "return": 1,
                                 "error": f"Force pull failed while stashing local changes in {repo_path}: {stash_error}"
@@ -444,7 +446,8 @@ class RepoAction(Action):
                                 text=True,
                                 check=True)
                         except subprocess.CalledProcessError as e:
-                            pull_error = (e.stderr or e.stdout or str(e)).strip()
+                            pull_error = (
+                                e.stderr or e.stdout or str(e)).strip()
                             if stash_created:
                                 return {
                                     "return": 1,
@@ -504,9 +507,11 @@ class RepoAction(Action):
                 if tag:
                     checkout = "tags/" + tag
 
-                # Checkout to a specific branch or commit if --checkout is provided
+                # Checkout to a specific branch or commit if --checkout is
+                # provided
                 if checkout or tag:
-                    logger.info(f"Checking out to {checkout} in {repo_path}...")
+                    logger.info(
+                        f"Checking out to {checkout} in {repo_path}...")
                     subprocess.run(
                         ['git', '-C', repo_path, 'checkout', checkout], check=True)
 
@@ -532,7 +537,8 @@ class RepoAction(Action):
                     return {"return": 1,
                             "error": f"Syntax error in {meta_file_path}: {e}"}
 
-                r = self.register_repo(repo_path, meta_data, ignore_on_conflict)
+                r = self.register_repo(
+                    repo_path, meta_data, ignore_on_conflict)
                 if r['return'] > 0:
                     return r
 
