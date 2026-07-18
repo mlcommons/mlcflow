@@ -92,7 +92,7 @@ class RepoAction(Action):
             lowered_checkout_error = checkout_error_message.lower()
             missing_local_branch = (
                 "pathspec" in lowered_checkout_error
-                and "did not match" in lowered_checkout_error
+                and "did not match any file(s) known to git" in lowered_checkout_error
             )
             if not missing_local_branch:
                 raise RuntimeError(
@@ -129,22 +129,23 @@ class RepoAction(Action):
                 ) from tracking_error
 
     @staticmethod
-    def _stash_restore_guidance(repo_path):
+    def _format_stash_restore_guidance(repo_path):
         return (
             f"Local changes remain in stash. Please run `git -C {repo_path} stash apply` "
             "after resolving pull issues."
         )
 
     def _format_pull_error(self, repo_path, error_message, stash_created=False,
-                           force=False, during_pull=True):
+                           force=False, during_git_pull=True):
+        """Format strict pull errors, preserving stash recovery guidance when needed."""
         prefix = "Force pull failed" if force else "Pull failed"
-        if during_pull:
+        if during_git_pull:
             prefix = f"{prefix} during git pull"
 
         if stash_created:
             return (
                 f"{prefix} for {repo_path}. "
-                f"{self._stash_restore_guidance(repo_path)} "
+                f"{self._format_stash_restore_guidance(repo_path)} "
                 f"Details: {error_message}"
             )
 
@@ -594,7 +595,7 @@ class RepoAction(Action):
                                 str(e),
                                 stash_created=stash_created,
                                 force=True,
-                                during_pull=False)
+                                during_git_pull=False)
                         }
                     except subprocess.CalledProcessError as e:
                         pull_error = self._subprocess_error_message(e)
@@ -659,6 +660,7 @@ class RepoAction(Action):
                             text=True,
                             check=True)
                     except RuntimeError:
+                        # _checkout_pull_branch already formats contextual checkout errors.
                         raise
                     except subprocess.CalledProcessError as e:
                         pull_error = self._subprocess_error_message(e)
