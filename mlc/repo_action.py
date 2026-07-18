@@ -59,9 +59,9 @@ class RepoAction(Action):
                     "Re-clone with --shallow to create a shallow copy."
                 )
         # Preserve the historical CLI behavior for existing repositories:
-        # the branch argument is only applied to the pull command by the
-        # internal strict auto-pull path that opts into fast-forward-only
-        # updates.
+        # standard `mlc pull repo` continues to run a plain `git pull`
+        # without forcing `origin <branch>`, while the internal strict
+        # auto-pull path applies the branch argument explicitly.
         if branch and fast_forward_only:
             pull_command.extend(['origin', branch])
         return pull_command
@@ -73,24 +73,37 @@ class RepoAction(Action):
                 capture_output=True,
                 text=True,
                 check=True)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as checkout_error:
             try:
                 subprocess.run(
                     ['git', '-C', repo_path, 'fetch', 'origin', branch],
                     capture_output=True,
                     text=True,
                     check=True)
+            except subprocess.CalledProcessError as fetch_error:
+                error_message = (
+                    fetch_error.stderr or fetch_error.stdout or str(fetch_error)).strip()
+                raise RuntimeError(
+                    f"Failed to fetch branch '{branch}' in {repo_path}: {error_message}"
+                ) from fetch_error
+
+            try:
                 subprocess.run(
                     ['git', '-C', repo_path, 'checkout', '-b',
                         branch, '--track', f'origin/{branch}'],
                     capture_output=True,
                     text=True,
                     check=True)
-            except subprocess.CalledProcessError as e:
-                error_message = (e.stderr or e.stdout or str(e)).strip()
+            except subprocess.CalledProcessError as tracking_error:
+                tracking_message = (
+                    tracking_error.stderr or tracking_error.stdout or str(tracking_error)).strip()
+                checkout_message = (
+                    checkout_error.stderr or checkout_error.stdout or str(checkout_error)).strip()
                 raise RuntimeError(
-                    f"Failed to prepare branch '{branch}' in {repo_path}: {error_message}"
-                ) from e
+                    f"Failed to prepare branch '{branch}' in {repo_path}. "
+                    f"Initial checkout failed with: {checkout_message}. "
+                    f"Creating the tracking branch then failed with: {tracking_message}"
+                ) from tracking_error
 
     def add(self, run_args):
         """
