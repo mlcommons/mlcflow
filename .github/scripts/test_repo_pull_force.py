@@ -95,6 +95,34 @@ class TestRepoPullForce(unittest.TestCase):
             calls,
         )
 
+    @patch("mlc.repo_action.subprocess.run")
+    def test_checkout_pull_branch_does_not_mask_non_pathspec_checkout_errors(
+            self, mock_run):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            if cmd[:5] == ['git', '-C', self.repo_path, 'checkout', 'dev']:
+                raise subprocess.CalledProcessError(
+                    1,
+                    cmd,
+                    stderr="error: you need to resolve your current index first",
+                )
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok")
+
+        mock_run.side_effect = fake_run
+
+        with self.assertRaises(RuntimeError) as context:
+            self.repo_action._checkout_pull_branch(self.repo_path, "dev")
+
+        self.assertIn("Cannot switch to branch 'dev'", str(context.exception))
+        self.assertIn("resolve your current index first", str(context.exception))
+        self.assertFalse(any("fetch" in cmd for cmd in calls))
+        self.assertFalse(
+            any(cmd[:6] == ['git', '-C', self.repo_path, 'checkout', '-b', 'dev']
+                for cmd in calls)
+        )
+
     @patch.object(RepoAction, "register_repo", return_value={"return": 0})
     @patch("mlc.repo_action.subprocess.run")
     def test_pull_without_force_skips_when_local_changes(
@@ -190,6 +218,81 @@ class TestRepoPullForce(unittest.TestCase):
             any("reset" in cmd and "--hard" in cmd and "HEAD" in cmd for cmd in calls))
         self.assertFalse(
             any("stash" in cmd and "drop" in cmd for cmd in calls))
+
+    @patch.object(RepoAction, "register_repo", return_value={"return": 0})
+    @patch.object(
+        RepoAction,
+        "_checkout_pull_branch",
+        side_effect=RuntimeError("Cannot switch to branch 'dev'"))
+    @patch("mlc.repo_action.subprocess.run")
+    def test_pull_force_checkout_error_mentions_stash_recovery(
+            self, mock_run, _mock_checkout_branch, _mock_register):
+        stash_list_call_count = 0
+
+        def fake_run(cmd, **kwargs):
+            nonlocal stash_list_call_count
+            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=" M tracked.txt\n")
+            if cmd[0] == "git" and "stash" in cmd and "list" in cmd:
+                stash_list_call_count += 1
+                if stash_list_call_count == 1:
+                    return subprocess.CompletedProcess(cmd, 0, stdout="")
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout="stash@{0}: On dev: mlc pull repo --force\n")
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok")
+
+        mock_run.side_effect = fake_run
+
+        res = self.repo_action.pull_repo(
+            "mlcommons@test-repo",
+            branch="dev",
+            repo_path=self.repo_path,
+            force=True,
+            fast_forward_only=True,
+        )
+
+        self.assertEqual(res["return"], 1)
+        self.assertIn("Local changes remain in stash", res["error"])
+        self.assertIn("git -C", res["error"])
+        self.assertIn("Cannot switch to branch 'dev'", res["error"])
+
+    @patch.object(RepoAction, "register_repo", return_value={"return": 0})
+    @patch("mlc.repo_action.subprocess.run")
+    def test_pull_existing_repo_ff_only_failure_returns_actionable_error(
+            self, mock_run, _mock_register):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            if cmd[0] == "git" and "status" in cmd and "--porcelain" in cmd and "--untracked-files=no" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout="")
+            if cmd[:5] == ['git', '-C', self.repo_path, 'checkout', 'dev']:
+                return subprocess.CompletedProcess(cmd, 0, stdout="Switched")
+            if cmd[:4] == ['git', '-C', self.repo_path, 'pull']:
+                raise subprocess.CalledProcessError(
+                    1, cmd, stderr="fatal: Not possible to fast-forward, aborting.")
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok")
+
+        mock_run.side_effect = fake_run
+
+        res = self.repo_action.pull_repo(
+            "mlcommons@test-repo",
+            branch="dev",
+            repo_path=self.repo_path,
+            fast_forward_only=True,
+        )
+
+        self.assertEqual(res["return"], 1)
+        self.assertIn("Pull failed during git pull", res["error"])
+        self.assertIn("Not possible to fast-forward", res["error"])
+        pull_calls = [
+            kwargs for cmd, kwargs in calls
+            if cmd[:4] == ['git', '-C', self.repo_path, 'pull']
+        ]
+        self.assertEqual(len(pull_calls), 1)
+        self.assertTrue(pull_calls[0]["capture_output"])
+        self.assertTrue(pull_calls[0]["text"])
 
 
 if __name__ == "__main__":

@@ -87,6 +87,14 @@ class RepoAction(Action):
                 text=True,
                 check=True)
         except subprocess.CalledProcessError as checkout_error:
+            checkout_error_message = self._subprocess_error_message(
+                checkout_error)
+            lowered_checkout_error = checkout_error_message.lower()
+            if "pathspec" not in lowered_checkout_error or "did not match" not in lowered_checkout_error:
+                raise RuntimeError(
+                    f"Cannot switch to branch '{branch}' in {repo_path}: "
+                    f"{checkout_error_message}"
+                ) from checkout_error
             try:
                 subprocess.run(
                     ['git', '-C', repo_path, 'fetch', 'origin', branch],
@@ -111,10 +119,17 @@ class RepoAction(Action):
                 raise RuntimeError(
                     f"Initial checkout of '{branch}' failed in {repo_path}. "
                     "After fetching from origin, creating a tracking branch also failed. "
-                    f"Initial error: {self._subprocess_error_message(checkout_error)}. "
+                    f"Initial error: {checkout_error_message}. "
                     f"Tracking branch error: {self._subprocess_error_message(tracking_error)}. "
                     "Check that the branch name is correct and that your local checkout can track origin."
                 ) from tracking_error
+
+    @staticmethod
+    def _stash_restore_guidance(repo_path):
+        return (
+            f"Local changes remain in stash. Please run `git -C {repo_path} stash apply` "
+            "after resolving pull issues."
+        )
 
     @staticmethod
     def _subprocess_error_message(error):
@@ -552,12 +567,22 @@ class RepoAction(Action):
                             capture_output=True,
                             text=True,
                             check=True)
-                    except subprocess.CalledProcessError as e:
-                        pull_error = (e.stderr or e.stdout or str(e)).strip()
+                    except RuntimeError as e:
                         if stash_created:
                             return {
                                 "return": 1,
-                                "error": f"Force pull failed during git pull for {repo_path}. Local changes remain in stash. Please run `git -C {repo_path} stash apply` after resolving pull issues. Details: {pull_error}"
+                                "error": f"Force pull failed for {repo_path}. {self._stash_restore_guidance(repo_path)} Details: {str(e)}"
+                            }
+                        return {
+                            "return": 1,
+                            "error": f"Force pull failed for {repo_path}: {str(e)}"
+                        }
+                    except subprocess.CalledProcessError as e:
+                        pull_error = self._subprocess_error_message(e)
+                        if stash_created:
+                            return {
+                                "return": 1,
+                                "error": f"Force pull failed during git pull for {repo_path}. {self._stash_restore_guidance(repo_path)} Details: {pull_error}"
                             }
                         return {
                             "return": 1,
@@ -606,12 +631,23 @@ class RepoAction(Action):
                 else:
                     logger.info(
                         "No local changes detected. Pulling latest changes...")
-                    if fast_forward_only and branch:
-                        self._checkout_pull_branch(repo_path, branch)
-                    subprocess.run(
-                        self._build_pull_command(
-                            repo_path, branch, clone_depth, fast_forward_only),
-                        check=True)
+                    try:
+                        if fast_forward_only and branch:
+                            self._checkout_pull_branch(repo_path, branch)
+                        subprocess.run(
+                            self._build_pull_command(
+                                repo_path, branch, clone_depth, fast_forward_only),
+                            capture_output=True,
+                            text=True,
+                            check=True)
+                    except RuntimeError:
+                        raise
+                    except subprocess.CalledProcessError as e:
+                        pull_error = self._subprocess_error_message(e)
+                        return {
+                            "return": 1,
+                            "error": f"Pull failed during git pull for {repo_path}: {pull_error}"
+                        }
                     logger.info("Repository successfully pulled.")
 
             if tag:
@@ -678,7 +714,7 @@ class RepoAction(Action):
 
 
     - `--checkout <commit_sha>`: Checks out a specific commit after cloning (applicable when the repository exists locally).
-    - `--branch <branch_name>`: Checks out a specific branch **while cloning** a new repository.
+    - `--branch <branch_name>`: Checks out a specific branch while cloning a new repository. When strict fast-forward-only pulls are requested for an existing checkout, it also selects the local branch to switch to before pulling `origin/<branch>`.
     - `--tag <release_tag>`: Checks out a particular release tag.
     - `--pat <access_token>` or `--ssh`: Clones a private repository using a personal access token or SSH.
     - `--force`: For existing repositories with local tracked changes, stashes changes before pull and reapplies them after pull.
