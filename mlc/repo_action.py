@@ -40,6 +40,8 @@ class RepoAction(Action):
 
     """
 
+    # These phrases come from git's current stderr output and may vary by
+    # version or locale, so keep the matching logic narrowly scoped.
     GIT_MISSING_BRANCH_PHRASE = "did not match any file(s) known to git"
     GIT_FAST_FORWARD_FAILURE_PHRASE = "not possible to fast-forward"
 
@@ -185,6 +187,17 @@ class RepoAction(Action):
     def _subprocess_error_message(error):
         """Return stderr, then stdout, then str(error), whichever is populated first."""
         return (error.stderr or error.stdout or str(error)).strip()
+
+    @staticmethod
+    def _validate_extra_git_args(extra_args):
+        disallowed_pattern = re.compile(r"[;&|`$<>\r\n]")
+        for arg in extra_args:
+            if disallowed_pattern.search(arg):
+                return (
+                    "--extra_git_args may not include shell metacharacters such as "
+                    ";, &, |, `, $, <, >, or newlines."
+                )
+        return None
 
     def add(self, run_args):
         """
@@ -545,6 +558,9 @@ class RepoAction(Action):
                         "return": 1,
                         "error": "--extra_git_args must be provided as a string or list of strings."
                     }
+                extra_git_args_error = self._validate_extra_git_args(extra_args)
+                if extra_git_args_error:
+                    return {"return": 1, "error": extra_git_args_error}
 
             # If the directory doesn't exist, clone it
             if not os.path.exists(repo_path):
