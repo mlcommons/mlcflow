@@ -145,7 +145,7 @@ jobs:
         if: env.EMPTY_DIFF != 'true'
         run: |
           SUMMARY=$(jq -r '.summary' ai_output.json)
-          BODY=$(printf '## 🤖 AI PR Review Summary\n\n%s\n' "$SUMMARY")
+          BODY=$(printf '## 🤖 AI Peer Review\n\n%s\n' "$SUMMARY")
 
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "$BODY"
@@ -156,7 +156,7 @@ jobs:
         if: env.EMPTY_DIFF != 'true'
         continue-on-error: true
         run: |
-          jq -c '.comments[]?' ai_output.json | while IFS= read -r c; do
+          while IFS= read -r c; do
             FILE=$(jq -r '.file' <<<"$c")
             LINE=$(jq -r '.line' <<<"$c")
             COMMENT=$(jq -r '.comment' <<<"$c")
@@ -178,6 +178,6 @@ jobs:
               -F line="$LINE" \
               -f side="RIGHT" \
               -f subject_type="line" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
-          done
+          done < <(jq -c '.comments[]?' ai_output.json)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
