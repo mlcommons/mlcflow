@@ -145,7 +145,7 @@ jobs:
         if: env.EMPTY_DIFF != 'true'
         run: |
           SUMMARY=$(jq -r '.summary' ai_output.json)
-          BODY=$(printf '## 🤖 AI Peer Review\n\n%s\n' "$SUMMARY")
+          BODY=$(printf '%s\n\n%s\n' '## 🤖 AI Peer Review' "$SUMMARY")
 
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "$BODY"
@@ -165,14 +165,14 @@ jobs:
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
               continue
             fi
-            if [ -z "$COMMENT" ]; then
+            if [ -z "$COMMENT" ] || [ "$COMMENT" = "null" ]; then
               echo "::warning::Skipping AI review comment with empty body for $FILE:$LINE"
               continue
             fi
 
             gh api \
               repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
-              --raw-field body="$COMMENT" \
+              -f body="$COMMENT" \
               -f commit_id="${{ github.event.pull_request.head.sha }}" \
               -f path="$FILE" \
               -F line="$LINE" \
