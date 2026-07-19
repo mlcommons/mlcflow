@@ -144,13 +144,11 @@ jobs:
       - name: Post PR summary comment
         if: env.EMPTY_DIFF != 'true'
         run: |
-          {
-            printf '## 🤖 AI PR Review Summary\n\n'
-            jq -r '.summary' ai_output.json
-          } > ai_pr_review_summary.md
+          SUMMARY=$(jq -r '.summary' ai_output.json)
+          BODY=$(printf '## 🤖 AI PR Review Summary\n\n%s\n' "$SUMMARY")
 
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body-file ai_pr_review_summary.md
+            --body "$BODY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -161,16 +159,20 @@ jobs:
           jq -c '.comments[]?' ai_output.json | while IFS= read -r c; do
             FILE=$(jq -r '.file' <<<"$c")
             LINE=$(jq -r '.line' <<<"$c")
-            jq -r '.comment' <<<"$c" > ai_pr_review_comment.md
+            COMMENT=$(jq -r '.comment' <<<"$c")
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
               continue
             fi
+            if [ -z "$COMMENT" ]; then
+              echo "::warning::Skipping AI review comment with empty body for $FILE:$LINE"
+              continue
+            fi
 
             gh api \
               repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
-              --raw-field body="$(cat ai_pr_review_comment.md)" \
+              --raw-field body="$COMMENT" \
               -f commit_id="${{ github.event.pull_request.head.sha }}" \
               -f path="$FILE" \
               -F line="$LINE" \
