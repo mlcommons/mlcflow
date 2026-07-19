@@ -148,12 +148,7 @@ jobs:
           if [ -z "$SUMMARY" ] || [ "$SUMMARY" = "null" ]; then
             SUMMARY="AI review did not provide a summary."
           fi
-          BODY=$(cat <<EOF
-          ## 🤖 AI Peer Review
-
-          $SUMMARY
-          EOF
-          )
+          BODY=$'## 🤖 AI Peer Review\n\n'"$SUMMARY"
 
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "$BODY"
@@ -165,6 +160,8 @@ jobs:
         continue-on-error: true
         run: |
           while IFS= read -r c; do
+            # Base64-encode fields during extraction so multiline markdown,
+            # quotes, and other special characters survive shell parsing.
             mapfile -t ENCODED_FIELDS < <(
               jq -r '[.file, (.line | tostring), (.comment // "")] | map(@base64)[]' <<<"$c"
             )
@@ -181,7 +178,7 @@ jobs:
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
               continue
             fi
-            if [ -z "$COMMENT" ]; then
+            if [ -z "$COMMENT" ] || [ "$COMMENT" = "null" ]; then
               echo "::warning::Skipping AI review comment with empty body for $FILE:$LINE"
               continue
             fi
