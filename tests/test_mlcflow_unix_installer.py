@@ -105,9 +105,19 @@ def test_get_venv_suffix_uses_python_machine_value():
                 minor = os.environ.get("FAKE_PY_MINOR", "12")
                 code = sys.argv[2]
 
-                if 'print("_{}_py{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))' in code:
+                if (
+                    "platform.machine()" in code
+                    and "sys.version_info[0]" in code
+                    and "sys.version_info[1]" in code
+                    and "_py" in code
+                ):
                     print(f"_{machine}_py{major}.{minor}")
-                elif 'print("{}|{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))' in code:
+                elif (
+                    "platform.machine()" in code
+                    and "sys.version_info[0]" in code
+                    and "sys.version_info[1]" in code
+                    and "|" in code
+                ):
                     print(f"{machine}|{major}.{minor}")
                 else:
                     raise SystemExit(f"unexpected code: {code}")
