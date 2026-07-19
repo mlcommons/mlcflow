@@ -143,12 +143,13 @@ jobs:
 
       - name: Post PR summary comment
         if: env.EMPTY_DIFF != 'true'
+        shell: bash
         run: |
           SUMMARY=$(jq -r '.summary' ai_output.json)
           if [ -z "$SUMMARY" ] || [ "$SUMMARY" = "null" ]; then
             SUMMARY="AI review did not provide a summary."
           fi
-          BODY=$'## 🤖 AI Peer Review\n\n'"$SUMMARY"
+          BODY=$(printf '%s\n\n%s' '## 🤖 AI Peer Review' "$SUMMARY")
 
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "$BODY"
@@ -158,6 +159,7 @@ jobs:
       - name: Post inline review comments
         if: env.EMPTY_DIFF != 'true'
         continue-on-error: true
+        shell: bash
         run: |
           while IFS= read -r c; do
             # Base64-encode fields during extraction so multiline markdown,
@@ -170,9 +172,9 @@ jobs:
               continue
             fi
 
-            FILE=$(printf '%s' "${ENCODED_FIELDS[0]}" | base64 --decode)
-            LINE=$(printf '%s' "${ENCODED_FIELDS[1]}" | base64 --decode)
-            COMMENT=$(printf '%s' "${ENCODED_FIELDS[2]}" | base64 --decode)
+            FILE=$(python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[1]).decode(), end="")' "${ENCODED_FIELDS[0]}")
+            LINE=$(python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[1]).decode(), end="")' "${ENCODED_FIELDS[1]}")
+            COMMENT=$(python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[1]).decode(), end="")' "${ENCODED_FIELDS[2]}")
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
