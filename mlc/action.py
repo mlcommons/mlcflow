@@ -416,14 +416,22 @@ class Action:
 
             if os.path.exists(item_path):
                 if force_remove == True:
-                    shutil.rmtree(item_path)
+                    try:
+                        shutil.rmtree(item_path)
+                    except FileNotFoundError:
+                        logger.warning(
+                            f"{item_path} was already removed by another process.")
                 else:
                     user_choice = input(
                         f"Confirm to delete {target_name} item: {item_path}? (yes/no): ").strip().lower()
                     if user_choice not in ['yes', 'y']:
                         continue
                     else:
-                        shutil.rmtree(item_path)
+                        try:
+                            shutil.rmtree(item_path)
+                        except FileNotFoundError:
+                            logger.warning(
+                                f"{item_path} was already removed by another process.")
 
                 logger.info(
                     f"{target_name} item: {item_path} has been successfully removed")

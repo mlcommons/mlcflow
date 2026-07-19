@@ -10,6 +10,7 @@ from .logger import logger
 from urllib.parse import urlparse
 from .repo import Repo
 from .index import Index
+from filelock import FileLock, Timeout
 
 
 class RepoAction(Action):
@@ -172,17 +173,19 @@ class RepoAction(Action):
 
         # Get the path to the repos.json file in $HOME/MLC
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
+        lock_file = repos_file_path + ".lock"
 
-        with open(repos_file_path, 'r') as f:
-            repos_list = json.load(f)
+        with FileLock(lock_file, timeout=60):
+            with open(repos_file_path, 'r') as f:
+                repos_list = json.load(f)
 
-        if repo_path not in repos_list:
-            repos_list.append(repo_path)
-            logger.info(f"Added new repo path: {repo_path}")
+            if repo_path not in repos_list:
+                repos_list.append(repo_path)
+                logger.info(f"Added new repo path: {repo_path}")
 
-        with open(repos_file_path, 'w') as f:
-            json.dump(repos_list, f, indent=2)
-            logger.info(f"Updated repos.json at {repos_file_path}")
+            with open(repos_file_path, 'w') as f:
+                json.dump(repos_list, f, indent=2)
+                logger.info(f"Updated repos.json at {repos_file_path}")
 
         self.repos = self.load_repos_and_meta()
         repo_obj = next(
@@ -780,17 +783,19 @@ def rm_repo(repo_path, repos_file_path, force_remove):
 
 def unregister_repo(repo_path, repos_file_path):
     logger.info(f"Unregistering the repo in path {repo_path}")
+    lock_file = repos_file_path + ".lock"
 
-    with open(repos_file_path, 'r') as f:
-        repos_list = json.load(f)
+    with FileLock(lock_file, timeout=60):
+        with open(repos_file_path, 'r') as f:
+            repos_list = json.load(f)
 
-    if repo_path in repos_list:
-        repos_list.remove(repo_path)
-        with open(repos_file_path, 'w') as f:
-            json.dump(repos_list, f, indent=2)
-        logger.info(f"Path: {repo_path} has been removed.")
-    else:
-        logger.info(
-            f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
+        if repo_path in repos_list:
+            repos_list.remove(repo_path)
+            with open(repos_file_path, 'w') as f:
+                json.dump(repos_list, f, indent=2)
+            logger.info(f"Path: {repo_path} has been removed.")
+        else:
+            logger.info(
+                f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
 
     return {'return': 0}
