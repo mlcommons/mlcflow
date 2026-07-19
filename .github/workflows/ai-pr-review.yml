@@ -145,6 +145,9 @@ jobs:
         if: env.EMPTY_DIFF != 'true'
         run: |
           SUMMARY=$(jq -r '.summary' ai_output.json)
+          if [ -z "$SUMMARY" ] || [ "$SUMMARY" = "null" ]; then
+            SUMMARY="AI review did not provide a summary."
+          fi
           BODY=$(printf '%s\n\n%s\n' '## 🤖 AI Peer Review' "$SUMMARY")
 
           gh pr comment ${{ github.event.pull_request.number }} \
@@ -157,9 +160,17 @@ jobs:
         continue-on-error: true
         run: |
           while IFS= read -r c; do
-            FILE=$(jq -r '.file' <<<"$c")
-            LINE=$(jq -r '.line' <<<"$c")
-            COMMENT=$(jq -r '.comment' <<<"$c")
+            mapfile -t ENCODED_FIELDS < <(
+              jq -r '[.file, (.line | tostring), (.comment // "")] | map(@base64)[]' <<<"$c"
+            )
+            if [ "${#ENCODED_FIELDS[@]}" -ne 3 ]; then
+              echo "::warning::Skipping malformed AI review comment payload"
+              continue
+            fi
+
+            FILE=$(printf '%s' "${ENCODED_FIELDS[0]}" | base64 --decode)
+            LINE=$(printf '%s' "${ENCODED_FIELDS[1]}" | base64 --decode)
+            COMMENT=$(printf '%s' "${ENCODED_FIELDS[2]}" | base64 --decode)
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
