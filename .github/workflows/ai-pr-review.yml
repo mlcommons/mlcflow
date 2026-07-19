@@ -144,9 +144,13 @@ jobs:
       - name: Post PR summary comment
         if: env.EMPTY_DIFF != 'true'
         run: |
-          SUMMARY=$(jq -r '.summary' ai_output.json)
+          {
+            printf '## 🤖 AI PR Review Summary\n\n'
+            jq -r '.summary' ai_output.json
+          } > ai_pr_review_summary.md
+
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "## 🤖 AI Peer Review\n\n$SUMMARY"
+            --body-file ai_pr_review_summary.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -154,10 +158,10 @@ jobs:
         if: env.EMPTY_DIFF != 'true'
         continue-on-error: true
         run: |
-          jq -c '.comments[]?' ai_output.json | while read c; do
-            FILE=$(echo $c | jq -r '.file')
-            LINE=$(echo $c | jq -r '.line')
-            COMMENT=$(echo $c | jq -r '.comment')
+          jq -c '.comments[]?' ai_output.json | while IFS= read -r c; do
+            FILE=$(jq -r '.file' <<<"$c")
+            LINE=$(jq -r '.line' <<<"$c")
+            jq -r '.comment' <<<"$c" > ai_pr_review_comment.md
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
@@ -166,7 +170,7 @@ jobs:
 
             gh api \
               repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
-              -f body="$COMMENT" \
+              --raw-field body="$(cat ai_pr_review_comment.md)" \
               -f commit_id="${{ github.event.pull_request.head.sha }}" \
               -f path="$FILE" \
               -F line="$LINE" \
