@@ -1,10 +1,23 @@
 # AGENTS.md — AI coding agent guide for mlcflow
 
+> **⚠️ ARCHITECTURE MIGRATION (Option B, mlcflow 2.0.0) — READ FIRST.**
+> The execution engine now lives **inside this repo** at `mlc/engine/`
+> (`module.py`, `cache_utils.py`, `docker.py`, `apptainer.py`, `remote_run.py`,
+> `experiment.py`, `meta_schema.py`, `script_utils.py`, `docker_utils.py`,
+> `lint.py`, `doc.py`, `help.py`, `validate.py`, `utils.py`, `meta.json`) and is
+> imported directly: `from mlc.engine import ScriptAutomation`. There is **no
+> more `dynamic_import_module` and no auto git-clone** of mlperf-automations.
+> Script *content* comes from the **`mlc-scripts` pip package** (discovered via
+> `mlc_scripts.SCRIPTS_DIR`) and/or registered local repos (which override the
+> package by UID — see `index.py` deterministic-priority logic). `Automation`
+> base class moved to `mlc/automation.py` (breaks a circular import). Sections
+> below that describe dynamic loading / auto-pull are historical; trust this
+> banner where they conflict. See `migration-modification-plan.md`.
+
 mlcflow is the CLI driver for the MLC automation framework. It provides the
-`mlc`, `mlcr`, `mlcd`, and related commands and dynamically loads the script
-execution engine (`ScriptAutomation`) from an external content repo
-(`mlperf-automations`). This file covers everything an AI agent needs to
-contribute correctly to this repo.
+`mlc`, `mlcr`, `mlcd`, and related commands. As of the Option B migration it also
+**contains the script execution engine** (`ScriptAutomation`) under `mlc/engine/`.
+This file covers everything an AI agent needs to contribute correctly to this repo.
 
 ---
 

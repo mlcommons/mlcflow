@@ -23,9 +23,13 @@ class Item:
 
     def _save_meta(self):
         yaml_file = os.path.join(self.path, "meta.yaml")
-        _file = os.path.join(self.path, "meta.")
+        json_file = os.path.join(self.path, "meta.json")
 
         if os.path.exists(yaml_file):
             utils.save_yaml(yaml_file, self.meta)
-        elif os.path.exists(_file):
-            utils.save_(_file, self.meta)
+        else:
+            # Default to JSON (all cache/experiment entries use meta.json).
+            # Previously this branch referenced a non-existent utils.save_
+            # helper via a "meta." path that never matched, so metadata writes
+            # for meta.json-backed items were silently lost.
+            utils.save_json(json_file, meta=self.meta)

@@ -228,13 +228,56 @@ class Action:
                 logger.info(
                     f"Created repos.json in {os.path.dirname(self.repos_path)} and initialised with local cache folder path: {mlc_local_repo_path}")
 
-        self.local_cache_path = os.path.join(mlc_local_repo_path, "cache")
-        if not os.path.exists(self.local_cache_path):
-            os.makedirs(self.local_cache_path, exist_ok=True)
+        # Cache root. Default remains {repos_path}/local/cache for full
+        # backward compatibility (existing caches keep working with no data
+        # movement). MLC_CACHE_DIR overrides it — e.g. a large-disk mount, or a
+        # per-venv location. See migration docs §08.
+        self.cache_root = os.environ.get(
+            'MLC_CACHE_DIR', os.path.join(mlc_local_repo_path, "cache"))
+        # Back-compat alias (was previously unused dead state).
+        self.local_cache_path = self.cache_root
+        if not os.path.exists(self.cache_root):
+            os.makedirs(self.cache_root, exist_ok=True)
 
         self.repos = self.load_repos_and_meta()
+
+        # Prepend the bundled mlc-scripts package as a read-only virtual repo so
+        # its scripts are discoverable via the index without any git clone.
+        # Registered (local dev) repos are loaded after it and therefore
+        # override package scripts by UID during indexing — preserving the
+        # editable-install developer override workflow.
+        pkg_repo = self._get_package_scripts_repo()
+        if pkg_repo is not None:
+            self.repos = [pkg_repo] + self.repos
+
         # logger.info(f"In Action class: {self.repos_path}")
         self._index = None
+
+    def _get_package_scripts_repo(self):
+        """Return a read-only Repo pointing at the installed mlc-scripts package,
+        or None if the package is not installed. The index scans ``{repo}/script``,
+        which for the package equals ``mlc_scripts.SCRIPTS_DIR``.
+        """
+        try:
+            import mlc_scripts
+        except ImportError:
+            logger.debug(
+                "mlc_scripts package not installed; relying on registered repos "
+                "for script content.")
+            return None
+
+        scripts_dir = getattr(mlc_scripts, "SCRIPTS_DIR", None)
+        if not scripts_dir or not os.path.isdir(scripts_dir):
+            return None
+
+        pkg_dir = os.path.dirname(scripts_dir)  # {site-packages}/mlc_scripts
+        repo = Repo(path=pkg_dir, meta={
+            "alias": "mlc-scripts-pkg",
+            "uid": "mlcscriptspkg000",
+            "name": "Bundled mlc-scripts package (read-only)",
+        })
+        repo.readonly = True
+        return repo
 
     def add(self, i):
         """
@@ -293,7 +336,13 @@ class Action:
         repo_path = repo.path
 
         target_name = i.get('target_name', self.action_type)
-        target_path = os.path.join(repo_path, target_name)
+        if target_name == "cache":
+            # Cache root is configurable via MLC_CACHE_DIR (defaults to
+            # {repos_path}/local/cache, identical to the pre-migration path).
+            target_path = getattr(
+                self, 'cache_root', os.path.join(repo_path, target_name))
+        else:
+            target_path = os.path.join(repo_path, target_name)
         if target_name in ["cache", "experiment"]:
             extra_tags_suffix = i.get('extra_tags', '').replace(",", "-")[:15]
             if extra_tags_suffix != '':

@@ -164,7 +164,8 @@ class Index:
                 "tags": tags,
                 "alias": alias,
                 "path": path,
-                "repo": repo
+                "repo": repo,
+                "readonly": getattr(repo, "readonly", False)
             })
             self._save_indices()
 
@@ -188,7 +189,8 @@ class Index:
                 "tags": tags,
                 "alias": alias,
                 "path": path,
-                "repo": repo
+                "repo": repo,
+                "readonly": getattr(repo, "readonly", False)
             }
         self._save_indices()
 
@@ -276,11 +278,22 @@ class Index:
                 if folder_type == "script":
                     # logger.debug(f"-----Meta changed for {automation_path}, validating against schema... -----")
                     errors, warnings = validate_meta(data, config_path)
-                    for e in errors:
-                        logger.error(f"Meta validation error: {e}")
                     for w in warnings:
                         logger.debug(f"Meta validation warning: {w}")
                     if errors:
+                        readonly = getattr(repo, "readonly", False)
+                        if readonly:
+                            # Scripts shipped inside the read-only mlc-scripts
+                            # package cannot be edited by the user, so a bad
+                            # meta.yaml must not abort indexing of the other
+                            # ~377 scripts. Warn and skip this one entry.
+                            for e in errors:
+                                logger.warning(
+                                    f"Skipping package script with invalid meta "
+                                    f"{config_path}: {e}")
+                            continue
+                        for e in errors:
+                            logger.error(f"Meta validation error: {e}")
                         raise ValueError(
                             f"Meta validation failed for {config_path}. Fix the above error(s) and try again.")
 
@@ -417,12 +430,30 @@ class Index:
                 return
             tags = data.get("tags", [])
             alias = data.get("alias", None)
+            readonly = getattr(repo, "readonly", False)
+
+            # Deterministic priority: scripts bundled in the read-only
+            # mlc-scripts package must never override a script with the same UID
+            # coming from a registered (developer/local) repo, regardless of the
+            # order in which repos are processed or whether this is an
+            # incremental or full index build. Registered repos always win so
+            # that `pip install -e ./mlperf-automations` (or `mlc add repo`)
+            # takes priority over the bundled package.
+            if readonly:
+                for existing in self.indices[folder_type]:
+                    if existing.get("uid") == unique_id and not existing.get(
+                            "readonly", False) and existing.get("path") != folder_path:
+                        logger.debug(
+                            f"Keeping registered repo entry for uid {unique_id}; "
+                            f"skipping read-only package copy at {folder_path}")
+                        return
 
             # Remove stale entry for the same meta file path if exists
             self._delete_index_entries(folder_type, "path", folder_path)
 
             # Remove index entry with the same UID for other meta file if
-            # exists
+            # exists (unless a higher-priority registered entry should win,
+            # handled above).
             self._delete_index_entries(folder_type, "uid", unique_id)
 
             self.indices[folder_type].append({
@@ -430,7 +461,8 @@ class Index:
                 "tags": tags,
                 "alias": alias,
                 "path": folder_path,
-                "repo": repo
+                "repo": repo,
+                "readonly": readonly,
             })
 
         except Exception as e:
@@ -482,12 +514,21 @@ class Index:
         logger.info(f"Removing repo from index: {repo_path}")
         changed = False
 
+        # Use a normalized path + separator prefix so that e.g. removing
+        # ".../python3.13" does not also match ".../python3.13-extra". A bare
+        # str.startswith() would collide on shared venv path prefixes.
+        norm_repo = os.path.normpath(repo_path)
+
+        def _belongs(p):
+            np = os.path.normpath(p)
+            return np == norm_repo or np.startswith(norm_repo + os.sep)
+
         # remove index entries
         for folder_type in self.indices:
             before = len(self.indices[folder_type])
             self.indices[folder_type] = [
                 item for item in self.indices[folder_type]
-                if not item["path"].startswith(repo_path)
+                if not _belongs(item["path"])
             ]
             if len(self.indices[folder_type]) != before:
                 changed = True
@@ -495,7 +536,7 @@ class Index:
         # remove modified times
         keys_to_delete = [
             k for k in self.modified_times
-            if k.startswith(repo_path)
+            if _belongs(k)
         ]
 
         for k in keys_to_delete:

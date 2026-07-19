@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mlcflow"
-version = "1.2.4"
+version = "2.0.0"
 
 description = "An automation interface tailored for CPU/GPU benchmarking"
 authors = [
@@ -35,13 +35,13 @@ Repository = "https://github.com/mlcommons/mlcflow"
 Issues = "https://github.com/mlcommons/mlcflow/issues"
 
 [tool.setuptools]
-packages = ["mlc"]
+packages = ["mlc", "mlc.engine"]
 py-modules = []
-#include-package-data = true
 
-#[tool.setuptools.package-data]
-# This includes the config.yaml file
-#"mlc" = ["config.yaml"]
+[tool.setuptools.package-data]
+# Ship the automation-type meta (alias: script) alongside the engine so
+# ScriptAutomation can load self.meta from the package itself.
+"mlc.engine" = ["meta.json"]
 
 [project.scripts]
 mlc = "mlc.main:main"

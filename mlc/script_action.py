@@ -2,13 +2,26 @@ import re
 from .action import Action
 import os
 import sys
-import importlib
 import json
-import inspect
 from .index import Index
 from . import utils
+from .engine import ScriptAutomation
 from .error_codes import get_error_guidance
 from .logger import logger
+
+
+def get_mlcflow_version():
+    """Return the installed mlcflow version for error context.
+
+    Replaces the pre-migration behaviour of embedding the git module path in
+    error messages (the engine no longer lives at a ``/repos/.../module.py``
+    path).
+    """
+    try:
+        from importlib.metadata import version
+        return f"mlcflow {version('mlcflow')}"
+    except Exception:
+        return "mlcflow (unknown version)"
 
 
 class ScriptAction(Action):
@@ -204,162 +217,83 @@ Main Script Meta:""")
 
         return res
 
-    def dynamic_import_module(self, script_path):
-        # Validate the script_path
-        if not os.path.exists(script_path):
-            raise FileNotFoundError(f"Script file not found: {script_path}")
-
-        # Add the parent folder of the script to sys.path
-        script_dir = os.path.dirname(script_path)
-        automation_dir = os.path.dirname(script_dir)  # automation folder
-
-        if automation_dir not in sys.path:
-            sys.path.insert(0, automation_dir)
-
-        # Dynamically load the module
-        module_name = os.path.splitext(os.path.basename(script_path))[0]
-        spec = importlib.util.spec_from_file_location(module_name, script_path)
-        if spec is None or spec.loader is None:
-            raise ImportError(
-                f"Cannot create a module spec for: {script_path}")
-
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        return module
-
     def call_script_module_function(self, function_name, run_args):
         self.action_type = "script"
-        repos_folder = self.repos_path
 
-        # Import script submodule
-        script_path = self.find_target_folder("script")
-        if not script_path:
-            logger.warning(
-                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository...")
+        # Engine is now part of mlcflow (mlc/engine/) and imported directly.
+        # No dynamic module loading and no auto-clone of mlperf-automations.
+        # Script *content* is discovered at run time via the index, which
+        # includes both registered local repos and the bundled mlc-scripts
+        # package (see index.py / find_scripts_dir).
+        automation_instance = ScriptAutomation(self, run_args)
 
-            # Use the access method to pull the required repository
-            result = self.access({
-                "automation": "repo",
-                "action": "pull",
-                "repo": "mlcommons@mlperf-automations",
-                "branch": "dev"
-            })
+        _version_str = get_mlcflow_version()
 
-            if result['return'] == 0:
-                self.repos = self.load_repos_and_meta()
-                self.index = Index(self.repos_path, self.repos)
-
-                # Try to find the script path again after pulling
-                script_path = self.find_target_folder("script")
-                if not script_path:
-                    return {
-                        'return': 1, 'error': f"""Script automation still not found after pulling mlcommons@mlperf-automations --branch=dev."""}
+        try:
+            if function_name == "run":
+                result = automation_instance.run(run_args)
+            elif function_name == "docker":
+                result = automation_instance.docker(run_args)
+            elif function_name == "test":
+                result = automation_instance.test(run_args)
+            elif function_name == "experiment":
+                result = automation_instance.experiment(run_args)
+            elif function_name == "remote_run":
+                result = automation_instance.remote_run(run_args)
+            elif function_name == "help":
+                result = automation_instance.help(run_args)
+            elif function_name == "doc":
+                result = automation_instance.doc(run_args)
+            elif function_name == "lint":
+                result = automation_instance.lint(run_args)
             else:
-                # If pull failed, return the original error with additional
-                # info
-                logger.error(
-                    f"Failed to pull mlcommons@mlperf-automations repository: {result.get('error', 'Unknown error')}")
                 return {
-                    'return': 1, 'error': f"""Script automation not found and failed to automatically pull mlcommons@mlperf-automations --branch=dev. Please run "mlc pull repo mlcommons@mlperf-automations --branch=dev" manually: {result.get('error', 'Unknown error')}"""}
+                    'return': 1, 'error': f'Function {function_name} is not supported'}
+        except ScriptExecutionError:
+            raise
+        except Exception as exc:
+            _script_name = run_args.get('tags', run_args.get('details'))
+            raise ScriptExecutionError(
+                f"Script {function_name} execution failed ({_version_str})." +
+                "\nError : " + f"{type(exc).__name__}: {exc}",
+                script_name=_script_name, run_args=run_args) from exc
 
-        module_path = os.path.join(script_path, "module.py")
-        module = self.dynamic_import_module(module_path)
+        if result['return'] > 0:
+            error = result.get('error', "")
+            error_guidance = get_error_guidance(
+                result.get('error_code', result.get('return')), error)
+            _name_match = re.search(r'name\s*=\s*([^,)]+)', error)
+            _script_name = _name_match.group(1).strip() if _name_match else run_args.get(
+                'tags', run_args.get('details'))
+            # Dump dependency version info to file for debugging
+            _version_info_file = None
+            _version_info = result.get('version_info', [])
+            if _version_info:
+                _version_info_file = os.path.join(
+                    os.getcwd(), 'mlc-error-version-info.json')
+                try:
+                    with open(_version_info_file, 'w') as _vf:
+                        json.dump(_version_info, _vf, indent=2)
+                except Exception:
+                    _version_info_file = None
+            raise ScriptExecutionError(
+                f"Script {function_name} execution failed ({_version_str}). \nError : {error}",
+                script_name=_script_name, run_args=run_args,
+                version_info_file=_version_info_file,
+                error_code=error_guidance.get(
+                    'error_code') if error_guidance else None,
+                error_guidance=error_guidance)
 
-        # Check if ScriptAutomation is defined in the module
-        if hasattr(module, 'ScriptAutomation'):
-            ctor = module.ScriptAutomation.__init__
-            params = inspect.signature(ctor).parameters
+        if str(run_args.get("mlc_output")).lower() in [
+                "on", "true", "yes", "1"]:
+            with open("tmp-state.json", "w") as f:
+                json.dump(result['new_state'], f, indent=2)
 
-            if 'run_args' in params:
-                automation_instance = module.ScriptAutomation(
-                    self, module_path, run_args)
-            else:
-                automation_instance = module.ScriptAutomation(
-                    self, module_path)
+            with open("tmp-run-env.out", "w") as f:
+                for key, val in result['new_env'].items():
+                    f.write(f"""{key}="{val}"\n""")
 
-            try:
-                if function_name == "run":
-                    result = automation_instance.run(
-                        run_args)  # Pass args to the run method
-                elif function_name == "docker":
-                    result = automation_instance.docker(
-                        run_args)  # Pass args to the run method
-                elif function_name == "test":
-                    result = automation_instance.test(
-                        run_args)  # Pass args to the run method
-                elif function_name == "experiment":
-                    result = automation_instance.experiment(
-                        run_args)  # Pass args to the experiment method
-                elif function_name == "remote_run":
-                    result = automation_instance.remote_run(
-                        run_args)  # Pass args to the experiment method
-                elif function_name == "help":
-                    result = automation_instance.help(
-                        run_args)  # Pass args to the help method
-                elif function_name == "doc":
-                    result = automation_instance.doc(
-                        run_args)  # Pass args to the doc method
-                elif function_name == "lint":
-                    result = automation_instance.lint(
-                        run_args)  # Pass args to the lint method
-                else:
-                    return {
-                        'return': 1, 'error': f'Function {function_name} is not supported'}
-            except ScriptExecutionError:
-                raise
-            except Exception as exc:
-                _repo_match = re.search(r'/repos/([^/]+)/', module_path)
-                _repo_alias = _repo_match.group(1) if _repo_match else None
-                _script_name = run_args.get('tags', run_args.get('details'))
-                raise ScriptExecutionError(
-                    f"Script {function_name} execution failed in {module_path}." +
-                    "\nError : " + f"{type(exc).__name__}: {exc}",
-                    script_name=_script_name, repo_alias=_repo_alias, module_path=module_path,
-                    run_args=run_args) from exc
-
-            if result['return'] > 0:
-                error = result.get('error', "")
-                error_guidance = get_error_guidance(
-                    result.get('error_code', result.get('return')), error)
-                _name_match = re.search(r'name\s*=\s*([^,)]+)', error)
-                _script_name = _name_match.group(1).strip() if _name_match else run_args.get(
-                    'tags', run_args.get('details'))
-                _repo_match = re.search(r'/repos/([^/]+)/', module_path)
-                _repo_alias = _repo_match.group(1) if _repo_match else None
-                # Dump dependency version info to file for debugging
-                _version_info_file = None
-                _version_info = result.get('version_info', [])
-                if _version_info:
-                    _version_info_file = os.path.join(
-                        os.getcwd(), 'mlc-error-version-info.json')
-                    try:
-                        with open(_version_info_file, 'w') as _vf:
-                            json.dump(_version_info, _vf, indent=2)
-                    except Exception:
-                        _version_info_file = None
-                raise ScriptExecutionError(
-                    f"Script {function_name} execution failed in {module_path}. \nError : {error}",
-                    script_name=_script_name, repo_alias=_repo_alias, module_path=module_path,
-                    run_args=run_args, version_info_file=_version_info_file,
-                    error_code=error_guidance.get(
-                        'error_code') if error_guidance else None,
-                    error_guidance=error_guidance)
-
-            if str(run_args.get("mlc_output")).lower() in [
-                    "on", "true", "yes", "1"]:
-                with open("tmp-state.json", "w") as f:
-                    json.dump(result['new_state'], f, indent=2)
-
-                with open("tmp-run-env.out", "w") as f:
-                    for key, val in result['new_env'].items():
-                        f.write(f"""{key}="{val}"\n""")
-
-            return result
-        else:
-            logger.info("ScriptAutomation class not found in the script.")
-            return {'return': 1,
-                    'error': 'ScriptAutomation class not found in the script.'}
+        return result
 
     def docker(self, run_args):
         return self.docker_run(run_args)

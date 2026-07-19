@@ -325,6 +325,16 @@ class RepoAction(Action):
     def pull_repo(self, repo_url, branch=None, checkout=None, tag=None,
                   pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False):
 
+        # Deprecation: mlperf-automations script content is now distributed via
+        # the mlc-scripts pip package (Option B migration). Pulling it as a git
+        # repo still works for developers, but is no longer required.
+        if repo_url and "mlperf-automations" in str(repo_url):
+            logger.warning(
+                "DeprecationWarning: mlperf-automations scripts are now "
+                "distributed via pip. To get the latest scripts, run: "
+                "pip install mlc-scripts --upgrade  (git pull is only needed for "
+                "local script development).")
+
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path  # either the value will be from 'MLC_REPOS'
         # Ensure the directory exists
