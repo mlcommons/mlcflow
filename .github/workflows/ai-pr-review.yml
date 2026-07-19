@@ -149,10 +149,10 @@ jobs:
           if [ -z "$SUMMARY" ] || [ "$SUMMARY" = "null" ]; then
             SUMMARY="AI review did not provide a summary."
           fi
-          BODY=$(printf '%s\n\n%s' '## 🤖 AI Peer Review' "$SUMMARY")
+          PR_SUMMARY_BODY=$(printf '%s\n\n%s' '## 🤖 AI Peer Review' "$SUMMARY")
 
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "$BODY"
+            --body "$PR_SUMMARY_BODY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -161,20 +161,27 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
+          decode_field() {
+            python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[1]).decode(), end="")' "$1"
+          }
+
           while IFS= read -r c; do
             # Base64-encode fields during extraction so multiline markdown,
             # quotes, and other special characters survive shell parsing.
-            mapfile -t ENCODED_FIELDS < <(
+            if ! mapfile -t ENCODED_FIELDS < <(
               jq -r '[.file, (.line | tostring), (.comment // "")] | map(@base64)[]' <<<"$c"
-            )
+            ); then
+              echo "::warning::Skipping malformed AI review comment payload: jq extraction failed"
+              continue
+            fi
             if [ "${#ENCODED_FIELDS[@]}" -ne 3 ]; then
               echo "::warning::Skipping malformed AI review comment payload: expected 3 fields, got ${#ENCODED_FIELDS[@]}"
               continue
             fi
 
-            FILE=$(python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[1]).decode(), end="")' "${ENCODED_FIELDS[0]}")
-            LINE=$(python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[1]).decode(), end="")' "${ENCODED_FIELDS[1]}")
-            COMMENT=$(python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[1]).decode(), end="")' "${ENCODED_FIELDS[2]}")
+            FILE=$(decode_field "${ENCODED_FIELDS[0]}")
+            LINE=$(decode_field "${ENCODED_FIELDS[1]}")
+            COMMENT=$(decode_field "${ENCODED_FIELDS[2]}")
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
