@@ -40,6 +40,8 @@ class RepoAction(Action):
 
     """
 
+    # These phrases come from git's current stderr output and may vary by
+    # version or locale, so keep the matching logic narrowly scoped.
     GIT_MISSING_BRANCH_PHRASE = "did not match any file(s) known to git"
     GIT_FAST_FORWARD_FAILURE_PHRASE = "not possible to fast-forward"
 
@@ -183,8 +185,18 @@ class RepoAction(Action):
 
     @staticmethod
     def _subprocess_error_message(error):
-        """Return the most helpful message from a subprocess-related error."""
+        """Return stderr, then stdout, then str(error), whichever is populated first."""
         return (error.stderr or error.stdout or str(error)).strip()
+
+    @staticmethod
+    def _validate_extra_git_args(extra_args):
+        disallowed_pattern = re.compile(r"[\r\n]")
+        for arg in extra_args:
+            if disallowed_pattern.search(arg):
+                return (
+                    "--extra_git_args may not include carriage returns or newlines."
+                )
+        return None
 
     def add(self, run_args):
         """
@@ -521,7 +533,7 @@ class RepoAction(Action):
                     clone_depth = int(depth)
                 except (TypeError, ValueError):
                     return {
-                        "return": 1, "error": f"Invalid value for --depth: {depth!r}. Must be a positive integer."}
+                        "return": 1, "error": f"Invalid value for --depth: {depth}. Must be a positive integer."}
                 if clone_depth < 1:
                     return {
                         "return": 1, "error": f"Invalid value for --depth: {clone_depth}. Must be a positive integer."}
@@ -532,9 +544,22 @@ class RepoAction(Action):
             extra_args = []
             if extra_git_args:
                 if isinstance(extra_git_args, list):
+                    if not all(isinstance(arg, str) for arg in extra_git_args):
+                        return {
+                            "return": 1,
+                            "error": "--extra_git_args list entries must all be strings."
+                        }
                     extra_args = extra_git_args
+                elif isinstance(extra_git_args, str):
+                    extra_args = shlex.split(extra_git_args)
                 else:
-                    extra_args = shlex.split(str(extra_git_args))
+                    return {
+                        "return": 1,
+                        "error": "--extra_git_args must be provided as a string or list of strings."
+                    }
+                extra_git_args_error = self._validate_extra_git_args(extra_args)
+                if extra_git_args_error:
+                    return {"return": 1, "error": extra_git_args_error}
 
             # If the directory doesn't exist, clone it
             if not os.path.exists(repo_path):

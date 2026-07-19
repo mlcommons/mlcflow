@@ -61,13 +61,13 @@ jobs:
 
           DEFAULT_VENV_DIR="$HOME/mlcflow"
           VENV_DIR="$DEFAULT_VENV_DIR"
-          PY_MAJOR_MINOR="$(python3 -c 'import sys; print("{}.{}".format(*sys.version_info[:2]))')"
-          PY_ARCH="$(python3 -c 'import platform; print(platform.machine())')"
+          PY_MAJOR_MINOR="$(get_python_major_minor_version)"
+          PY_ARCH="$(normalize_architecture)"
 
           # Simulate an existing incompatible default venv and verify suffix fallback
           mkdir -p "$DEFAULT_VENV_DIR"
           resolve_default_venv_dir
-          EXPECTED_SUFFIX="${DEFAULT_VENV_DIR}_${PY_ARCH}_py${PY_MAJOR_MINOR}"
+          EXPECTED_SUFFIX="${DEFAULT_VENV_DIR}$(get_venv_suffix)"
           if [ "$VENV_DIR" != "$EXPECTED_SUFFIX" ]; then
             echo "Expected fallback venv path: $EXPECTED_SUFFIX"
             echo "Actual venv path: $VENV_DIR"

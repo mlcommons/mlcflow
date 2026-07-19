@@ -1,6 +1,8 @@
-import subprocess
 import platform
+import subprocess
 import sys
+import tempfile
+import textwrap
 from pathlib import Path
 
 
@@ -11,17 +13,19 @@ INSTALLER_SCRIPT = REPO_ROOT / "docs" / "install" / "mlcflow_unix_installer.sh"
 def _resolve_venv_dir(tmp_path, setup_snippet):
     default_dir = tmp_path / "mlcflow"
     marker = "__RESULT__"
-    command = f"""
-set -euo pipefail
-source "{INSTALLER_SCRIPT}"
-DEFAULT_VENV_DIR="{default_dir}"
-VENV_DIR="$DEFAULT_VENV_DIR"
-PY_MAJOR_MINOR="$(python3 -c 'import sys; print("{{}}.{{}}".format(*sys.version_info[:2]))')"
-PY_ARCH="$(python3 -c 'import platform; print(platform.machine())')"
-{setup_snippet}
-resolve_default_venv_dir
-echo "{marker}$VENV_DIR"
-"""
+    command = textwrap.dedent(
+        f"""
+        set -euo pipefail
+        source "{INSTALLER_SCRIPT}"
+        DEFAULT_VENV_DIR="{default_dir}"
+        VENV_DIR="$DEFAULT_VENV_DIR"
+        PY_MAJOR_MINOR="$(python3 -c 'import sys; print("{{}}.{{}}".format(*sys.version_info[:2]))')"
+        PY_ARCH="$(python3 -c 'import platform; print(platform.machine())')"
+        {setup_snippet}
+        resolve_default_venv_dir
+        echo "{marker}$VENV_DIR"
+        """
+    )
     result = subprocess.run(
         ["bash", "-lc", command],
         text=True,
@@ -34,13 +38,14 @@ echo "{marker}$VENV_DIR"
             return line[len(marker):]
 
     raise AssertionError(
-        f"Could not parse resolved venv path from output:\n{result.stdout}")
+        f"Could not parse resolved venv path from output:\n{result.stdout}"
+    )
 
 
 def test_resolve_default_venv_dir_prefers_compatible_default(tmp_path):
     setup_snippet = """
-python3 -m venv "$DEFAULT_VENV_DIR"
-"""
+    python3 -m venv "$DEFAULT_VENV_DIR"
+    """
     resolved = _resolve_venv_dir(tmp_path, setup_snippet)
     assert resolved == str(tmp_path / "mlcflow")
 
@@ -48,36 +53,85 @@ python3 -m venv "$DEFAULT_VENV_DIR"
 def test_resolve_default_venv_dir_uses_suffix_for_incompatible_default(
         tmp_path):
     setup_snippet = """
-mkdir -p "$DEFAULT_VENV_DIR"
-"""
+    mkdir -p "$DEFAULT_VENV_DIR"
+    """
     resolved = _resolve_venv_dir(tmp_path, setup_snippet)
     assert resolved.startswith(str(tmp_path / "mlcflow_"))
     assert "_py" in resolved
 
 
 def test_resolve_default_venv_dir_removes_stale_shared_env_when_default_incompatible(
-        tmp_path):
-    """When the default venv is incompatible and the suffixed venv already exists
-    but is itself stale/broken, the stale suffixed dir must be removed so that
-    setup_venv can create a fresh one rather than silently reusing a broken env."""
+    tmp_path,
+):
+    """Broken suffixed envs should be removed so setup_venv recreates them."""
     setup_snippet = """
-mkdir -p "$DEFAULT_VENV_DIR"
-SHARED_VENV_DIR="${DEFAULT_VENV_DIR}_${PY_ARCH}_py${PY_MAJOR_MINOR}"
-mkdir -p "$SHARED_VENV_DIR"
-"""
+    mkdir -p "$DEFAULT_VENV_DIR"
+    SHARED_VENV_DIR="${DEFAULT_VENV_DIR}_${PY_ARCH}_py${PY_MAJOR_MINOR}"
+    mkdir -p "$SHARED_VENV_DIR"
+    """
     resolved = _resolve_venv_dir(tmp_path, setup_snippet)
-    expected_suffix = f"{tmp_path / 'mlcflow'}_{platform.machine()}_py{sys.version_info[0]}.{sys.version_info[1]}"
+    expected_suffix = (
+        f"{tmp_path / 'mlcflow'}_{platform.machine()}"
+        f"_py{sys.version_info[0]}.{sys.version_info[1]}"
+    )
     assert resolved == expected_suffix
-    # The stale shared dir should have been removed so setup_venv creates it
-    # fresh
     assert not Path(expected_suffix).exists()
 
 
 def test_resolve_default_venv_dir_reuses_compatible_suffixed_env(tmp_path):
     setup_snippet = """
-SHARED_VENV_DIR="${DEFAULT_VENV_DIR}_${PY_ARCH}_py${PY_MAJOR_MINOR}"
-python3 -m venv "$SHARED_VENV_DIR"
-"""
+    SHARED_VENV_DIR="${DEFAULT_VENV_DIR}_${PY_ARCH}_py${PY_MAJOR_MINOR}"
+    python3 -m venv "$SHARED_VENV_DIR"
+    """
     resolved = _resolve_venv_dir(tmp_path, setup_snippet)
-    expected = f"{tmp_path / 'mlcflow'}_{platform.machine()}_py{sys.version_info[0]}.{sys.version_info[1]}"
+    expected = (
+        f"{tmp_path / 'mlcflow'}_{platform.machine()}"
+        f"_py{sys.version_info[0]}.{sys.version_info[1]}"
+    )
     assert resolved == expected
+
+
+def test_get_venv_suffix_and_compatibility_signature_use_consistent_python_values():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        shim_path = Path(temp_dir) / "python-shim"
+        shim_path.write_text(
+            textwrap.dedent(
+                """\
+                #!/usr/bin/env python3
+                import os
+                import platform
+                import sys
+
+                machine = os.environ["FAKE_MACHINE"]
+                major = int(os.environ.get("FAKE_PY_MAJOR", "3"))
+                minor = int(os.environ.get("FAKE_PY_MINOR", "12"))
+                code = sys.argv[2]
+
+                platform.machine = lambda: machine
+                sys.version_info = (major, minor, 0, "final", 0)
+                exec(code, {"__name__": "__main__"})
+                """
+            ),
+            encoding="utf-8",
+        )
+        shim_path.chmod(0o755)
+
+        command = textwrap.dedent(
+            f"""
+            set -euo pipefail
+            source "{INSTALLER_SCRIPT}"
+            PYTHON_CMD="{shim_path}"
+            export FAKE_MACHINE=arm64
+            export FAKE_PY_MAJOR=3
+            export FAKE_PY_MINOR=12
+            printf '__RESULT__:%s:%s\\n' "$(get_venv_suffix)" "$(get_python_compatibility_signature "$PYTHON_CMD")"
+            """
+        )
+        result = subprocess.run(
+            ["bash", "-lc", command],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+
+    assert "__RESULT__:_arm64_py3.12:arm64|3.12" in result.stdout
