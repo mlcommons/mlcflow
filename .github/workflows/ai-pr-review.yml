@@ -145,6 +145,11 @@ jobs:
         if: env.EMPTY_DIFF != 'true'
         shell: bash
         run: |
+          if [ ! -f ai_output.json ] || ! jq -e . ai_output.json >/dev/null; then
+            echo "::warning::Skipping AI PR summary comment because ai_output.json is missing or invalid"
+            exit 0
+          fi
+
           SUMMARY=$(jq -r '.summary' ai_output.json)
           if [ -z "$SUMMARY" ] || [ "$SUMMARY" = "null" ]; then
             SUMMARY="AI review did not provide a summary."
@@ -162,26 +167,39 @@ jobs:
         shell: bash
         run: |
           decode_field() {
-            python3 -c 'import base64, sys; print(base64.b64decode(sys.argv[1]).decode(), end="")' "$1"
+            python3 -c 'import base64, sys; exec("try:\n sys.stdout.write(base64.b64decode(sys.argv[1]).decode())\nexcept Exception as exc:\n print(f\"decode_error:{exc}\", file=sys.stderr); sys.exit(1)")' "$1"
           }
+
+          if [ ! -f ai_output.json ] || ! jq -e . ai_output.json >/dev/null; then
+            echo "::warning::Skipping AI inline review comments because ai_output.json is missing or invalid"
+            exit 0
+          fi
 
           while IFS= read -r c; do
             # Base64-encode fields during extraction so multiline markdown,
             # quotes, and other special characters survive shell parsing.
-            if ! mapfile -t ENCODED_FIELDS < <(
-              jq -r '[.file, (.line | tostring), (.comment // "")] | map(@base64)[]' <<<"$c"
-            ); then
+            if ! ENCODED_PAYLOAD=$(jq -r '[.file, (.line | tostring), (.comment // "")] | map(@base64)[]' <<<"$c"); then
               echo "::warning::Skipping malformed AI review comment payload: jq extraction failed"
               continue
             fi
+            mapfile -t ENCODED_FIELDS <<<"$ENCODED_PAYLOAD"
             if [ "${#ENCODED_FIELDS[@]}" -ne 3 ]; then
               echo "::warning::Skipping malformed AI review comment payload: expected 3 fields, got ${#ENCODED_FIELDS[@]}"
               continue
             fi
 
-            FILE=$(decode_field "${ENCODED_FIELDS[0]}")
-            LINE=$(decode_field "${ENCODED_FIELDS[1]}")
-            COMMENT=$(decode_field "${ENCODED_FIELDS[2]}")
+            if ! FILE=$(decode_field "${ENCODED_FIELDS[0]}"); then
+              echo "::warning::Skipping AI review comment payload: failed to decode file field"
+              continue
+            fi
+            if ! LINE=$(decode_field "${ENCODED_FIELDS[1]}"); then
+              echo "::warning::Skipping AI review comment payload: failed to decode line field"
+              continue
+            fi
+            if ! COMMENT=$(decode_field "${ENCODED_FIELDS[2]}"); then
+              echo "::warning::Skipping AI review comment payload: failed to decode comment field"
+              continue
+            fi
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
