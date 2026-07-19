@@ -557,7 +557,8 @@ class RepoAction(Action):
                         "return": 1,
                         "error": "--extra_git_args must be provided as a string or list of strings."
                     }
-                extra_git_args_error = self._validate_extra_git_args(extra_args)
+                extra_git_args_error = self._validate_extra_git_args(
+                    extra_args)
                 if extra_git_args_error:
                     return {"return": 1, "error": extra_git_args_error}
 
