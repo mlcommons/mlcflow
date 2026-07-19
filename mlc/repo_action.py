@@ -597,7 +597,7 @@ class RepoAction(Action):
                 else:
                     logger.info(
                         f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
-
+    
                     # Check for local changes
                     status_command = [
                         'git',
@@ -608,7 +608,7 @@ class RepoAction(Action):
                         '--untracked-files=no']
                     local_changes = subprocess.run(
                         status_command, capture_output=True, text=True)
-
+    
                     if local_changes.stdout.strip():
                         if not force:
                             logger.warning(
@@ -616,7 +616,7 @@ class RepoAction(Action):
                             print(local_changes.stdout.strip())
                             return {
                                 "return": 0, "warning": f"Local changes detected in the already existing repository: {repo_path}, skipping the pull"}
-
+    
                         logger.warning(
                             "Local changes detected. Running force pull with temporary git stash.")
                         stash_created = False
@@ -648,7 +648,7 @@ class RepoAction(Action):
                                 "return": 1,
                                 "error": f"Force pull failed while stashing local changes in {repo_path}: {stash_error}"
                             }
-
+    
                         logger.info(
                             "Pulling latest changes...")
                         try:
@@ -681,7 +681,7 @@ class RepoAction(Action):
                                     force=True)
                             }
                         logger.info("Repository successfully pulled.")
-
+    
                         if stash_created:
                             try:
                                 subprocess.run(
@@ -746,29 +746,29 @@ class RepoAction(Action):
                                     repo_path, pull_error)
                             }
                         logger.info("Repository successfully pulled.")
-
+    
                 if tag:
                     checkout = "tags/" + tag
-
+    
                 # Checkout to a specific branch or commit if --checkout is provided
                 if checkout or tag:
                     logger.info(f"Checking out to {checkout} in {repo_path}...")
                     subprocess.run(
                         ['git', '-C', repo_path, 'checkout', checkout], check=True)
-
+    
                 # if not tag:
                 #    subprocess.run(['git', '-C', repo_path, 'pull'], check=True)
                 #    logger.info("Repository successfully pulled.")
-
+    
                 logger.info("Registering the repo in repos.json")
-
+    
                 # check the meta file to obtain uids
                 meta_file_path = os.path.join(repo_path, 'meta.yaml')
                 if not os.path.exists(meta_file_path):
                     logger.warning(
                         f"meta.yaml not found in {repo_path}. Repo pulled but not registered in MLC repos. Skipping...")
                     return {"return": 0}
-
+    
                 try:
                     with open(meta_file_path, 'r') as meta_file:
                         meta_data = yaml.safe_load(meta_file)
@@ -777,11 +777,11 @@ class RepoAction(Action):
                     logger.error(f"Error loading YAML configuration: {e}")
                     return {"return": 1,
                             "error": f"Syntax error in {meta_file_path}: {e}"}
-
+    
                 r = self.register_repo(repo_path, meta_data, ignore_on_conflict)
                 if r['return'] > 0:
                     return r
-
+    
                 return {"return": 0}
 
         except RuntimeError as e:

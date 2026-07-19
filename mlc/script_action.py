@@ -26,8 +26,9 @@ class ScriptAction(Action):
     6.  Copy(cp)
     7.  Run
     8.  Docker
-    9.  Test
-    10. Experiment
+    9.  Apptainer
+    10. Test
+    11. Experiment
 
     Scripts in MLCFlow can be identified using different methods:
 
@@ -243,7 +244,8 @@ Main Script Meta:""")
                 "automation": "repo",
                 "action": "pull",
                 "repo": "mlcommons@mlperf-automations",
-                "branch": "dev"
+                "branch": "dev",
+                "fast_forward_only": True
             })
 
             if result['return'] == 0:
@@ -285,6 +287,9 @@ Main Script Meta:""")
                 elif function_name == "docker":
                     result = automation_instance.docker(
                         run_args)  # Pass args to the run method
+                elif function_name == "apptainer":
+                    result = automation_instance.apptainer(
+                        run_args)  # Pass args to the apptainer method
                 elif function_name == "test":
                     result = automation_instance.test(
                         run_args)  # Pass args to the run method
@@ -413,6 +418,33 @@ Main Script Meta:""")
         return self.call_script_module_function("docker", run_args)
 
     docker.__doc__ = docker_run.__doc__
+
+    def apptainer(self, run_args):
+        return self.apptainer_run(run_args)
+
+    def apptainer_run(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Script
+    Action: Apptainer
+    ####################################################################################################################
+
+    The `apptainer` action runs scripts inside an Apptainer containerized environment.
+
+    An MLCFlow script can be executed inside Apptainer using either of the following syntaxes:
+
+    1. Apptainer Run: mlc apptainer run --tags=<script tags> <run flags>
+    2. Apptainer Script: mlc apptainer script --tags=<script tags> <run flags>
+
+    Example Command:
+
+    mlc apptainer script --tags=detect,os -j
+    mlca detect,os -j
+
+        """
+        return self.call_script_module_function("apptainer", run_args)
+
+    apptainer.__doc__ = apptainer_run.__doc__
 
     def remote_run(self, run_args):
         """

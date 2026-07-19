@@ -48,12 +48,49 @@ jobs:
           OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
           DIFF = open("pr.diff").read()[:15000]
 
+          def extract_response_text(data):
+              output_text = data.get("output_text")
+              if isinstance(output_text, str) and output_text.strip():
+                  return output_text.strip()
+
+              texts = []
+              for item in data.get("output", []):
+                  for content in item.get("content", []):
+                      text = content.get("text")
+                      if isinstance(text, str) and text.strip():
+                          texts.append(text.strip())
+                      elif isinstance(text, dict):
+                          value = text.get("value")
+                          if isinstance(value, str) and value.strip():
+                              texts.append(value.strip())
+
+              return "\n".join(texts).strip()
+
+          def strip_code_fences(text):
+              text = text.strip()
+              if not text.startswith("```"):
+                  return text
+
+              lines = text.splitlines()
+              if len(lines) < 2 or lines[-1].strip() != "```":
+                  return text
+
+              lines = lines[1:-1]
+
+              return "\n".join(lines).strip()
+
           prompt = f"""
-          Review this incremental pull request diff.
+          Review this incremental pull request diff for a public engineering repository.
 
           Tasks:
-          1. Write a concise PR summary (overall risks, design issues).
-          2. Provide inline review comments with:
+          1. Write a professional PR summary in 2-4 sentences that:
+             - explains the main change clearly
+             - notes any material risk or follow-up
+             - avoids hype, praise, or filler
+             - says plainly when risk is low
+          2. Provide inline review comments only for concrete, actionable issues.
+             Return an empty comments list when there are no such issues.
+             Each inline comment must include:
              - file
              - line
              - comment
@@ -84,11 +121,18 @@ jobs:
                   "model": "gpt-4.1-mini",
                   "input": prompt,
                   "temperature": 0.2
-              }
+              },
+              timeout=60
           )
 
+          response.raise_for_status()
           data = response.json()
-          text = data["output"][0]["content"][0]["text"]
+          text = strip_code_fences(extract_response_text(data))
+          if not text:
+              raise RuntimeError(
+                  "OpenAI review response did not contain any text output: "
+                  + json.dumps(data)[:1000]
+              )
 
           parsed = json.loads(text)
           with open("ai_output.json", "w") as f:
@@ -99,24 +143,70 @@ jobs:
 
       - name: Post PR summary comment
         if: env.EMPTY_DIFF != 'true'
+        shell: bash
         run: |
+          if [ ! -f ai_output.json ] || ! jq -e . ai_output.json >/dev/null; then
+            echo "::warning::Skipping AI PR summary comment because ai_output.json is missing or invalid"
+            exit 0
+          fi
+
           SUMMARY=$(jq -r '.summary' ai_output.json)
+          if [ -z "$SUMMARY" ] || [ "$SUMMARY" = "null" ]; then
+            SUMMARY="AI review did not provide a summary."
+          fi
+          PR_SUMMARY_BODY=$(printf '%s\n\n%s' '## 🤖 AI Peer Review' "$SUMMARY")
+
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "## 🤖 AI PR Review Summary\n\n$SUMMARY"
+            --body "$PR_SUMMARY_BODY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post inline review comments
         if: env.EMPTY_DIFF != 'true'
         continue-on-error: true
+        shell: bash
         run: |
-          jq -c '.comments[]?' ai_output.json | while read c; do
-            FILE=$(echo $c | jq -r '.file')
-            LINE=$(echo $c | jq -r '.line')
-            COMMENT=$(echo $c | jq -r '.comment')
+          decode_field() {
+            python3 -c 'import base64, sys; exec("try:\n sys.stdout.write(base64.b64decode(sys.argv[1]).decode())\nexcept Exception as exc:\n print(f\"decode_error:{exc}\", file=sys.stderr); sys.exit(1)")' "$1"
+          }
+
+          if [ ! -f ai_output.json ] || ! jq -e . ai_output.json >/dev/null; then
+            echo "::warning::Skipping AI inline review comments because ai_output.json is missing or invalid"
+            exit 0
+          fi
+
+          while IFS= read -r c; do
+            # Base64-encode fields during extraction so multiline markdown,
+            # quotes, and other special characters survive shell parsing.
+            if ! ENCODED_PAYLOAD=$(jq -r '[.file, (.line | tostring), (.comment // "")] | map(@base64)[]' <<<"$c"); then
+              echo "::warning::Skipping malformed AI review comment payload: jq extraction failed"
+              continue
+            fi
+            mapfile -t ENCODED_FIELDS <<<"$ENCODED_PAYLOAD"
+            if [ "${#ENCODED_FIELDS[@]}" -ne 3 ]; then
+              echo "::warning::Skipping malformed AI review comment payload: expected 3 fields, got ${#ENCODED_FIELDS[@]}"
+              continue
+            fi
+
+            if ! FILE=$(decode_field "${ENCODED_FIELDS[0]}"); then
+              echo "::warning::Skipping AI review comment payload: failed to decode file field"
+              continue
+            fi
+            if ! LINE=$(decode_field "${ENCODED_FIELDS[1]}"); then
+              echo "::warning::Skipping AI review comment payload: failed to decode line field"
+              continue
+            fi
+            if ! COMMENT=$(decode_field "${ENCODED_FIELDS[2]}"); then
+              echo "::warning::Skipping AI review comment payload: failed to decode comment field"
+              continue
+            fi
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
+              continue
+            fi
+            if [ -z "$COMMENT" ] || [ "$COMMENT" = "null" ]; then
+              echo "::warning::Skipping AI review comment with empty body for $FILE:$LINE"
               continue
             fi
 
@@ -128,6 +218,6 @@ jobs:
               -F line="$LINE" \
               -f side="RIGHT" \
               -f subject_type="line" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
-          done
+          done < <(jq -c '.comments[]?' ai_output.json)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

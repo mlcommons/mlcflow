@@ -390,7 +390,7 @@ def build_parser(pre_args):
     reindex_parser.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Script-only
-    for action in ['docker', 'docker-run', 'apptainer',
+    for action in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
                    'experiment', 'remote-run', 'remote-experiment',
                    'remote-docker', 'doc', 'lint']:
         p = subparsers.add_parser(action, add_help=False)
@@ -432,8 +432,8 @@ def build_run_args(args):
     if args.command in ['pull', 'rm', 'add', 'find'] and args.target == "repo":
         run_args['repo'] = args.details
 
-    if args.command in ['docker', 'docker-run', 'apptainer', 'experiment',
-                        'remote-run', 'remote-experiment',
+    if args.command in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
+                        'experiment', 'remote-run', 'remote-experiment',
                         'remote-docker', 'doc', 'lint'] and args.target == "run":
         # run_args['target'] = 'script' #dont modify this as script might have
         # target as in input
@@ -507,7 +507,7 @@ def main():
 
     | Target  | Actions                                                   |
     |---------|-----------------------------------------------------------|
-    | script  | run, find/search, rm, mv, cp, add, test, docker-run, show |
+    | script  | run, find/search, rm, mv, cp, add, test, docker-run, apptainer/apptainer-run, show |
     | cache   | find/search, rm, show, list, prune, mark-tmp              |
     | repo    | pull, search, rm, list, find/search                       |
 
@@ -560,7 +560,7 @@ def main():
         help_text = ""
         if pre_args.target == "run":
             if pre_args.action.startswith(
-                    "docker") or pre_args.action == "apptainer":
+                    "docker") or pre_args.action in ("apptainer", "apptainer-run"):
                 pre_args.target = "script"
             else:
                 logger.error(
@@ -576,7 +576,7 @@ def main():
             else:
                 pre_args.target, pre_args.action = pre_args.action, None
             actions = get_action(pre_args.target, default_parent)
-            help_text += actions.__doc__
+            help_text += actions.__doc__ or ""
             # iterate through every method
             for method_name, method in inspect.getmembers(
                     actions.__class__, inspect.isfunction):
@@ -588,7 +588,7 @@ def main():
             action_name = pre_args.action.replace("-", "_")
             try:
                 method = getattr(actions, action_name)
-                help_text += actions.__doc__
+                help_text += actions.__doc__ or ""
                 if method.__doc__:
                     help_text += method.__doc__
             except AttributeError:
