@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+import yaml
 from unittest.mock import patch, MagicMock
 
 from mlc.repo_action import unregister_repo, RepoAction
@@ -48,7 +49,6 @@ class RegisterRepoThreadSafetyTest(unittest.TestCase):
         os.makedirs(repo_dir, exist_ok=True)
         uid = utils.get_new_uid()['uid']
         meta = {'uid': uid, 'alias': name}
-        import yaml
         with open(os.path.join(repo_dir, 'meta.yaml'), 'w') as f:
             yaml.dump(meta, f)
         return repo_dir, meta
@@ -150,7 +150,6 @@ class RegisterRepoThreadSafetyTest(unittest.TestCase):
                 clone_call_count.append(1)
                 # Simulate the clone by creating the directory + meta.yaml
                 os.makedirs(repo_path, exist_ok=True)
-                import yaml
                 meta = {'uid': utils.get_new_uid()['uid'], 'alias': 'example@test-repo'}
                 with open(os.path.join(repo_path, 'meta.yaml'), 'w') as f:
                     yaml.dump(meta, f)
