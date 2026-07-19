@@ -90,7 +90,7 @@ def test_resolve_default_venv_dir_reuses_compatible_suffixed_env(tmp_path):
     assert resolved == expected
 
 
-def test_get_venv_suffix_uses_python_machine_value():
+def test_get_venv_suffix_and_compatibility_signature_use_consistent_python_values():
     with tempfile.TemporaryDirectory() as temp_dir:
         shim_path = Path(temp_dir) / "python-shim"
         shim_path.write_text(
@@ -98,29 +98,17 @@ def test_get_venv_suffix_uses_python_machine_value():
                 """\
                 #!/usr/bin/env python3
                 import os
+                import platform
                 import sys
 
                 machine = os.environ["FAKE_MACHINE"]
-                major = os.environ.get("FAKE_PY_MAJOR", "3")
-                minor = os.environ.get("FAKE_PY_MINOR", "12")
+                major = int(os.environ.get("FAKE_PY_MAJOR", "3"))
+                minor = int(os.environ.get("FAKE_PY_MINOR", "12"))
                 code = sys.argv[2]
 
-                if (
-                    "platform.machine()" in code
-                    and "sys.version_info[0]" in code
-                    and "sys.version_info[1]" in code
-                    and "_py" in code
-                ):
-                    print(f"_{machine}_py{major}.{minor}")
-                elif (
-                    "platform.machine()" in code
-                    and "sys.version_info[0]" in code
-                    and "sys.version_info[1]" in code
-                    and "|" in code
-                ):
-                    print(f"{machine}|{major}.{minor}")
-                else:
-                    raise SystemExit(f"unexpected code: {code}")
+                platform.machine = lambda: machine
+                sys.version_info = (major, minor, 0, "final", 0)
+                exec(code, {"__name__": "__main__"})
                 """
             ),
             encoding="utf-8",
