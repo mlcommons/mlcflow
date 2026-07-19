@@ -26,7 +26,8 @@ class RegisterRepoThreadSafetyTest(unittest.TestCase):
         self.addCleanup(self._restore_env)
         os.environ["MLC_REPOS"] = os.path.join(self.temp_dir.name, "repos")
 
-        # Bootstrap a minimal MLC environment (creates repos.json, local meta.yaml)
+        # Bootstrap a minimal MLC environment (creates repos.json, local
+        # meta.yaml)
         action = Action()
         action.parent = None
         self.repos_path = action.repos_path
@@ -59,7 +60,8 @@ class RegisterRepoThreadSafetyTest(unittest.TestCase):
         all N must appear in repos.json at the end with no duplicates.
         """
         n_threads = 10
-        fake_repos = [self._make_fake_repo_dir(f"fake-repo-register-{i}") for i in range(n_threads)]
+        fake_repos = [self._make_fake_repo_dir(
+            f"fake-repo-register-{i}") for i in range(n_threads)]
         errors = []
 
         def register(repo_path, meta):
@@ -84,7 +86,10 @@ class RegisterRepoThreadSafetyTest(unittest.TestCase):
             final_list = json.load(f)
 
         for path, _ in fake_repos:
-            self.assertIn(path, final_list, msg=f"{path} missing from repos.json")
+            self.assertIn(
+                path,
+                final_list,
+                msg=f"{path} missing from repos.json")
 
         # No duplicates
         self.assertEqual(len(final_list), len(set(final_list)),
@@ -96,7 +101,8 @@ class RegisterRepoThreadSafetyTest(unittest.TestCase):
         unique path; all fake paths must be gone afterwards with no duplicates.
         """
         n_threads = 10
-        fake_paths = [f"/tmp/fake-repo-unregister-{i}" for i in range(n_threads)]
+        fake_paths = [
+            f"/tmp/fake-repo-unregister-{i}" for i in range(n_threads)]
 
         # Seed repos.json with all fake paths
         with open(self.repos_file, "r") as f:
@@ -112,7 +118,10 @@ class RegisterRepoThreadSafetyTest(unittest.TestCase):
             except Exception as exc:
                 errors.append(exc)
 
-        threads = [threading.Thread(target=unregister, args=(p,)) for p in fake_paths]
+        threads = [
+            threading.Thread(
+                target=unregister, args=(
+                    p,)) for p in fake_paths]
         for t in threads:
             t.start()
         for t in threads:
@@ -150,7 +159,9 @@ class RegisterRepoThreadSafetyTest(unittest.TestCase):
                 clone_call_count.append(1)
                 # Simulate the clone by creating the directory + meta.yaml
                 os.makedirs(repo_path, exist_ok=True)
-                meta = {'uid': utils.get_new_uid()['uid'], 'alias': 'example@test-repo'}
+                meta = {
+                    'uid': utils.get_new_uid()['uid'],
+                    'alias': 'example@test-repo'}
                 with open(os.path.join(repo_path, 'meta.yaml'), 'w') as f:
                     yaml.dump(meta, f)
                 result = MagicMock()
