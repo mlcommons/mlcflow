@@ -148,7 +148,12 @@ jobs:
           if [ -z "$SUMMARY" ] || [ "$SUMMARY" = "null" ]; then
             SUMMARY="AI review did not provide a summary."
           fi
-          BODY=$(printf '%s\n\n%s\n' '## 🤖 AI Peer Review' "$SUMMARY")
+          BODY=$(cat <<EOF
+          ## 🤖 AI Peer Review
+
+          $SUMMARY
+          EOF
+          )
 
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "$BODY"
@@ -164,7 +169,7 @@ jobs:
               jq -r '[.file, (.line | tostring), (.comment // "")] | map(@base64)[]' <<<"$c"
             )
             if [ "${#ENCODED_FIELDS[@]}" -ne 3 ]; then
-              echo "::warning::Skipping malformed AI review comment payload"
+              echo "::warning::Skipping malformed AI review comment payload: expected 3 fields, got ${#ENCODED_FIELDS[@]}"
               continue
             fi
 
@@ -176,7 +181,7 @@ jobs:
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
               continue
             fi
-            if [ -z "$COMMENT" ] || [ "$COMMENT" = "null" ]; then
+            if [ -z "$COMMENT" ]; then
               echo "::warning::Skipping AI review comment with empty body for $FILE:$LINE"
               continue
             fi
