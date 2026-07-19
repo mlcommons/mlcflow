@@ -9,6 +9,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER_SCRIPT = REPO_ROOT / "docs" / "install" / "mlcflow_unix_installer.sh"
 
+
 def _resolve_venv_dir(tmp_path, setup_snippet):
     default_dir = tmp_path / "mlcflow"
     marker = "__RESULT__"
