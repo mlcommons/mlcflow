@@ -357,7 +357,7 @@ get_python_compatibility_signature() {
 }
 
 get_venv_suffix() {
-    echo "_$(normalize_architecture)_py$(get_python_major_minor_version)"
+    "$PYTHON_CMD" -c 'import platform, sys; print("_{}_py{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))'
 }
 
 is_compatible_venv() {
@@ -398,7 +398,7 @@ resolve_venv_dir() {
 
         resolved_venv_dir="$compatible_venv_dir"
         if [ -d "$resolved_venv_dir" ] && ! is_compatible_venv "$resolved_venv_dir"; then
-            log_warn "Removing stale/incompatible virtual environment: $resolved_venv_dir"
+            log_warn "Removing stale/incompatible virtual environment: $resolved_venv_dir" >&2
             rm -rf "$resolved_venv_dir"
         fi
         echo "$resolved_venv_dir"

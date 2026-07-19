@@ -15,19 +15,11 @@ INSTALLER_PATH = os.path.join(
     "install",
     "mlcflow_unix_installer.sh")
 # Keep this in sync with docs/install/mlcflow_unix_installer.sh:
-# normalize_architecture() and get_python_compatibility_signature().
+# get_venv_suffix() and get_python_compatibility_signature().
 COMPATIBILITY_SIGNATURE_CODE = (
     'import platform, sys; '
     'print("{}|{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))'
 )
-
-
-def normalize_architecture(machine):
-    if machine in ("x86_64", "amd64"):
-        return "x86_64"
-    if machine in ("aarch64", "arm64"):
-        return "aarch64"
-    return machine
 
 
 class UnixInstallerVenvTest(unittest.TestCase):
@@ -37,7 +29,7 @@ class UnixInstallerVenvTest(unittest.TestCase):
 
     def _expected_suffix(self):
         return (
-            f"_{normalize_architecture(platform.machine())}"
+            f"_{platform.machine()}"
             f"_py{sys.version_info[0]}.{sys.version_info[1]}"
         )
 
@@ -129,10 +121,10 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
             + main_guard
         )
         self.assertIn(main_guard, installer_contents)
+        modified_contents = installer_contents.replace(main_guard, replacement)
+        self.assertIn(replacement, modified_contents)
         with open(integration_installer_path, "w", encoding="utf-8") as installer_file:
-            installer_file.write(
-                installer_contents.replace(main_guard, replacement)
-            )
+            installer_file.write(modified_contents)
         return integration_installer_path
 
     def test_installer_main_runs_setup_venv_with_stubbed_dependencies(self):

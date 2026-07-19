@@ -190,12 +190,11 @@ class RepoAction(Action):
 
     @staticmethod
     def _validate_extra_git_args(extra_args):
-        disallowed_pattern = re.compile(r"[;&|`$<>\r\n]")
+        disallowed_pattern = re.compile(r"[\r\n]")
         for arg in extra_args:
             if disallowed_pattern.search(arg):
                 return (
-                    "--extra_git_args may not include shell metacharacters such as "
-                    ";, &, |, `, $, <, >, or newlines."
+                    "--extra_git_args may not include carriage returns or newlines."
                 )
         return None
 
