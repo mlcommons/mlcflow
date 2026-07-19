@@ -174,18 +174,29 @@ class RepoAction(Action):
         # Get the path to the repos.json file in $HOME/MLC
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
 
+        # Lock file sits next to repos.json; left on disk but harmless.
         repos_lock_file = repos_file_path + ".lock"
-        with FileLock(repos_lock_file, timeout=60):
-            with open(repos_file_path, 'r') as f:
-                repos_list = json.load(f)
+        try:
+            with FileLock(repos_lock_file, timeout=60):
+                with open(repos_file_path, 'r') as f:
+                    repos_list = json.load(f)
 
-            if repo_path not in repos_list:
-                repos_list.append(repo_path)
-                logger.info(f"Added new repo path: {repo_path}")
+                if repo_path not in repos_list:
+                    repos_list.append(repo_path)
+                    logger.info(f"Added new repo path: {repo_path}")
 
-            with open(repos_file_path, 'w') as f:
-                json.dump(repos_list, f, indent=2)
-                logger.info(f"Updated repos.json at {repos_file_path}")
+                with open(repos_file_path, 'w') as f:
+                    json.dump(repos_list, f, indent=2)
+                    logger.info(f"Updated repos.json at {repos_file_path}")
+        except Timeout:
+            return {
+                'return': 1,
+                'error': (
+                    f"Could not acquire lock for repos.json after 60 seconds. "
+                    "Another mlc process may be modifying repos.json. "
+                    "Try again once the other operation completes."
+                )
+            }
 
         self.repos = self.load_repos_and_meta()
         repo_obj = next(
@@ -361,6 +372,7 @@ class RepoAction(Action):
                 repo_path = os.path.join(repo_base_path, repo_download_name)
 
         try:
+            # Lock file sits next to the repo directory; left on disk but harmless.
             repo_lock_file = repo_path + ".lock"
             with FileLock(repo_lock_file, timeout=300):
                 # If the directory doesn't exist, clone it
@@ -546,6 +558,15 @@ class RepoAction(Action):
 
         except subprocess.CalledProcessError as e:
             return {'return': 1, 'error': f"Git command failed: {e}"}
+        except Timeout:
+            return {
+                'return': 1,
+                'error': (
+                    f"Could not acquire lock for {repo_path} after 300 seconds. "
+                    "Another mlc process may be cloning or pulling this repo. "
+                    "Try again once the other operation completes."
+                )
+            }
         except Exception as e:
             return {'return': 1,
                     'error': f"Error pulling repository: {str(e)}"}
@@ -792,18 +813,29 @@ def rm_repo(repo_path, repos_file_path, force_remove):
 def unregister_repo(repo_path, repos_file_path):
     logger.info(f"Unregistering the repo in path {repo_path}")
 
+    # Lock file sits next to repos.json; left on disk but harmless.
     repos_lock_file = repos_file_path + ".lock"
-    with FileLock(repos_lock_file, timeout=60):
-        with open(repos_file_path, 'r') as f:
-            repos_list = json.load(f)
+    try:
+        with FileLock(repos_lock_file, timeout=60):
+            with open(repos_file_path, 'r') as f:
+                repos_list = json.load(f)
 
-        if repo_path in repos_list:
-            repos_list.remove(repo_path)
-            with open(repos_file_path, 'w') as f:
-                json.dump(repos_list, f, indent=2)
-            logger.info(f"Path: {repo_path} has been removed.")
-        else:
-            logger.info(
-                f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
+            if repo_path in repos_list:
+                repos_list.remove(repo_path)
+                with open(repos_file_path, 'w') as f:
+                    json.dump(repos_list, f, indent=2)
+                logger.info(f"Path: {repo_path} has been removed.")
+            else:
+                logger.info(
+                    f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
+    except Timeout:
+        return {
+            'return': 1,
+            'error': (
+                f"Could not acquire lock for repos.json after 60 seconds. "
+                "Another mlc process may be modifying repos.json. "
+                "Try again once the other operation completes."
+            )
+        }
 
     return {'return': 0}
