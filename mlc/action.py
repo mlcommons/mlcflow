@@ -483,6 +483,7 @@ class Action:
         target_name = i.get('target_name', i.get('target', "cache"))
         i['target_name'] = target_name
         ii = i.copy()
+        quiet = ii.get('quiet', sys.stdin.isatty())
 
         if i.get('search_tags'):
             ii['tags'] = ",".join(i['search_tags'])
@@ -504,9 +505,12 @@ class Action:
 
         new_tags = set(search_tags)
         if len(found_items) > 1:
-            # Step 3: Ask user for confirmation if multiple items are found
-            user_input = input(
-                f"{len(found_items)} items found. Do you want to update all? (yes/no): ").strip().lower()
+            if quiet:
+                user_input = 'yes'
+            else:
+                # Step 3: Ask user for confirmation if multiple items are found
+                user_input = input(
+                    f"{len(found_items)} items found. Do you want to update all? (yes/no): ").strip().lower()
             if user_input not in ['yes', 'y']:
                 return {'return': 0,
                         'message': 'Update operation canceled by the user.'}
