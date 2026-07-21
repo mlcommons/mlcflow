@@ -432,28 +432,48 @@ class Index:
             alias = data.get("alias", None)
             readonly = getattr(repo, "readonly", False)
 
-            # Deterministic priority: scripts bundled in the read-only
-            # mlc-scripts package must never override a script with the same UID
-            # coming from a registered (developer/local) repo, regardless of the
-            # order in which repos are processed or whether this is an
-            # incremental or full index build. Registered repos always win so
-            # that `pip install -e ./mlperf-automations` (or `mlc add repo`)
-            # takes priority over the bundled package.
-            if readonly:
-                for existing in self.indices[folder_type]:
-                    if existing.get("uid") == unique_id and not existing.get(
-                            "readonly", False) and existing.get("path") != folder_path:
-                        logger.debug(
-                            f"Keeping registered repo entry for uid {unique_id}; "
-                            f"skipping read-only package copy at {folder_path}")
-                        return
+            # Deterministic priority between the bundled read-only mlc-scripts
+            # package and a registered (developer/local) repo that define the
+            # same UID.
+            #
+            # Default: the bundled package wins, so the installed/published
+            # scripts are what actually run (a stale local clone left over from
+            # the old auto-clone flow can no longer silently shadow a fresh
+            # install). Set MLC_PREFER_DEV_SCRIPTS=1 (or true/yes/on) to restore
+            # developer-first priority, letting `pip install -e
+            # ./mlperf-automations` (or `mlc add repo`) override the package.
+            #
+            # The decision is order-independent — it holds for both full and
+            # incremental index builds: whichever side wins must not be
+            # overwritten by the losing side, no matter which is processed first.
+            prefer_dev = os.environ.get(
+                "MLC_PREFER_DEV_SCRIPTS", "").strip().lower() in (
+                    "1", "true", "yes", "on")
+            for existing in self.indices[folder_type]:
+                if existing.get("uid") != unique_id or existing.get(
+                        "path") == folder_path:
+                    continue
+                existing_readonly = existing.get("readonly", False)
+                if existing_readonly == readonly:
+                    continue  # same kind — normal last-wins dedup applies below
+                # One entry is the read-only package, the other a registered
+                # repo. The incoming entry wins iff it is the preferred side.
+                incoming_wins = (not readonly) if prefer_dev else readonly
+                if not incoming_wins:
+                    kept = "package" if existing_readonly else "dev"
+                    skipped = "package" if readonly else "dev"
+                    logger.debug(
+                        f"Script priority: keeping {kept} entry for uid "
+                        f"{unique_id}; skipping {skipped} copy at {folder_path}")
+                    return
 
             # Remove stale entry for the same meta file path if exists
             self._delete_index_entries(folder_type, "path", folder_path)
 
             # Remove index entry with the same UID for other meta file if
-            # exists (unless a higher-priority registered entry should win,
-            # handled above).
+            # exists. If we reach here, either there is no cross-kind conflict or
+            # the incoming entry is the winning side (so the losing entry is
+            # dropped here and replaced below).
             self._delete_index_entries(folder_type, "uid", unique_id)
 
             self.indices[folder_type].append({

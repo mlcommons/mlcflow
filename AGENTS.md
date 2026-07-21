@@ -8,8 +8,10 @@
 > imported directly: `from mlc.engine import ScriptAutomation`. There is **no
 > more `dynamic_import_module` and no auto git-clone** of mlperf-automations.
 > Script *content* comes from the **`mlc-scripts` pip package** (discovered via
-> `mlc_scripts.SCRIPTS_DIR`) and/or registered local repos (which override the
-> package by UID — see `index.py` deterministic-priority logic). `Automation`
+> `mlc_scripts.SCRIPTS_DIR`) and/or registered local repos. On a UID clash the
+> **package wins by default** (published scripts run); set
+> **`MLC_PREFER_DEV_SCRIPTS=1`** to let registered/editable dev repos override
+> the package — see `index.py` priority policy. `Automation`
 > base class moved to `mlc/automation.py` (breaks a circular import). Sections
 > below that describe dynamic loading / auto-pull are historical; trust this
 > banner where they conflict. See `migration-modification-plan.md`.

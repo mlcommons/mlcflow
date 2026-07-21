@@ -243,9 +243,10 @@ class Action:
 
         # Prepend the bundled mlc-scripts package as a read-only virtual repo so
         # its scripts are discoverable via the index without any git clone.
-        # Registered (local dev) repos are loaded after it and therefore
-        # override package scripts by UID during indexing — preserving the
-        # editable-install developer override workflow.
+        # By default the package wins over registered repos on a UID clash (see
+        # the priority policy in index.py) so the installed/published scripts
+        # run; set MLC_PREFER_DEV_SCRIPTS=1 to let registered/editable dev repos
+        # override the package for local development.
         pkg_repo = self._get_package_scripts_repo()
         if pkg_repo is not None:
             self.repos = [pkg_repo] + self.repos
