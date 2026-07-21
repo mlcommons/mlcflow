@@ -445,7 +445,8 @@ class Index:
             #
             # The decision is order-independent — it holds for both full and
             # incremental index builds: whichever side wins must not be
-            # overwritten by the losing side, no matter which is processed first.
+            # overwritten by the losing side, no matter which is processed
+            # first.
             prefer_dev = os.environ.get(
                 "MLC_PREFER_DEV_SCRIPTS", "").strip().lower() in (
                     "1", "true", "yes", "on")

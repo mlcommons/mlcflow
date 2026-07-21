@@ -1,3 +1,4 @@
+from mlc.index import Index
 import json
 import os
 import sys
@@ -7,8 +8,6 @@ import unittest
 # Ensure the in-tree mlc package is imported (not an installed copy) regardless
 # of how the test is invoked.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from mlc.index import Index
 
 
 UID = "abcdef0123456789"
@@ -76,10 +75,18 @@ class IndexScriptPriorityTest(unittest.TestCase):
         return self._winner(idx)
 
     def test_default_package_wins_pkg_first(self):
-        self.assertEqual(self._run(prefer_dev=False, dev_first=False), "package")
+        self.assertEqual(
+            self._run(
+                prefer_dev=False,
+                dev_first=False),
+            "package")
 
     def test_default_package_wins_dev_first(self):
-        self.assertEqual(self._run(prefer_dev=False, dev_first=True), "package")
+        self.assertEqual(
+            self._run(
+                prefer_dev=False,
+                dev_first=True),
+            "package")
 
     def test_prefer_dev_wins_pkg_first(self):
         self.assertEqual(self._run(prefer_dev=True, dev_first=False), "dev")
