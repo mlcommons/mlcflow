@@ -484,7 +484,7 @@ class Action:
         target_name = i.get('target_name', i.get('target', "cache"))
         i['target_name'] = target_name
         ii = i.copy()
-        quiet = ii.get('quiet', sys.stdin.isatty())
+        quiet = ii.get('quiet', not sys.stdin.isatty())
 
         if i.get('search_tags'):
             ii['tags'] = ",".join(i['search_tags'])
