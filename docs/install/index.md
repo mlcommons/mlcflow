@@ -56,22 +56,32 @@ This step is not mandatory. But the latest `pip` install requires this or else w
     git config --system core.longpaths true
     ```
 
-## Install MLCFLow
+## Install MLCFlow
 
 If you are not using virtual ENV for installation, the latest `pip` install requires the `--break-system-packages` flag while installing.
 
 ```bash
-pip install mlcflow
+pip install mlcflow mlc-scripts
 ```
-## Pull the Automation Repo
-```bash
-mlc pull repo mlcommons@mlperf-automations
-```
-* If you are forking https://github.com/mlcommons/mlperf-automations you can substitute the above command by `mlc pull repo <your_github_username>@mlperf-automations`.
-   
-!!! tip
-    If you want to pull the latest changes (recommended), please do `mlc pull repo` periodically.
 
+`mlcflow` is the CLI and execution engine; `mlc-scripts` bundles the ~378
+MLPerf automation script directories as pip package data. This single command
+is everything you need — no git clone happens, and no network access beyond
+PyPI is required. See the [Option B migration docs](../migration/index.md) if
+you're curious why installation used to look different (a required
+`mlc pull repo` step) and no longer does.
+
+!!! note "Only needed if you're forking or actively developing scripts"
+    If you maintain your own fork of
+    [mlperf-automations](https://github.com/mlcommons/mlperf-automations), or
+    you're actively editing scripts and want your local edits to take effect
+    instead of the published `mlc-scripts` package's copies, register your
+    fork/checkout as an additional repo:
+    ```bash
+    mlc pull repo <your_github_username>@mlperf-automations
+    export MLC_PREFER_DEV_SCRIPTS=1   # let your repo win over the bundled package
+    ```
+    Most users installing `mlc-scripts` from PyPI don't need this step at all.
 
 Now, you are ready to use the `mlc` commands. Currently, `mlc` is being used to automate the benchmark runs for:
 

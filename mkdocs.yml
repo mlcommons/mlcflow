@@ -23,6 +23,12 @@ nav:
     - README.md
   - Install:
     - install/index.md
+  - Migration (Option B):
+    - migration/index.md
+    - migration/reference.md
+    - migration/remote-and-docker.md
+    - migration/upgrading.md
+    - migration/tutorial-fresh-install.md
   - MLC CLI:
     - Repos:
       - Repo Action:

@@ -62,7 +62,7 @@ Each target has its own set of specific actions to tailor automation workflows a
 | repo    | pull, search, rm, list, find/search , add        |
 
 
-MLC started with a compatibility layer where by it supported MLCommons CM automations - Script, Cache and Experiment. Now, MLCFLow has just the Script Automation which is an extension of the Script Automation from CM but with a cleaner integration of Cache Automation and Docker and Test extensions. The old CM scripts are now updated with the latest MLCFlow scripts in the [MLPerf Automations](https://github.com/mlcommons/mlperf-automations/tree/main/script) repository. 
+MLC started with a compatibility layer where by it supported MLCommons CM automations - Script, Cache and Experiment. Now, MLCFLow has just the Script Automation which is an extension of the Script Automation from CM but with a cleaner integration of Cache Automation and Docker and Test extensions. The old CM scripts are now updated with the latest MLCFlow scripts, published as pip package data in the [`mlc-scripts`](https://github.com/mlcommons/mlperf-automations) package (`pip install mlc-scripts`) — see the [Option B migration docs](https://docs.mlcommons.org/mlcflow/migration/) for how script content is packaged and discovered.
 
 
 ## Architectural Diagram
@@ -97,7 +97,6 @@ classDiagram
     class ScriptAction {
         +search(i)
         +rm(i)
-        +dynamic_import_module(script_path)
         +call_script_module_function(function_name, run_args)
         +docker(run_args)
         +run(run_args)

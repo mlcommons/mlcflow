@@ -6,14 +6,18 @@ A Bootstrap installer for MLCFlow that automatically detects your Unix-based ope
 
 ## Purpose
 
-This installer provides a **one-command setup** for the MLCFlow package and the MLPerf automation repository. It handles all the complexity of:
+This installer provides a **one-command setup** for the MLCFlow package and the MLPerf automation scripts. It handles all the complexity of:
 - Detecting your Linux distribution or macOS
 - Automatically detecting and using sudo when needed
 - Installing missing system packages
 - Validating Python installation and version
 - Setting up isolated Python environments
-- Installing MLCFlow and its dependencies
-- Cloning the automation repository
+- Installing MLCFlow, `mlc-scripts`, and their dependencies
+
+Since the [Option B migration](https://docs.mlcommons.org/mlcflow/migration/),
+script content is served from the `mlc-scripts` pip package — the installer
+does **not** clone the automation repo by default. Pass `--pull-repo` if you
+specifically need a git checkout (forking, or actively developing scripts).
 
 **After installation, activate the virtual environment** to use MLCFlow commands:
 ```bash
@@ -79,10 +83,14 @@ source ~/mlcflow/bin/activate
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 6. Install MLCFlow Package                                 │
-│    - Install mlcflow via pip                               │
+│ 6. Install MLCFlow + mlc-scripts                           │
+│    - Install mlcflow via pip (engine + CLI)                │
+│    - Install mlc-scripts via pip (script content)          │
 │    - Install all dependencies                              │
 └─────────────────────────────────────────────────────────────┘
+                              ↓
+                  SKIP_REPO_PULL=true by default — done here.
+                  Only if --pull-repo was passed:
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │ 7. Prompt for Repository Details (if interactive)          │
@@ -91,13 +99,17 @@ source ~/mlcflow/bin/activate
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 8. Clone Automation Repository                             │
+│ 8. Clone Automation Repository (opt-in, --pull-repo only)  │
 │    - Uses 'mlc pull repo' command                          │
-│    - Stored in ~/MLC/repos/ (mlc default location)         │
+│    - Stored under the venv/conda-anchored cache root       │
+│      (or ~/MLC/repos if MLC_REPOS is set / no venv active) │
 └─────────────────────────────────────────────────────────────┘
                               ↓
                       ✅ Installation Complete
 ```
+
+See [Reference: cache and repo path resolution](https://docs.mlcommons.org/mlcflow/migration/reference/#cache-and-repo-path-resolution)
+for exactly how the storage location is chosen.
 
 ## Usage
 
@@ -148,8 +160,12 @@ bash mlcflow_linux.sh --yes --quiet
 | `--yes` | Auto-confirm all prompts (non-interactive mode) | Interactive |
 | `--upgrade` | Upgrade mlcflow if already installed | Skip if present |
 | `--venv-dir <path>` | Custom virtual environment directory | `~/mlcflow` |
-| `--mlc-repo <repo>` | Repository in format `owner@repo` | `mlcommons@mlperf-automations` |
-| `--mlc-repo-branch <branch>` | Git branch to clone | `dev` |
+| `--pull-repo` | Also clone/pull the automation repo (opt-in — script content already comes from the `mlc-scripts` pip package) | Off |
+| `--skip-repo-pull` | No-op; this is already the default. Kept for compatibility with older invocations. | (default behavior) |
+| `--mlc-repo <repo>` | Repository in format `owner@repo`, used only with `--pull-repo` | `mlcommons@mlperf-automations` |
+| `--mlc-repo-branch <branch>` | Git branch to clone, used only with `--pull-repo` | `dev` |
+| `--local-mlcflow-path <path>` | Install `mlcflow` from a local path instead of PyPI (useful for testing unreleased changes) | PyPI |
+| `--local-mlc-scripts-path <path>` | Install `mlc-scripts` from a local path instead of PyPI | PyPI |
 | `--install-python` | Auto-install Python if incompatible | Prompt user |
 | `--verbose` | Enable debug logging | Normal logging |
 | `--quiet` | Minimal output (errors/warnings only) | Normal logging |
@@ -208,16 +224,20 @@ Based on this detection, it chooses the appropriate execution method.
 - `python`, `git`, `curl`, `wget`, `unzip`
 
 ### Python Packages (in virtual environment)
-- `mlcflow` - Main automation CLI
+- `mlcflow` - Main automation CLI and execution engine
+- `mlc-scripts` - MLPerf automation script content (pip package data, ~378 scripts)
 - `requests` - HTTP library
 - `pyyaml` - YAML parser
 - `giturlparse` - Git URL utilities
 - `colorama` - Cross-platform colored terminal output
 
-### Automation Repository
-- Cloned via `mlc pull repo` command
-- Default location: `~/MLC/repos/mlcommons@mlperf-automations/`
-- Contains MLPerf automation scripts and configurations
+### Automation Repository (optional, only with `--pull-repo`)
+- Cloned via `mlc pull repo` command, only if `--pull-repo` was passed
+- Default location: under the venv/conda-anchored cache root (or
+  `~/MLC/repos/mlcommons@mlperf-automations/` if `MLC_REPOS` is set or no
+  venv/conda environment is active)
+- Not needed for normal use — the `mlc-scripts` package installed above
+  already contains every script's `meta.yaml`, `customize.py`, and `run.sh`
 
 ## Post-Installation
 
@@ -252,8 +272,12 @@ deactivate
 
 ### File Locations
 - **Virtual Environment**: `~/mlcflow` (or custom path)
-- **Automation Repository**: `~/MLC/repos/mlcommons@mlperf-automations/`
-- **MLC Cache**: `~/MLC/repos/`
+- **Automation Repository** (only if `--pull-repo` was used): under the cache
+  root, e.g. `.../mlc_cache/mlcommons@mlperf-automations/`
+- **MLC Cache**: anchored to the active venv/conda environment by default
+  (`{venv}/mlc_cache` or `{CONDA_PREFIX}/mlc_cache`), or `~/MLC/repos/` if
+  `MLC_REPOS` is set or no venv/conda environment is active — see
+  [Reference: cache and repo path resolution](https://docs.mlcommons.org/mlcflow/migration/reference/#cache-and-repo-path-resolution)
 
 ## Troubleshooting
 
