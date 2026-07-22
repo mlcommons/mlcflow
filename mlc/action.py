@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 import json
 import yaml
@@ -200,8 +201,28 @@ class Action:
 
         temp_repo = os.environ.get('MLC_REPOS', '').strip()
         if temp_repo == '':
-            self.repos_path = os.path.join(
-                os.path.expanduser("~"), "MLC", "repos")
+            # Inside a venv, default the repos/cache root to the venv's own
+            # directory tree instead of ~/MLC/repos: `pip install -U
+            # mlc-scripts` only ever touches lib/pythonX.Y/site-packages, so
+            # a venv-anchored cache survives package upgrades, and each venv
+            # gets its own independent cache instead of sharing (and
+            # colliding on) one global ~/MLC/repos across environments.
+            # MLC_REPOS still overrides this unconditionally.
+            #
+            # sys.prefix != sys.base_prefix is the standard venv/virtualenv
+            # detection idiom, but a named conda environment typically leaves
+            # sys.prefix == sys.base_prefix (conda doesn't use the venv
+            # relocation mechanism), so it's checked separately via
+            # CONDA_PREFIX to get the same per-environment isolation there.
+            in_venv = sys.prefix != getattr(sys, 'base_prefix', sys.prefix)
+            conda_prefix = os.environ.get('CONDA_PREFIX', '').strip()
+            if conda_prefix:
+                self.repos_path = os.path.join(conda_prefix, "mlc_cache")
+            elif in_venv:
+                self.repos_path = os.path.join(sys.prefix, "mlc_cache")
+            else:
+                self.repos_path = os.path.join(
+                    os.path.expanduser("~"), "MLC", "repos")
         else:
             self.repos_path = temp_repo
 
@@ -211,6 +232,22 @@ class Action:
             mlc_local_repo_path).expanduser().resolve()
 
         if not os.path.exists(mlc_local_repo_path):
+            # Warn (once, at first-use) when the venv/conda-anchored default
+            # above is about to create a fresh cache while a pre-existing,
+            # already-populated legacy ~/MLC/repos sits unused — e.g. someone
+            # upgrading mlcflow inside an environment they'd used before this
+            # default changed. Set MLC_REPOS to the old path to keep using it.
+            if temp_repo == '':
+                legacy_repos_path = os.path.join(
+                    os.path.expanduser("~"), "MLC", "repos")
+                legacy_local_path = os.path.join(legacy_repos_path, 'local')
+                if os.path.abspath(legacy_repos_path) != os.path.abspath(self.repos_path) \
+                        and os.path.isfile(os.path.join(legacy_repos_path, "repos.json")) \
+                        and os.path.isdir(legacy_local_path):
+                    logger.warning(
+                        f"Using a new cache at {self.repos_path} — your existing cache/registered "
+                        f"repos at {legacy_repos_path} are not used from this environment. Set "
+                        f"MLC_REPOS={legacy_repos_path} to keep using them here.")
             os.makedirs(mlc_local_repo_path, exist_ok=True)
 
         if not os.path.isfile(os.path.join(mlc_local_repo_path, "meta.yaml")):
