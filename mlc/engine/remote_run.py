@@ -141,7 +141,7 @@ def remote_run(self_module, i):
     # package (no git clone). The installer above installs mlcflow only, so the
     # remote also needs mlc-scripts for `import mlc_scripts` / script discovery.
     remote_mlc_scripts_spec = i.get('remote_mlc_scripts_pip_spec', 'mlc-scripts')
-    run_cmds.append(f"pip install -U {remote_mlc_scripts_spec}")
+    run_cmds.append(f"pip install -U {shlex.quote(remote_mlc_scripts_spec)}")
     if i.get('remote_pull_mlc_repos', False):
         run_cmds.append("mlc pull repo")
 
@@ -216,12 +216,13 @@ def remote_run(self_module, i):
                 'files_to_copy', []) + repo_files
             remote_mlc_repos_path = i.get("remote_mlc_repos_path", "MLC/repos")
             remote_inputs['copy_directory'] = remote_mlc_repos_path
+            quoted_remote_mlc_repos_path = shlex.quote(remote_mlc_repos_path)
             # On the remote, if MLC_REPOS is set and differs, symlink so
             # mlcflow finds the copied repos
             run_cmds.insert(0,
-                            f'if [ -n "$MLC_REPOS" ] && [ "$MLC_REPOS" != "{remote_mlc_repos_path}" ]; then '
-                            f'mkdir -p "{remote_mlc_repos_path}" && '
-                            f'ln -sfn "$(realpath {remote_mlc_repos_path})"/* "$MLC_REPOS/"; '
+                            f'if [ -n "$MLC_REPOS" ] && [ "$MLC_REPOS" != {quoted_remote_mlc_repos_path} ]; then '
+                            f'mkdir -p {quoted_remote_mlc_repos_path} && '
+                            f'ln -sfn "$(realpath {quoted_remote_mlc_repos_path})"/* "$MLC_REPOS/"; '
                             f'fi')
 
     if files_to_copy_back:

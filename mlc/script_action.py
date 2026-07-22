@@ -382,6 +382,14 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_local_installer_path:
+        Path to a local mlcflow_unix_installer.sh to use instead of fetching it from GitHub
+    13. --remote_local_mlcflow_path:
+        Path to a local mlcflow checkout to install on the remote instead of from PyPI
+    14. --remote_skip_repo_pull:
+        Skip pulling/cloning the automation repo on the remote (default: True)
+    15. --remote_mlc_scripts_pip_spec:
+        pip install spec for mlc-scripts on the remote (default: mlc-scripts)
 
     Example Command:
 
@@ -564,6 +572,14 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_local_installer_path:
+        Path to a local mlcflow_unix_installer.sh to use instead of fetching it from GitHub
+    13. --remote_local_mlcflow_path:
+        Path to a local mlcflow checkout to install on the remote instead of from PyPI
+    14. --remote_skip_repo_pull:
+        Skip pulling/cloning the automation repo on the remote (default: True)
+    15. --remote_mlc_scripts_pip_spec:
+        pip install spec for mlc-scripts on the remote (default: mlc-scripts)
 
     Example Command:
 
@@ -607,6 +623,14 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_local_installer_path:
+        Path to a local mlcflow_unix_installer.sh to use instead of fetching it from GitHub
+    13. --remote_local_mlcflow_path:
+        Path to a local mlcflow checkout to install on the remote instead of from PyPI
+    14. --remote_skip_repo_pull:
+        Skip pulling/cloning the automation repo on the remote (default: True)
+    15. --remote_mlc_scripts_pip_spec:
+        pip install spec for mlc-scripts on the remote (default: mlc-scripts)
 
     Example Command:
 

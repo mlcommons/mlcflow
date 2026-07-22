@@ -456,25 +456,31 @@ def fix_cache_paths(cached_path, env):
         # Normalize the path to use the current OS separators
         normalized = os.path.normpath(path_str)
 
-        # Check if path contains local/cache or local\cache pattern
+        # Check if path contains a local/cache or local\cache pattern.
+        # Search from the end and take the LAST "local" immediately followed
+        # by "cache": with the venv/conda-anchored cache root, repos_path can
+        # now be any environment path (e.g. under /usr/local/... on some
+        # systems), so an earlier incidental "local" segment can precede the
+        # real "local/cache" pair — the first-match lookup used to pick that
+        # wrong, earlier "local" and silently no-op instead of rewriting.
         path_parts = normalized.split(os.sep)
 
-        try:
-            local_idx = path_parts.index("local")
-            if local_idx + \
-                    1 < len(path_parts) and path_parts[local_idx + 1] == "cache":
-                # Extract the loaded cache path (up to and including "cache")
-                loaded_cache_path = os.sep.join(path_parts[:local_idx + 2])
-                loaded_cache_path_norm = os.path.normpath(loaded_cache_path)
+        local_idx = None
+        for idx in range(len(path_parts) - 2, -1, -1):
+            if path_parts[idx] == "local" and path_parts[idx + 1] == "cache":
+                local_idx = idx
+                break
 
-                if loaded_cache_path_norm != current_cache_path and os.path.exists(
-                        current_cache_path):
-                    # Replace old cache path with current cache path
-                    return normalized.replace(
-                        loaded_cache_path_norm, current_cache_path)
-        except (ValueError, IndexError):
-            # "local" not in path or malformed path
-            pass
+        if local_idx is not None:
+            # Extract the loaded cache path (up to and including "cache")
+            loaded_cache_path = os.sep.join(path_parts[:local_idx + 2])
+            loaded_cache_path_norm = os.path.normpath(loaded_cache_path)
+
+            if loaded_cache_path_norm != current_cache_path and os.path.exists(
+                    current_cache_path):
+                # Replace old cache path with current cache path
+                return normalized.replace(
+                    loaded_cache_path_norm, current_cache_path)
 
         return normalized
 

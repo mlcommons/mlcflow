@@ -216,7 +216,16 @@ class Action:
             # CONDA_PREFIX to get the same per-environment isolation there.
             in_venv = sys.prefix != getattr(sys, 'base_prefix', sys.prefix)
             conda_prefix = os.environ.get('CONDA_PREFIX', '').strip()
-            if conda_prefix:
+            conda_env_name = os.environ.get('CONDA_DEFAULT_ENV', '').strip()
+            # Exclude conda's `base` env: CONDA_PREFIX is set whenever any
+            # conda env is active, including `base`, which many users have
+            # auto-activated via `conda init` in their shell rc without ever
+            # consciously opting into a dedicated environment for mlcflow.
+            # Redirecting those users is a bigger surprise than the venv
+            # case — their existing ~/MLC/repos cache/registered repos would
+            # silently become invisible — so only isolate named, deliberately
+            # activated conda environments.
+            if conda_prefix and conda_env_name != 'base':
                 self.repos_path = os.path.join(conda_prefix, "mlc_cache")
             elif in_venv:
                 self.repos_path = os.path.join(sys.prefix, "mlc_cache")

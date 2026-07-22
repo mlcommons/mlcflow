@@ -142,11 +142,21 @@ def run_script_and_tag_experiment(
     # Get current datetime in YYYY-MM-DD_HH-MM-SS format
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    # Create a folder name using the timestamp
-    folder_name = f"run_{timestamp}"
-
-    # Create the directory
-    os.makedirs(folder_name, exist_ok=True)
+    # Create a folder name using the timestamp + pid, so two experiment runs
+    # (e.g. concurrent `mlce` invocations) started within the same second
+    # don't land in the same folder and interleave/overwrite each other's
+    # output. exist_ok is intentionally NOT used: on a residual collision we
+    # fall back to an incrementing suffix instead of silently sharing a folder.
+    base_folder_name = f"run_{timestamp}_{os.getpid()}"
+    folder_name = base_folder_name
+    suffix = 0
+    while True:
+        try:
+            os.makedirs(folder_name)
+            break
+        except FileExistsError:
+            suffix += 1
+            folder_name = f"{base_folder_name}_{suffix}"
     os.chdir(folder_name)
 
     if not skip_state_save:

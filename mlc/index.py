@@ -320,6 +320,7 @@ class Index:
         # track all currently detected item paths
         current_item_keys = set()
         changed = False
+        self._shadowed_script_count = 0
 
         # load modified times
         self.modified_times = self._load_modified_times()
@@ -356,6 +357,16 @@ class Index:
         if deleted_keys:
             logger.debug(
                 f"Deleted keys removed from modified times and indices: {deleted_keys}")
+
+        if self._shadowed_script_count:
+            logger.warning(
+                f"{self._shadowed_script_count} script(s) skipped due to a "
+                "UID clash between the bundled mlc-scripts package and a "
+                "registered/dev repo (bundled package wins by default). If "
+                "you have local edits to a shadowed script, set "
+                "MLC_PREFER_DEV_SCRIPTS=1 to let your dev repo override the "
+                "package. Run with --verbose to see which scripts were "
+                "skipped.")
 
         if force_rebuild or changed:
             logger.debug(
@@ -466,6 +477,8 @@ class Index:
                     logger.debug(
                         f"Script priority: keeping {kept} entry for uid "
                         f"{unique_id}; skipping {skipped} copy at {folder_path}")
+                    self._shadowed_script_count = getattr(
+                        self, "_shadowed_script_count", 0) + 1
                     return
 
             # Remove stale entry for the same meta file path if exists

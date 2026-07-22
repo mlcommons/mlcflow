@@ -621,7 +621,7 @@ class ScriptAutomation(Automation):
         if min_mlc_version != '':
             try:
                 import importlib.metadata
-                current_mlc_version = importlib.metadata.version("mlc")
+                current_mlc_version = importlib.metadata.version("mlcflow")
                 comparison = utils.compare_versions(
                     current_mlc_version, min_mlc_version)
                 if comparison < 0:
