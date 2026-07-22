@@ -134,13 +134,15 @@ def remote_run(self_module, i):
         fetch_cmd = f'cat {shlex.quote(local_installer_path)}'
     else:
         fetch_cmd = ('curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/'
-                      'refs/heads/dev/docs/install/mlcflow_unix_installer.sh')
+                     'refs/heads/dev/docs/install/mlcflow_unix_installer.sh')
     run_cmds.append(f'{fetch_cmd} | bash -s -- {installer_flags_str}')
     run_cmds.append(f". {remote_mlc_python_venv}/bin/activate")
     # After the migration, script content is delivered via the mlc-scripts pip
     # package (no git clone). The installer above installs mlcflow only, so the
-    # remote also needs mlc-scripts for `import mlc_scripts` / script discovery.
-    remote_mlc_scripts_spec = i.get('remote_mlc_scripts_pip_spec', 'mlc-scripts')
+    # remote also needs mlc-scripts for `import mlc_scripts` / script
+    # discovery.
+    remote_mlc_scripts_spec = i.get(
+        'remote_mlc_scripts_pip_spec', 'mlc-scripts')
     run_cmds.append(f"pip install -U {shlex.quote(remote_mlc_scripts_spec)}")
     if i.get('remote_pull_mlc_repos', False):
         run_cmds.append("mlc pull repo")
