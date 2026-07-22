@@ -210,11 +210,27 @@ def format_elapsed(seconds):
         return f"{int(hours)} hours {int(mins)} minutes {secs:.1f} seconds"
 
 
+def _flatten_parsed(values):
+    result = []
+    for v in values:
+        parsed = parse_value(v)
+        if isinstance(parsed, list):
+            result.extend(parsed)
+        else:
+            result.append(parsed)
+    return result
+
+
 def parse_value(val):
     if isinstance(val, list):
-        return [parse_value(v) for v in val]
+        return _flatten_parsed(val)
 
     val = str(val)
+
+    # Comma-separated sweep values: --exp.KEY=a,b,c -> [a, b, c]
+    # (documented sweep syntax, e.g. --exp.target_qps=5,10,20)
+    if ',' in val:
+        return _flatten_parsed(part.strip() for part in val.split(','))
 
     # Handle range inputs like 2:10 or 2:10:2
     if ':' in val:
