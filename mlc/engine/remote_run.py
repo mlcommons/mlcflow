@@ -1,5 +1,6 @@
 from collections import defaultdict
 import os
+import shlex
 import mlc.utils as utils
 from mlc import utils
 from mlc.engine.utils import *
@@ -101,8 +102,40 @@ def remote_run(self_module, i):
     # Note: The remote activation command uses Unix syntax because we're SSHing into a (likely) Unix server
     # Even if we're running from Windows locally, the remote commands execute
     # on the remote server
-    run_cmds.append(
-        f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {remote_mlc_python_venv}')
+    # Escape hatch for testing/air-gapped installs: point the bootstrap at a
+    # local copy of the installer script (e.g. a checked-out branch under
+    # test) instead of fetching the published one from GitHub.
+    local_installer_path = i.get('remote_local_installer_path', '')
+    local_mlcflow_path = i.get('remote_local_mlcflow_path', '')
+    # Off by default (matches the installer's own default post-migration):
+    # script content comes from mlc-scripts via pip (installed below), so the
+    # remote host never needs the automation repo cloned. Explicitly passed
+    # here rather than relying solely on the installer's own default, so this
+    # still holds even against a stale/not-yet-updated installer fetched from
+    # the published URL. Pass remote_skip_repo_pull=False to opt back into
+    # the old clone-based bootstrap.
+    # is_true() (not raw truthiness) because a CLI-passed
+    # --remote_skip_repo_pull=False arrives as the *string* "False", which is
+    # truthy in Python.
+    skip_repo_pull = is_true(i.get('remote_skip_repo_pull', True))
+
+    installer_flags = ['--yes']
+    if skip_repo_pull:
+        installer_flags.append('--skip-repo-pull')
+    else:
+        installer_flags.append('--pull-repo')
+    if local_mlcflow_path:
+        installer_flags.append(
+            f'--local-mlcflow-path {shlex.quote(local_mlcflow_path)}')
+    installer_flags.append(f'--venv-dir {shlex.quote(remote_mlc_python_venv)}')
+    installer_flags_str = ' '.join(installer_flags)
+
+    if local_installer_path:
+        fetch_cmd = f'cat {shlex.quote(local_installer_path)}'
+    else:
+        fetch_cmd = ('curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/'
+                      'refs/heads/dev/docs/install/mlcflow_unix_installer.sh')
+    run_cmds.append(f'{fetch_cmd} | bash -s -- {installer_flags_str}')
     run_cmds.append(f". {remote_mlc_python_venv}/bin/activate")
     # After the migration, script content is delivered via the mlc-scripts pip
     # package (no git clone). The installer above installs mlcflow only, so the

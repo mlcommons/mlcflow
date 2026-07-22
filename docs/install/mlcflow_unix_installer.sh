@@ -26,6 +26,12 @@ ASSUME_YES=false
 INSTALL_PYTHON=false
 VERBOSE=false
 QUIET=false
+# Off by default post-migration: script content comes from the mlc-scripts
+# pip package (installed below), so cloning the automation repo is no longer
+# needed unless the caller explicitly opts in via --pull-repo.
+SKIP_REPO_PULL=true
+LOCAL_MLCFLOW_PATH=""
+LOCAL_MLC_SCRIPTS_PATH=""
 VENV_DIR="$DEFAULT_VENV_DIR"
 MLC_REPO="$DEFAULT_REPO"
 MLC_BRANCH="$DEFAULT_BRANCH"
@@ -84,8 +90,16 @@ Options:
   --yes                   Auto-confirm prompts
   --upgrade               Upgrade mlcflow if already installed
   --venv-dir <path>       Custom virtual environment path
-  --mlc-repo <repo>       Override automation repo
-  --mlc-repo-branch <b>   Override repo branch
+  --mlc-repo <repo>       Override automation repo (used with --pull-repo)
+  --mlc-repo-branch <b>   Override repo branch (used with --pull-repo)
+  --pull-repo             Also clone/pull the automation repo. Off by default:
+                           script content is served from the mlc-scripts pip
+                           package, installed automatically below.
+  --skip-repo-pull        No-op (this is the default; kept for compatibility)
+  --local-mlcflow-path <p>     Install mlcflow from this local path (pip
+                                install <p>) instead of PyPI
+  --local-mlc-scripts-path <p> Install mlc-scripts from this local path (pip
+                                install <p>) instead of PyPI
   --install-python        Auto-install Python if incompatible
   --verbose               Enable debug logs
   --quiet                 Minimal output
@@ -108,6 +122,10 @@ while [[ $# -gt 0 ]]; do
         --venv-dir) VENV_DIR="$2"; shift ;;
         --mlc-repo) MLC_REPO="$2"; shift ;;
         --mlc-repo-branch) MLC_BRANCH="$2"; shift ;;
+        --pull-repo) SKIP_REPO_PULL=false ;;
+        --skip-repo-pull) SKIP_REPO_PULL=true ;;
+        --local-mlcflow-path) LOCAL_MLCFLOW_PATH="$2"; shift ;;
+        --local-mlc-scripts-path) LOCAL_MLC_SCRIPTS_PATH="$2"; shift ;;
         --install-python) INSTALL_PYTHON=true ;;
         --verbose) VERBOSE=true ;;
         --quiet) QUIET=true ;;
@@ -343,6 +361,11 @@ setup_venv() {
 # ------------------------------------------------------------------------------
 
 install_mlcflow() {
+    if [ -n "$LOCAL_MLCFLOW_PATH" ]; then
+        log_info "Installing mlcflow from local path: $LOCAL_MLCFLOW_PATH"
+        python3 -m pip install --upgrade "$LOCAL_MLCFLOW_PATH"
+        return
+    fi
     if python3 -m pip show mlcflow >/dev/null 2>&1; then
         if $UPGRADE; then
             log_info "Upgrading mlcflow..."
@@ -353,6 +376,27 @@ install_mlcflow() {
     else
         log_info "Installing mlcflow..."
         python3 -m pip install mlcflow
+    fi
+}
+
+install_mlc_scripts() {
+    # Scripts ship as the mlc-scripts pip package (Option B migration) — install
+    # it by default alongside mlcflow, from a local path if given, else PyPI.
+    # This is what makes --skip-repo-pull (now the default) safe: script
+    # content still arrives, just via pip instead of a git clone.
+    if [ -n "$LOCAL_MLC_SCRIPTS_PATH" ]; then
+        log_info "Installing mlc-scripts from local path: $LOCAL_MLC_SCRIPTS_PATH"
+        python3 -m pip install --upgrade "$LOCAL_MLC_SCRIPTS_PATH"
+    elif python3 -m pip show mlc-scripts >/dev/null 2>&1; then
+        if $UPGRADE; then
+            log_info "Upgrading mlc-scripts..."
+            python3 -m pip install --upgrade mlc-scripts
+        else
+            log_info "mlc-scripts already installed. Skipping."
+        fi
+    else
+        log_info "Installing mlc-scripts..."
+        python3 -m pip install mlc-scripts
     fi
 }
 
@@ -410,8 +454,13 @@ main() {
     ensure_python
     setup_venv
     install_mlcflow
-    prompt_repo_details
-    pull_repo
+    install_mlc_scripts
+    if $SKIP_REPO_PULL; then
+        log_info "Scripts are served from the mlc-scripts pip package; skipping automation repo pull (pass --pull-repo to also clone it)."
+    else
+        prompt_repo_details
+        pull_repo
+    fi
 
     log_info "Installation completed successfully."
     echo ""
