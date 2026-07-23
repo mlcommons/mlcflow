@@ -1,10 +1,12 @@
 # AGENTS.md — AI coding agent guide for mlcflow
 
 mlcflow is the CLI driver for the MLC automation framework. It provides the
-`mlc`, `mlcr`, `mlcd`, and related commands and dynamically loads the script
-execution engine (`ScriptAutomation`) from an external content repo
-(`mlperf-automations`). This file covers everything an AI agent needs to
-contribute correctly to this repo.
+`mlc`, `mlcr`, `mlcd`, and related commands, and it *bundles* the script
+execution engine (`ScriptAutomation`, in `automation/`) directly in this repo.
+Benchmark **content** (377+ script directories) still lives in the separate
+`mlperf-automations` repo and is pulled/cloned on demand — only the engine
+that runs that content moved here. This file covers everything an AI agent
+needs to contribute correctly to this repo.
 
 ---
 
@@ -23,21 +25,28 @@ mlc/main.py:mlcr()
       → ScriptAction.run(run_args)
           → call_script_module_function("run", run_args)
               → find_target_folder("script")
-                  # walks registered repos looking for automation/script/
+                  # prefers the bundled automation/script/ shipped in this
+                  # repo (bundled_automation_path); falls back to scanning
+                  # registered repos for a custom/external override
               → dynamic_import_module("automation/script/module.py")
                   # loads ScriptAutomation class at runtime
               → ScriptAutomation(self, module_path).run(run_args)
-                  # all actual script logic lives in mlperf-automations
+                  # engine lives in this repo's automation/; script *content*
+                  # (meta.yaml/customize.py/run.sh) still comes from
+                  # mlperf-automations
 ```
 
 **Two repos, two roles:**
-- `mlcflow` (this repo) — the CLI driver: arg parsing, repo/index management,
-  dynamic dispatch, error reporting. Has no script content.
-- `mlperf-automations` — the content: 377+ script directories +
-  `automation/script/module.py` (the `ScriptAutomation` engine).
+- `mlcflow` (this repo) — the CLI driver *and* the script execution engine:
+  arg parsing, repo/index management, dynamic dispatch, error reporting, and
+  `automation/` (the `ScriptAutomation` engine, formerly hosted in
+  `mlperf-automations`).
+- `mlperf-automations` — the content: 377+ script directories
+  (`meta.yaml`/`customize.py`/`run.sh` per script). No engine code.
 
-mlcflow does **not** contain or execute benchmark logic. It finds the engine,
-loads it, and hands off `run_args`.
+mlcflow finds the bundled engine, loads it, and hands off `run_args`. It
+still does not contain benchmark *content* (individual script directories) —
+those are pulled from `mlperf-automations` into `~/MLC/repos/` like before.
 
 ---
 
@@ -47,7 +56,8 @@ loads it, and hands off `run_args`.
 mlcflow/
   mlc/
     main.py            # CLI entry point; all short commands (mlcr, mlcd…) defined here
-    action.py          # Base Action class: repo loading, index access, CRUD
+    action.py          # Base Action class: repo loading, index access, CRUD,
+                        #   bundled_automation_path()/find_target_folder()
     action_factory.py  # Maps target strings → Action subclasses
     script_action.py   # ScriptAction + ScriptExecutionError
     repo_action.py     # RepoAction: pull/add/rm/find repos
@@ -61,9 +71,17 @@ mlcflow/
     repo.py            # Repo data class
     item.py            # Item data class (path + meta)
     cfg_action.py      # Config loading (load cfg)
+  automation/          # ScriptAutomation ENGINE (migrated from mlperf-automations)
+    utils.py
+    script/
+      module.py        # ScriptAutomation — full script execution logic
+      cache_utils.py, docker.py, docker_utils.py, apptainer.py, doc.py,
+      experiment.py, help.py, lint.py, meta_schema.py, remote_run.py,
+      script_utils.py, validate.py
   tests/
     test_action_invalid_meta_entries.py
     test_cache_mark_tmp.py
+    test_automation_bundled.py
   .github/
     workflows/         # CI: core actions test, script features, MLPerf inference runs
     scripts/
@@ -82,10 +100,13 @@ mlcflow/
   index_cache.json                # tag index for caches
   index_experiment.json
   modified_times.json             # mtime map used for incremental index
-  mlcommons@mlperf-automations/   # pulled repos
-    automation/script/module.py   # ScriptAutomation engine (loaded dynamically)
-    script/<alias>/meta.yaml      # script content (not in this repo)
+  mlcommons@mlperf-automations/   # pulled repo (content ONLY, no automation/)
+    script/<alias>/meta.yaml      # script content, not in this repo
 ```
+
+The engine itself (`automation/script/module.py`) is resolved from the
+mlcflow install location (editable checkout or site-packages), not from
+`~/MLC/repos/`.
 
 ---
 
@@ -141,17 +162,26 @@ This is the most important thing to understand when modifying `script_action.py`
 `call_script_module_function(function_name, run_args)` in `script_action.py`:
 
 1. **Finds the automation folder**: calls `find_target_folder("script")` on the
-   `Action` base. This walks `self.repos` looking for a repo that has an
-   `automation/script/` directory inside it.
+   `Action` base. This now calls `bundled_automation_path("script")` first,
+   which resolves `automation/script/` relative to the installed `mlc`
+   package (`<pkg_root>/automation/script`, where `pkg_root` is the parent of
+   the `mlc/` package directory — works identically in an editable checkout
+   and in site-packages). Only if that's missing does it fall back to
+   scanning `self.repos` for a repo with its own `automation/script/`
+   directory (a dev-override escape hatch; not the normal path anymore).
 
-2. **Auto-pull if missing**: if no `automation/script/` is found, it pulls
-   `mlcommons@mlperf-automations --branch=dev` automatically and retries once.
+2. **Auto-pull if missing**: if neither the bundled path nor any registered
+   repo has `automation/script/` (should not normally happen — it's shipped
+   with mlcflow), it pulls `mlcommons@mlperf-automations --branch=dev`
+   automatically and retries once. This is now a last-resort fallback, not
+   the common path.
 
 3. **Loads module dynamically**: calls `dynamic_import_module(module_path)`
-   where `module_path = "<repo>/automation/script/module.py"`. This uses
-   `importlib.util.spec_from_file_location()`. The parent directory
-   (`automation/`) is prepended to `sys.path` so relative imports inside
-   `module.py` resolve.
+   where `module_path = ".../automation/script/module.py"` (bundled path in
+   practice). This uses `importlib.util.spec_from_file_location()`. The
+   parent directory (`automation/`) is prepended to `sys.path` so the
+   non-package-relative imports inside `module.py` (`from utils import *`,
+   `from script.script_utils import *`) resolve.
 
 4. **Instantiates `ScriptAutomation`**: checks if `ScriptAutomation.__init__`
    accepts a `run_args` parameter (via `inspect.signature`) and calls the
@@ -166,12 +196,21 @@ This is the most important thing to understand when modifying `script_action.py`
    this for the user with a rerun command and issue URL.
 
 **What this means for contributors:**
-- The `ScriptAutomation` class is **not** in this repo. Changes to how it is
-  called must be backward-compatible.
-- The `run_args` dict is the primary contract between mlcflow and the engine.
-  Keys added to `run_args` here become available to `ScriptAutomation`.
+- The `ScriptAutomation` class now lives in this repo, at
+  `automation/script/module.py`. You can edit it directly — no more
+  cross-repo round-trip to change engine behavior.
+- The `run_args` dict is the primary contract between the CLI layer
+  (`script_action.py`) and the engine (`automation/script/module.py`). Keys
+  added to `run_args` here become available to `ScriptAutomation`.
 - If you add a new function name to dispatch (e.g., `remote_run`), add the
-  `elif function_name == "remote_run":` branch in `call_script_module_function`.
+  `elif function_name == "remote_run":` branch in `call_script_module_function`
+  *and* the corresponding method on `ScriptAutomation` in
+  `automation/script/module.py`.
+- `automation/` still imports from `mlc` (`from mlc.main import Automation,
+  CacheAction`, `import mlc.utils as utils`) — that direction is unchanged;
+  don't introduce a circular import back from `mlc/` into `automation/` at
+  module load time (the coupling is intentionally one-way, engine → CLI
+  base classes, mediated through `dynamic_import_module`'s sys.path trick).
 
 ---
 
@@ -360,9 +399,11 @@ code 1. This is intentional to catch copy-paste artifacts. Quoted args are
 excluded from the check.
 
 **6. Auto-pull uses `--branch=dev`**
-When `call_script_module_function()` cannot find `automation/script/`, it
-auto-pulls `mlcommons@mlperf-automations --branch=dev`. If the local checkout
-is on `main`, the auto-pull may switch branches. This is a fallback path and
+`automation/script/` is bundled with mlcflow and should always be found via
+`bundled_automation_path()`. If somehow neither that nor any registered repo
+has it, `call_script_module_function()` auto-pulls
+`mlcommons@mlperf-automations --branch=dev` as a last resort. If the local
+checkout is on `main`, the auto-pull may switch branches. This is a fallback path and
 should not normally be triggered if the repo is already registered.
 
 **7. `ScriptAction.add()` always uses `cp` with `src_tags`**
@@ -379,7 +420,8 @@ avoids the prompt.
 |---|---|
 | Understand CLI dispatch | `mlc/main.py` (focus: `main()`, `build_parser()`, `mlc_expand_short()`) |
 | Add a new action or command | `mlc/main.py` + relevant Action class (`script_action.py` / `repo_action.py` / `cache_action.py`) |
-| Understand how automation engine is loaded | `mlc/script_action.py` (`call_script_module_function`, `dynamic_import_module`) |
+| Understand how automation engine is loaded | `mlc/action.py` (`bundled_automation_path`, `find_target_folder`), `mlc/script_action.py` (`call_script_module_function`, `dynamic_import_module`) |
+| Modify script execution behavior (ScriptAutomation itself) | `automation/script/module.py`, `automation/script/cache_utils.py`, `automation/utils.py` |
 | Debug a failed script run | `mlc/script_action.py` (`ScriptExecutionError`), `mlc/error_codes.py` (`get_error_guidance`) |
 | Fix index/search issues | `mlc/index.py` (`build_index`, `_index_single_repo`, `_save_indices`) |
 | Add or fix meta.yaml validation | `mlc/meta_schema.py` (`REQUIRED_KEYS`, `TOP_LEVEL_SCHEMA`, `validate_meta`) |

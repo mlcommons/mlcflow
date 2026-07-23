@@ -10,12 +10,17 @@ Compact task playbooks. Read AGENTS.md for full technical detail.
 mlcr <tags>  →  mlc_expand_short("run")  →  main()
   →  get_action("script", parent)  →  ScriptAction.run(run_args)
     →  call_script_module_function("run", run_args)
-      →  find_target_folder("script")        # walks registered repos
+      →  find_target_folder("script")        # bundled automation/script/ first,
+                                              # falls back to scanning registered repos
       →  dynamic_import_module(module.py)    # loads ScriptAutomation
-      →  ScriptAutomation(self, path).run(run_args)   # engine in mlperf-automations
+      →  ScriptAutomation(self, path).run(run_args)   # engine bundled in this repo
 ```
 
-**This repo = CLI driver only.** Script logic lives in `mlperf-automations/automation/script/module.py`, loaded at runtime.
+**This repo = CLI driver + script execution engine.** Engine logic lives in
+`automation/script/module.py` in this repo (migrated from `mlperf-automations`).
+Script *content* (the 377+ `script/<alias>/` directories with `meta.yaml`,
+`customize.py`, `run.sh`) still lives in `mlperf-automations` and is pulled
+into `~/MLC/repos/` as before.
 
 **Result dict contract** — every action method must return:
 - `{'return': 0}` on success

@@ -67,7 +67,23 @@ class Action:
                 'return': 1, 'error': f"'{action_name}' action is not supported for {action_target}."}
         return {'return': 0}
 
+    def bundled_automation_path(self, target):
+        # automation/ ships as a top-level package alongside mlc/, both in the
+        # editable checkout (mlcflow/automation) and in site-packages once
+        # installed, since mlc/action.py always lives one level under the
+        # package root that automation/ is a sibling of.
+        pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        target_folder = os.path.join(pkg_root, 'automation', target)
+        return target_folder if os.path.isdir(target_folder) else None
+
     def find_target_folder(self, target):
+        # Prefer the automation engine bundled with mlcflow itself; fall back
+        # to scanning registered repos for a custom/external 'automation'
+        # folder (e.g. a dev override) if the bundled one isn't present.
+        bundled = self.bundled_automation_path(target)
+        if bundled:
+            return bundled
+
         # Traverse through each repo to find the first 'target' folder inside
         # an 'automation' folder
         for repo in self.repos:
