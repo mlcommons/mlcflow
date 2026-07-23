@@ -230,14 +230,20 @@ Main Script Meta:""")
 
     def _content_repo_registered(self):
         # automation/ ships bundled with mlcflow, so find_target_folder()
-        # always succeeds regardless of whether mlcommons@mlperf-automations
-        # (the script *content* repo) is registered. "engine missing" is no
-        # longer a reliable signal that the content repo needs pulling, so
-        # check for its registration directly.
-        return any(
-            (repo.meta or {}).get('alias') == 'mlcommons@mlperf-automations'
-            for repo in self.repos
-        )
+        # always succeeds regardless of whether any script *content* repo
+        # (mlcommons@mlperf-automations or a fork/custom clone of it) is
+        # registered. "engine missing" is no longer a reliable signal that
+        # content needs pulling. Don't hardcode a specific repo alias here —
+        # forks (e.g. gateoverflow@mlperf-automations) are valid too — check
+        # generically for any repo with actual script content instead, same
+        # as find_target_folder() does for the (now-bundled) automation/
+        # folder, just one level up at <repo>/script/ instead of
+        # <repo>/automation/script/.
+        for repo in self.repos:
+            script_dir = os.path.join(repo.path, 'script')
+            if os.path.isdir(script_dir) and os.listdir(script_dir):
+                return True
+        return False
 
     def call_script_module_function(self, function_name, run_args):
         self.action_type = "script"
@@ -249,7 +255,7 @@ Main Script Meta:""")
             logger.warning(
                 "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository..."
                 if not script_path else
-                "mlcommons@mlperf-automations (script content) is not registered. Automatically pulling it...")
+                "No script content repo registered. Automatically pulling mlcommons@mlperf-automations...")
 
             # Use the access method to pull the required repository
             result = self.access({
