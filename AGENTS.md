@@ -39,14 +39,18 @@ mlc/main.py:mlcr()
 **Two repos, two roles:**
 - `mlcflow` (this repo) — the CLI driver *and* the script execution engine:
   arg parsing, repo/index management, dynamic dispatch, error reporting, and
-  `automation/` (the `ScriptAutomation` engine, formerly hosted in
-  `mlperf-automations`).
-- `mlperf-automations` — the content: 377+ script directories
-  (`meta.yaml`/`customize.py`/`run.sh` per script). No engine code.
+  `automation/` (the `ScriptAutomation` engine, originally developed in
+  `mlperf-automations`). This is now the *primary/authoritative* copy.
+- `mlperf-automations` — the content (377+ script directories:
+  `meta.yaml`/`customize.py`/`run.sh` per script), plus a copy of its own
+  `automation/` folder kept for backward compatibility. It has **not** been
+  removed there — see the "Bundled-first, external fallback" note below for
+  why that copy is no longer the one mlcflow actually loads.
 
-mlcflow finds the bundled engine, loads it, and hands off `run_args`. It
-still does not contain benchmark *content* (individual script directories) —
-those are pulled from `mlperf-automations` into `~/MLC/repos/` like before.
+mlcflow finds the bundled engine first and loads that, and hands off
+`run_args`. It still does not contain benchmark *content* (individual script
+directories) — those are pulled from `mlperf-automations` into `~/MLC/repos/`
+like before.
 
 ---
 
@@ -100,8 +104,10 @@ mlcflow/
   index_cache.json                # tag index for caches
   index_experiment.json
   modified_times.json             # mtime map used for incremental index
-  mlcommons@mlperf-automations/   # pulled repo (content ONLY, no automation/)
+  mlcommons@mlperf-automations/   # pulled repo
     script/<alias>/meta.yaml      # script content, not in this repo
+    automation/script/module.py   # still present there too (backward compat,
+                                   # kept for now) but NOT what mlcflow loads
 ```
 
 The engine itself (`automation/script/module.py`) is resolved from the

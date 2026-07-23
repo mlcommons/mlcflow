@@ -17,10 +17,14 @@ mlcr <tags>  →  mlc_expand_short("run")  →  main()
 ```
 
 **This repo = CLI driver + script execution engine.** Engine logic lives in
-`automation/script/module.py` in this repo (migrated from `mlperf-automations`).
-Script *content* (the 377+ `script/<alias>/` directories with `meta.yaml`,
-`customize.py`, `run.sh`) still lives in `mlperf-automations` and is pulled
-into `~/MLC/repos/` as before.
+`automation/script/module.py` in this repo (originally developed in
+`mlperf-automations`, and now bundled here as the primary copy mlcflow
+actually loads). `mlperf-automations` still has its own `automation/` folder
+too — it was **not** removed there, kept for backward compatibility — but
+`find_target_folder()` prefers the bundled copy in this repo, so that copy is
+no longer what runs. Script *content* (the 377+ `script/<alias>/` directories
+with `meta.yaml`, `customize.py`, `run.sh`) still lives in `mlperf-automations`
+and is pulled into `~/MLC/repos/` as before.
 
 **Result dict contract** — every action method must return:
 - `{'return': 0}` on success
