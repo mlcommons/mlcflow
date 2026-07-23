@@ -228,15 +228,28 @@ Main Script Meta:""")
 
         return module
 
+    def _content_repo_registered(self):
+        # automation/ ships bundled with mlcflow, so find_target_folder()
+        # always succeeds regardless of whether mlcommons@mlperf-automations
+        # (the script *content* repo) is registered. "engine missing" is no
+        # longer a reliable signal that the content repo needs pulling, so
+        # check for its registration directly.
+        return any(
+            (repo.meta or {}).get('alias') == 'mlcommons@mlperf-automations'
+            for repo in self.repos
+        )
+
     def call_script_module_function(self, function_name, run_args):
         self.action_type = "script"
         repos_folder = self.repos_path
 
         # Import script submodule
         script_path = self.find_target_folder("script")
-        if not script_path:
+        if not script_path or not self._content_repo_registered():
             logger.warning(
-                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository...")
+                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository..."
+                if not script_path else
+                "mlcommons@mlperf-automations (script content) is not registered. Automatically pulling it...")
 
             # Use the access method to pull the required repository
             result = self.access({
@@ -252,7 +265,7 @@ Main Script Meta:""")
 
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
-                if not script_path:
+                if not script_path or not self._content_repo_registered():
                     return {
                         'return': 1, 'error': f"""Script automation still not found after pulling mlcommons@mlperf-automations --branch=dev."""}
             else:
