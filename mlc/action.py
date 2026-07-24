@@ -5,6 +5,8 @@ import yaml
 import logging
 import re
 import shutil
+import hashlib
+import importlib.metadata as importlib_metadata
 from pathlib import Path
 
 from .logger import logger, setup_logging
@@ -14,6 +16,147 @@ from .index import Index
 from .repo import Repo
 from .item import Item
 from .error_codes import WarningCode
+
+# Entry-point group that pip-installable script-content packages advertise
+# themselves under (e.g. a package shipping the mlperf-automations script/
+# tree, or a fork of it under a different distribution name).
+SCRIPT_PACKAGE_ENTRY_POINT_GROUP = "mlc.script_packages"
+
+
+def _get_script_package_entry_points():
+    """
+    Version-compatible retrieval of entry points in
+    SCRIPT_PACKAGE_ENTRY_POINT_GROUP. Python 3.10+ supports
+    entry_points(group=...) directly; 3.8/3.9 only support the argument-less
+    entry_points(), which returns a plain dict (or dict-like
+    SelectableGroups) keyed by group name.
+    """
+    try:
+        return list(importlib_metadata.entry_points(
+            group=SCRIPT_PACKAGE_ENTRY_POINT_GROUP))
+    except TypeError:
+        # Python < 3.10: entry_points() takes no 'group' kwarg.
+        try:
+            all_eps = importlib_metadata.entry_points()
+            return list(all_eps.get(SCRIPT_PACKAGE_ENTRY_POINT_GROUP, []))
+        except Exception as e:
+            logger.debug(
+                f"Could not enumerate '{SCRIPT_PACKAGE_ENTRY_POINT_GROUP}' "
+                f"entry points on this Python version: {e}")
+            return []
+    except Exception as e:
+        logger.debug(
+            f"Could not enumerate '{SCRIPT_PACKAGE_ENTRY_POINT_GROUP}' entry points: {e}")
+        return []
+
+
+def _pip_repo_cache_path(repos_path):
+    return os.path.join(repos_path, "package_repos_cache.json")
+
+
+def _load_pip_repo_cache(repos_path):
+    cache_file = _pip_repo_cache_path(repos_path)
+    if not os.path.isfile(cache_file):
+        return {}
+    try:
+        with open(cache_file, "r") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_pip_repo_cache(repos_path, cache):
+    try:
+        os.makedirs(repos_path, exist_ok=True)
+        with open(_pip_repo_cache_path(repos_path), "w") as f:
+            json.dump(cache, f, indent=2)
+    except OSError as e:
+        logger.debug(f"Could not save pip script package cache: {e}")
+
+
+def discover_pip_script_repos(repos_path):
+    """
+    Discover script-content repos advertised by installed pip packages via
+    the SCRIPT_PACKAGE_ENTRY_POINT_GROUP entry-point group. Returns a list
+    of Repo objects, one per distinct installed *distribution*.
+
+    Deliberately aliases each repo by the entry point's owning distribution
+    name (`ep.dist.name`), NOT the self-chosen entry-point name (`ep.name`).
+    PyPI enforces distribution-name uniqueness the same way GitHub enforces
+    owner/repo uniqueness, so this is what lets a fork of a script-content
+    package coexist with the original even if both declare the same
+    entry-point name and even if the fork copied script uids verbatim.
+
+    entry_points() itself is a fast, local, no-network scan of installed
+    *.dist-info/entry_points.txt files (the same mechanism `pip list` relies
+    on) and is called every run - it's cheap. What's NOT free is `.load()`,
+    which actually imports the resolver module; that's cached across runs in
+    <repos_path>/package_repos_cache.json keyed by distribution name, so an
+    already-known package's content dir is reused directly without
+    re-importing anything.
+
+    Distributions that disappear (uninstalled) are simply left out of the
+    returned list - Index.build_index()'s existing deleted-item detection
+    (comparing each run's indexed files against modified_times.json) already
+    prunes their content automatically, so no explicit
+    Index.remove_repo_from_index() call is needed here.
+    """
+    cache = _load_pip_repo_cache(repos_path)
+    updated_cache = {}
+    discovered = {}
+    cache_changed = False
+
+    for ep in _get_script_package_entry_points():
+        dist = getattr(ep, 'dist', None)
+        dist_name = dist.name if dist is not None else ep.name
+        if dist_name in discovered:
+            # Same distribution declaring more than one entry point in this
+            # group - first one found wins, it's still the same repo.
+            continue
+
+        content_dir = cache.get(dist_name)
+        if content_dir and os.path.isdir(content_dir):
+            # Already known from a previous run - reuse it, skip the
+            # (import-triggering) ep.load() call entirely.
+            updated_cache[dist_name] = content_dir
+        else:
+            try:
+                module = ep.load()
+                content_dir = os.path.dirname(os.path.abspath(module.__file__))
+            except Exception as e:
+                logger.warning(
+                    f"Skipping script package entry point '{ep.name}' from "
+                    f"distribution '{dist_name}': failed to load ({e})")
+                continue
+
+            if not os.path.isdir(content_dir):
+                logger.warning(
+                    f"Script package '{dist_name}' entry point resolved to "
+                    f"a non-existent directory: {content_dir}. Skipping.")
+                continue
+
+            updated_cache[dist_name] = content_dir
+            cache_changed = True
+            logger.info(
+                f"Discovered new script package '{dist_name}' at {content_dir}")
+
+        uid = hashlib.md5(dist_name.encode('utf-8')).hexdigest()[:16]
+        discovered[dist_name] = Repo(path=updated_cache[dist_name], meta={
+            'alias': dist_name,
+            'uid': uid,
+            'source': 'pip',
+        })
+
+    if set(cache.keys()) - set(updated_cache.keys()):
+        # one or more previously-known packages disappeared (uninstalled)
+        cache_changed = True
+
+    if cache_changed:
+        _save_pip_repo_cache(repos_path, updated_cache)
+
+    return list(discovered.values())
+
 
 # Base class for actions
 
@@ -26,6 +169,18 @@ class Action:
     local_repo = None
     current_repo_path = None
     repos = []  # list of Repo objects
+
+    @staticmethod
+    def _is_pip_sourced_repo(repo_obj):
+        """
+        True if repo_obj (a Repo instance) was discovered from an installed
+        pip package rather than a git-cloned/registered repo. Its files live
+        inside the Python environment's site-packages, not ~/MLC/repos, and
+        must not be mutated by mlc add/cp/mv/rm - that would corrupt the
+        installed package outside of pip's own bookkeeping.
+        """
+        return bool(repo_obj) and getattr(
+            repo_obj, 'meta', {}).get('source') == 'pip'
 
     # Main access function to simulate a Python interface for CLI
     def access(self, options):
@@ -248,7 +403,12 @@ class Action:
         if not os.path.exists(self.local_cache_path):
             os.makedirs(self.local_cache_path, exist_ok=True)
 
-        self.repos = self.load_repos_and_meta()
+        # Pip-sourced script-content repos are prepended (processed first),
+        # so git-cloned repos loaded below are processed last and win any
+        # script-uid conflicts - pip is a second, lower-trust source for now
+        # (see mlcflow-pip-script-packages-proposal.pptx, Phase 1).
+        self.repos = discover_pip_script_repos(
+            self.repos_path) + self.load_repos_and_meta()
         # logger.info(f"In Action class: {self.repos_path}")
         self._index = None
 
@@ -306,6 +466,10 @@ class Action:
 
         # Determine paths and metadata format
         repo = res["list"][0]
+        if self._is_pip_sourced_repo(repo):
+            return {
+                'return': 1,
+                'error': f"""Repo '{repo.meta.get('alias')}' is sourced from an installed pip package (read-only) - cannot add items to it. Use a git-cloned repo or the local repo instead."""}
         repo_path = repo.path
 
         target_name = i.get('target_name', self.action_type)
@@ -429,6 +593,12 @@ class Action:
         for result in results:
             item_path = result.path
             item_meta = result.meta
+
+            if self._is_pip_sourced_repo(getattr(result, 'repo', None)):
+                logger.warning(
+                    f"Skipping removal of {item_path}: sourced from an "
+                    f"installed pip package (read-only), not a git-cloned repo.")
+                continue
 
             if os.path.exists(item_path):
                 if force_remove == True:
@@ -642,19 +812,30 @@ class Action:
                     return {
                         'return': 1, 'error': f"""Current directory is not inside a registered MLC repo and so using ".:" is not valid"""}
                 target_repo_name = os.path.basename(self.current_repo_path)
-            else:
-                if not any(os.path.basename(repodata.path) ==
-                           target_repo_name for repodata in self.repos):
-                    return {'return': 1, 'error': f"""The target repo {target_repo} is not registered in MLC. Either register in MLC by cloning from Git through command `mlc pull repo` or create repo using `mlc add repo` command and try to rerun the command again"""}
-            target_repo_path = os.path.join(self.repos_path, target_repo_name)
+
+            # Match by alias first - the on-disk directory basename doesn't
+            # always match the repo's alias (e.g. a pip-sourced repo's
+            # site-packages directory "mlc_scripts_content" vs its
+            # distribution-name alias "mlc-scripts"). Fall back to basename
+            # matching for repos with no alias set.
             target_repo = next(
-                (k for k in self.repos if os.path.basename(
-                    k.path) == target_repo_name), None)
+                (k for k in self.repos
+                 if k.meta.get('alias') == target_repo_name
+                 or os.path.basename(k.path) == target_repo_name), None)
+
+            if target_repo is None:
+                return {'return': 1, 'error': f"""The target repo {target_repo_name} is not registered in MLC. Either register in MLC by cloning from Git through command `mlc pull repo` or create repo using `mlc add repo` command and try to rerun the command again"""}
+            target_repo_path = target_repo.path
             target_item_name = target_split[1].strip()
         else:
             target_repo = result.repo
             target_repo_path = result.repo.path
             target_item_name = target_split[0].strip()
+
+        if self._is_pip_sourced_repo(target_repo):
+            return {
+                'return': 1,
+                'error': f"""Target repo '{getattr(target_repo, 'meta', {}).get('alias')}' is sourced from an installed pip package (read-only) - cannot copy/move items into it."""}
 
         target_item_path = os.path.join(
             target_repo_path, action_target, target_item_name)
