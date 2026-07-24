@@ -84,13 +84,44 @@ jobs:
                   "model": "gpt-4.1-mini",
                   "input": prompt,
                   "temperature": 0.2
-              }
+              },
+              timeout=120,
           )
 
-          data = response.json()
-          text = data["output"][0]["content"][0]["text"]
+          if not response.ok:
+              print(f"::error::OpenAI API request failed with HTTP {response.status_code}: {response.text[:2000]}")
+              raise SystemExit(1)
 
-          parsed = json.loads(text)
+          data = response.json()
+
+          text = None
+          for item in data.get("output", []):
+              if item.get("type") == "message":
+                  for block in item.get("content", []):
+                      if "text" in block:
+                          text = block["text"]
+                          break
+              if text:
+                  break
+
+          if text is None:
+              print(f"::error::Could not find message text in OpenAI response: {json.dumps(data)[:2000]}")
+              raise SystemExit(1)
+
+          # Models sometimes wrap JSON in a markdown code fence despite instructions not to.
+          stripped = text.strip()
+          if stripped.startswith("```"):
+              stripped = stripped.strip("`")
+              if stripped.startswith("json"):
+                  stripped = stripped[len("json"):]
+              stripped = stripped.strip()
+
+          try:
+              parsed = json.loads(stripped)
+          except json.JSONDecodeError as e:
+              print(f"::error::Failed to parse JSON from OpenAI response: {e}\nRaw text: {text[:2000]}")
+              raise SystemExit(1)
+
           with open("ai_output.json", "w") as f:
               json.dump(parsed, f, indent=2)
           EOF
@@ -100,9 +131,13 @@ jobs:
       - name: Post PR summary comment
         if: env.EMPTY_DIFF != 'true'
         run: |
-          SUMMARY=$(jq -r '.summary' ai_output.json)
+          {
+            echo "## 🤖 AI PR Review Summary"
+            echo
+            jq -r '.summary' ai_output.json
+          } > summary_comment.md
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "## 🤖 AI PR Review Summary\n\n$SUMMARY"
+            --body-file summary_comment.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -110,10 +145,10 @@ jobs:
         if: env.EMPTY_DIFF != 'true'
         continue-on-error: true
         run: |
-          jq -c '.comments[]?' ai_output.json | while read c; do
-            FILE=$(echo $c | jq -r '.file')
-            LINE=$(echo $c | jq -r '.line')
-            COMMENT=$(echo $c | jq -r '.comment')
+          jq -c '.comments[]?' ai_output.json | while read -r c; do
+            FILE=$(echo "$c" | jq -r '.file')
+            LINE=$(echo "$c" | jq -r '.line')
+            COMMENT=$(echo "$c" | jq -r '.comment')
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
@@ -126,8 +161,7 @@ jobs:
               -f commit_id="${{ github.event.pull_request.head.sha }}" \
               -f path="$FILE" \
               -F line="$LINE" \
-              -f side="RIGHT" \
-              -f subject_type="line" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
+              -f side="RIGHT" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
