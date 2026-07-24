@@ -26,6 +26,14 @@ no longer what runs. Script *content* (the 377+ `script/<alias>/` directories
 with `meta.yaml`, `customize.py`, `run.sh`) still lives in `mlperf-automations`
 and is pulled into `~/MLC/repos/` as before.
 
+**Version drift risk:** because `mlperf-automations`' copy of `automation/`
+is dead code (never executed, per the above), it's easy to patch a bug in
+*this* repo's `automation/script/module.py` and forget the old copy still
+exists there, unchanged and diverging. That copy has no functional effect,
+but a contributor could mistakenly edit it expecting it to do something.
+Treat any edit to `mlperf-automations/automation/` as a no-op until/unless
+that repo formally removes it.
+
 **Result dict contract** — every action method must return:
 - `{'return': 0}` on success
 - `{'return': N, 'error': 'message'}` on failure (N > 0)

@@ -52,6 +52,15 @@ mlcflow finds the bundled engine first and loads that, and hands off
 directories) — those are pulled from `mlperf-automations` into `~/MLC/repos/`
 like before.
 
+**Version drift risk:** `mlperf-automations`' copy of `automation/` is dead
+code — never executed, since the bundled copy here always wins. It's easy to
+fix a bug in this repo's `automation/script/module.py` and forget the old
+copy still exists there, unchanged and diverging further over time. That's
+harmless functionally, but a contributor could waste time editing the wrong
+copy expecting it to have an effect. Treat edits to
+`mlperf-automations/automation/` as inert until/unless that repo formally
+removes it.
+
 ---
 
 ## Repo layout
