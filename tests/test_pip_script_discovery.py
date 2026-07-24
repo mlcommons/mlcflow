@@ -104,7 +104,7 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
     def test_entry_points_enumeration_failure_does_not_crash(self):
         with patch.object(_mlc_action.importlib_metadata, "entry_points",
-                           side_effect=RuntimeError("boom")):
+                          side_effect=RuntimeError("boom")):
             repos = discover_pip_script_repos(self.repos_path)
         self.assertEqual(repos, [])
 
@@ -114,8 +114,12 @@ class PipScriptDiscoveryTest(unittest.TestCase):
         # which returns a plain dict (or dict-like SelectableGroups) keyed
         # by group name.
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
-        other_group_ep = _FakeEntryPoint("unrelated", "unrelated-dist", "/nonexistent")
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
+        other_group_ep = _FakeEntryPoint(
+            "unrelated", "unrelated-dist", "/nonexistent")
 
         def fake_entry_points(*args, **kwargs):
             if "group" in kwargs:
@@ -127,7 +131,7 @@ class PipScriptDiscoveryTest(unittest.TestCase):
             }
 
         with patch.object(_mlc_action.importlib_metadata, "entry_points",
-                           side_effect=fake_entry_points):
+                          side_effect=fake_entry_points):
             repos = discover_pip_script_repos(self.repos_path)
 
         self.assertEqual(len(repos), 1)
@@ -142,7 +146,7 @@ class PipScriptDiscoveryTest(unittest.TestCase):
             return {"some.other.group": []}
 
         with patch.object(_mlc_action.importlib_metadata, "entry_points",
-                           side_effect=fake_entry_points):
+                          side_effect=fake_entry_points):
             repos = discover_pip_script_repos(self.repos_path)
         self.assertEqual(repos, [])
 
@@ -150,7 +154,10 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
     def test_basic_discovery_adds_repo_and_makes_script_searchable(self):
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
 
         with self._patch_entry_points([ep]):
             action = self._new_action()
@@ -170,12 +177,18 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
     def test_cache_skips_reload_on_second_run_with_no_changes(self):
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep1 = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep1 = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep1]):
             discover_pip_script_repos(self.repos_path)
         self.assertEqual(ep1.load_call_count, 1)
 
-        ep2 = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep2 = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep2]):
             repos = discover_pip_script_repos(self.repos_path)
 
@@ -186,13 +199,19 @@ class PipScriptDiscoveryTest(unittest.TestCase):
     def test_cache_file_written_only_when_something_changes(self):
         cache_file = os.path.join(self.repos_path, "package_repos_cache.json")
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep1 = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep1 = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep1]):
             discover_pip_script_repos(self.repos_path)
         self.assertTrue(os.path.exists(cache_file))
         mtime_after_first = os.path.getmtime(cache_file)
 
-        ep2 = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep2 = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep2]):
             discover_pip_script_repos(self.repos_path)
         self.assertEqual(os.path.getmtime(cache_file), mtime_after_first)
@@ -204,7 +223,10 @@ class PipScriptDiscoveryTest(unittest.TestCase):
             f.write("{not valid json")
 
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep]):
             repos = discover_pip_script_repos(self.repos_path)
 
@@ -215,7 +237,10 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
     def test_uninstalled_package_disappears_on_next_discovery(self):
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep]):
             repos = discover_pip_script_repos(self.repos_path)
         self.assertEqual(len(repos), 1)
@@ -226,7 +251,10 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
     def test_uninstalled_package_scripts_removed_from_index(self):
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep]):
             action = self._new_action()
         res = action.search({"target_name": "script", "tags": "detect-widget"})
@@ -234,12 +262,14 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
         with self._patch_entry_points([]):
             action2 = self._new_action()
-        res2 = action2.search({"target_name": "script", "tags": "detect-widget"})
+        res2 = action2.search(
+            {"target_name": "script", "tags": "detect-widget"})
         self.assertEqual(len(res2["list"]), 0)
 
     # ---- 5.1 fork disambiguation (core design point) -----------------------
 
-    def test_fork_with_same_entry_point_name_different_distribution_coexist(self):
+    def test_fork_with_same_entry_point_name_different_distribution_coexist(
+            self):
         official_dir = os.path.join(self.temp_dir.name, "official_pkg")
         fork_dir = os.path.join(self.temp_dir.name, "fork_pkg")
         _write_script(official_dir, "detect-widget", "a" * 16)
@@ -260,7 +290,9 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
         pip_aliases = sorted(
             r.meta["alias"] for r in action.repos if r.meta.get("source") == "pip")
-        self.assertEqual(pip_aliases, ["anandhu-mlc-scripts-fork", "mlc-scripts"])
+        self.assertEqual(
+            pip_aliases, [
+                "anandhu-mlc-scripts-fork", "mlc-scripts"])
 
         res_official = action.search(
             {"target_name": "script", "tags": "detect-widget"})
@@ -273,7 +305,10 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
     def test_script_in_pip_repo_resolvable_as_dep_of_git_repo_script(self):
         _write_script(self.content_dir, "get-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
 
         with self._patch_entry_points([ep]):
             action = self._new_action()
@@ -301,13 +336,18 @@ class PipScriptDiscoveryTest(unittest.TestCase):
         dep_lookup = action2.search(
             {"target_name": "script", "tags": "get-widget"})
         self.assertEqual(len(dep_lookup["list"]), 1)
-        self.assertTrue(dep_lookup["list"][0].path.startswith(self.content_dir))
+        self.assertTrue(
+            dep_lookup["list"][0].path.startswith(
+                self.content_dir))
 
     # ---- 9.1 broken package doesn't take down discovery for others --------
 
     def test_broken_entry_point_is_skipped_others_still_discovered(self):
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        good_ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        good_ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         broken_ep = _FakeEntryPoint(
             "broken-pkg", "broken-dist", "/nonexistent",
             load_error=ImportError("simulated broken package"))
@@ -319,7 +359,10 @@ class PipScriptDiscoveryTest(unittest.TestCase):
         self.assertEqual(repos[0].meta["alias"], "mlc-scripts")
 
     def test_entry_point_resolving_to_missing_directory_is_skipped(self):
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", "/nonexistent/path")
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            "/nonexistent/path")
         with self._patch_entry_points([ep]):
             repos = discover_pip_script_repos(self.repos_path)
         self.assertEqual(repos, [])
@@ -328,7 +371,10 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
     def test_add_script_refused_for_pip_sourced_repo(self):
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep]):
             action = self._new_action()
 
@@ -342,9 +388,13 @@ class PipScriptDiscoveryTest(unittest.TestCase):
         self.assertFalse(
             os.path.exists(os.path.join(self.content_dir, "script", "new-script-1")))
 
-    def test_rm_script_refused_for_pip_sourced_repo_and_reports_nothing_removed(self):
+    def test_rm_script_refused_for_pip_sourced_repo_and_reports_nothing_removed(
+            self):
         script_dir = _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep]):
             action = self._new_action()
 
@@ -362,7 +412,10 @@ class PipScriptDiscoveryTest(unittest.TestCase):
 
     def test_rm_repo_refused_for_pip_sourced_repo(self):
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep]):
             action = self._new_action()
 
@@ -372,14 +425,18 @@ class PipScriptDiscoveryTest(unittest.TestCase):
         self.assertIn("pip uninstall", res["error"])
         self.assertTrue(os.path.isdir(self.content_dir))
 
-    def test_cp_script_into_pip_sourced_repo_referenced_by_alias_is_refused(self):
+    def test_cp_script_into_pip_sourced_repo_referenced_by_alias_is_refused(
+            self):
         # Regression test: the pip repo's on-disk directory basename
         # ("content_pkg", a tempdir name) never matches its alias
         # ("mlc-scripts", the distribution name) - cp()'s target-repo lookup
         # used to match by basename only and would crash with a NameError
         # instead of returning a clean refusal for exactly this mismatch.
         _write_script(self.content_dir, "detect-widget", "a" * 16)
-        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        ep = _FakeEntryPoint(
+            "mlperf-automations",
+            "mlc-scripts",
+            self.content_dir)
         with self._patch_entry_points([ep]):
             action = self._new_action()
 
