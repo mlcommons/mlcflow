@@ -108,6 +108,44 @@ class PipScriptDiscoveryTest(unittest.TestCase):
             repos = discover_pip_script_repos(self.repos_path)
         self.assertEqual(repos, [])
 
+    def test_pre_310_entry_points_api_fallback(self):
+        # Python <3.10: entry_points(group=...) raises TypeError (no such
+        # kwarg); callers must fall back to entry_points() with no args,
+        # which returns a plain dict (or dict-like SelectableGroups) keyed
+        # by group name.
+        _write_script(self.content_dir, "detect-widget", "a" * 16)
+        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        other_group_ep = _FakeEntryPoint("unrelated", "unrelated-dist", "/nonexistent")
+
+        def fake_entry_points(*args, **kwargs):
+            if "group" in kwargs:
+                raise TypeError(
+                    "entry_points() got an unexpected keyword argument 'group'")
+            return {
+                SCRIPT_PACKAGE_ENTRY_POINT_GROUP: [ep],
+                "some.other.group": [other_group_ep],
+            }
+
+        with patch.object(_mlc_action.importlib_metadata, "entry_points",
+                           side_effect=fake_entry_points):
+            repos = discover_pip_script_repos(self.repos_path)
+
+        self.assertEqual(len(repos), 1)
+        self.assertEqual(repos[0].meta["alias"], "mlc-scripts")
+        self.assertEqual(ep.load_call_count, 1)
+        self.assertEqual(other_group_ep.load_call_count, 0)
+
+    def test_pre_310_api_with_group_entirely_absent_is_noop(self):
+        def fake_entry_points(*args, **kwargs):
+            if "group" in kwargs:
+                raise TypeError("no group kwarg")
+            return {"some.other.group": []}
+
+        with patch.object(_mlc_action.importlib_metadata, "entry_points",
+                           side_effect=fake_entry_points):
+            repos = discover_pip_script_repos(self.repos_path)
+        self.assertEqual(repos, [])
+
     # ---- 1.1/1.2 basic discovery ------------------------------------------
 
     def test_basic_discovery_adds_repo_and_makes_script_searchable(self):
@@ -303,6 +341,24 @@ class PipScriptDiscoveryTest(unittest.TestCase):
         self.assertIn("pip package", res["error"])
         self.assertFalse(
             os.path.exists(os.path.join(self.content_dir, "script", "new-script-1")))
+
+    def test_rm_script_refused_for_pip_sourced_repo_and_reports_nothing_removed(self):
+        script_dir = _write_script(self.content_dir, "detect-widget", "a" * 16)
+        ep = _FakeEntryPoint("mlperf-automations", "mlc-scripts", self.content_dir)
+        with self._patch_entry_points([ep]):
+            action = self._new_action()
+
+        res = action.rm({
+            "target_name": "script",
+            "tags": "detect-widget",
+            "f": True,
+        })
+        # Must not falsely report success as if something were deleted.
+        self.assertEqual(res["return"], 0)
+        self.assertEqual(res.get("message"), "No items were removed")
+        self.assertNotIn("removed", res)
+        self.assertTrue(os.path.isdir(script_dir))
+        self.assertTrue(os.path.isfile(os.path.join(script_dir, "meta.yaml")))
 
     def test_rm_repo_refused_for_pip_sourced_repo(self):
         _write_script(self.content_dir, "detect-widget", "a" * 16)

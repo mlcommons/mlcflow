@@ -589,6 +589,7 @@ class Action:
                         force_remove = True
 
         results = res['list']
+        removed_paths = []
 
         for result in results:
             item_path = result.path
@@ -615,10 +616,21 @@ class Action:
                     f"{target_name} item: {item_path} has been successfully removed")
 
             self.get_index().rm(item_meta, target_name, item_path)
+            removed_paths.append(item_path)
+
+        if not removed_paths:
+            return {
+                "return": 0,
+                "warnings": [{"code": WarningCode.EMPTY_TARGET.code,
+                              "description": f"No {target_name} item was actually removed "
+                              f"(skipped: read-only pip-sourced repo, or declined confirmation)"}],
+                "message": "No items were removed",
+            }
 
         return {
             "return": 0,
-            "message": f"Item {item_path} successfully removed",
+            "message": f"Item {removed_paths[-1]} successfully removed",
+            "removed": removed_paths,
         }
 
     def save_new_meta(self, i, item_id, item_name,
@@ -813,15 +825,21 @@ class Action:
                         'return': 1, 'error': f"""Current directory is not inside a registered MLC repo and so using ".:" is not valid"""}
                 target_repo_name = os.path.basename(self.current_repo_path)
 
-            # Match by alias first - the on-disk directory basename doesn't
+            # Match by alias first, across ALL repos, before ever falling
+            # back to basename - the on-disk directory basename doesn't
             # always match the repo's alias (e.g. a pip-sourced repo's
             # site-packages directory "mlc_scripts_content" vs its
-            # distribution-name alias "mlc-scripts"). Fall back to basename
-            # matching for repos with no alias set.
+            # distribution-name alias "mlc-scripts"). Checking both in a
+            # single predicate would let an unrelated repo's basename match
+            # shadow the correct alias match depending on list order; doing
+            # alias as its own full pass first avoids that ambiguity.
             target_repo = next(
-                (k for k in self.repos
-                 if k.meta.get('alias') == target_repo_name
-                 or os.path.basename(k.path) == target_repo_name), None)
+                (k for k in self.repos if k.meta.get('alias') == target_repo_name),
+                None)
+            if target_repo is None:
+                target_repo = next(
+                    (k for k in self.repos
+                     if os.path.basename(k.path) == target_repo_name), None)
 
             if target_repo is None:
                 return {'return': 1, 'error': f"""The target repo {target_repo_name} is not registered in MLC. Either register in MLC by cloning from Git through command `mlc pull repo` or create repo using `mlc add repo` command and try to rerun the command again"""}
