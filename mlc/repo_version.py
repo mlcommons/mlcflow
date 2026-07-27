@@ -43,6 +43,10 @@ SIDECAR_NAME = "repos_version.json"
 # compute. Kept as a module constant so it is easy to tune in one place.
 _LOCK_TIMEOUT = 10
 
+# Seconds to allow a single git subprocess before giving up (guards against a
+# hung git so version resolution can never block a script run indefinitely).
+_GIT_TIMEOUT = 30
+
 # Keys stored only for cache invalidation; stripped from the returned version.
 _CACHE_ONLY_KEYS = ("head_mtime", "index_mtime")
 
@@ -57,7 +61,7 @@ def _looks_like_commit(value):
 def _git(repo_path, *args):
     return subprocess.check_output(
         ["git", "-C", repo_path, *args],
-        stderr=subprocess.DEVNULL, text=True).strip()
+        stderr=subprocess.DEVNULL, text=True, timeout=_GIT_TIMEOUT).strip()
 
 
 def _mtime(path):
@@ -132,6 +136,9 @@ def get_repo_version(repo_path, repos_path):
       it until the next git operation. Treat ``dirty`` as a hint, not a
       guarantee.
     """
+    # Normalise so the sidecar cache key is stable regardless of how the caller
+    # spelled the path (relative vs absolute, symlinks, trailing slash).
+    repo_path = os.path.realpath(repo_path)
     git_dir = os.path.join(repo_path, ".git")
     head_mtime = _mtime(os.path.join(git_dir, "HEAD"))
 
@@ -203,5 +210,6 @@ def get_repo_version(repo_path, repos_path):
     except Exception as e:
         # Lock timeout or any I/O problem: compute without caching.
         logger.debug(
-            "repos_version cache unavailable (%s); computing uncached", e)
+            "repos_version cache unavailable (%s); computing uncached", e,
+            exc_info=True)
         return _resolve()
