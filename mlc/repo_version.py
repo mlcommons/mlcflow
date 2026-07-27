@@ -25,6 +25,7 @@ Resolution order (so the result is never empty):
 """
 
 import os
+import re
 import json
 import logging
 import subprocess
@@ -44,6 +45,13 @@ _LOCK_TIMEOUT = 10
 
 # Keys stored only for cache invalidation; stripped from the returned version.
 _CACHE_ONLY_KEYS = ("head_mtime", "index_mtime")
+
+# A git commit is an abbreviated-to-full hex SHA (sha1 is 40, sha256 is 64).
+_COMMIT_RE = re.compile(r"\A[0-9a-fA-F]{7,64}\Z")
+
+
+def _looks_like_commit(value):
+    return bool(value) and bool(_COMMIT_RE.match(value))
 
 
 def _git(repo_path, *args):
@@ -75,10 +83,15 @@ def _fallback(repo_path):
         try:
             with open(hash_file) as f:
                 commit = f.read().strip()
-            if commit:
+            if _looks_like_commit(commit):
                 return {"source": "commit_file", "commit": commit,
                         "branch": "", "dirty": False}
-            logger.debug("git_commit_hash.txt in %s is empty", repo_path)
+            if commit:
+                logger.debug(
+                    "git_commit_hash.txt in %s is not a valid commit hash: %r",
+                    repo_path, commit)
+            else:
+                logger.debug("git_commit_hash.txt in %s is empty", repo_path)
         except OSError as e:
             logger.debug("Could not read %s: %s", hash_file, e)
     else:
@@ -110,6 +123,14 @@ def get_repo_version(repo_path, repos_path):
 
     Returns a dict with at least ``source`` and (when available) ``commit``,
     ``branch``, ``dirty`` and ``version``.
+
+    Notes:
+      ``commit`` / ``branch`` are authoritative. ``dirty`` is best-effort: it
+      uses ``git status --porcelain -uno`` (untracked files are intentionally
+      ignored), and because the result is cached behind ``.git/HEAD`` /
+      ``.git/index`` mtimes, an unstaged edit to a tracked file may not refresh
+      it until the next git operation. Treat ``dirty`` as a hint, not a
+      guarantee.
     """
     git_dir = os.path.join(repo_path, ".git")
     head_mtime = _mtime(os.path.join(git_dir, "HEAD"))
@@ -123,7 +144,10 @@ def get_repo_version(repo_path, repos_path):
         if os.path.exists(git_dir):
             try:
                 return _compute_from_git(repo_path)
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    "git version failed for %s: %s; falling back",
+                    repo_path, e)
                 return _fallback(repo_path)
         return _fallback(repo_path)
 
@@ -132,13 +156,17 @@ def get_repo_version(repo_path, repos_path):
     def _resolve():
         try:
             return _compute_from_git(repo_path)
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "git version failed for %s: %s; falling back", repo_path, e)
             return _fallback(repo_path)
 
     sidecar = os.path.join(repos_path, SIDECAR_NAME)
 
     # Without filelock we still work correctly, just uncached.
     if filelock is None:
+        logger.debug(
+            "filelock unavailable; computing repo version uncached")
         return _resolve()
 
     lock = filelock.FileLock(sidecar + ".lock")
