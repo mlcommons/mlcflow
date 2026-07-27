@@ -41,8 +41,11 @@ def get_repo_version(repo_path):
                 # Only tracked file changes (ignore untracked files)
                 "dirty": bool(_git("status", "--porcelain", "-uno")),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            # Broad by design: never raise into a caller. Log for debugging.
+            logger.debug(
+                "get_repo_version: git failed for %s (%s); trying fallback",
+                repo_path, e)
     hash_file = os.path.join(repo_path, "git_commit_hash.txt")
     if os.path.isfile(hash_file):
         try:
