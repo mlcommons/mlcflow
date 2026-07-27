@@ -26,6 +26,7 @@ Resolution order (so the result is never empty):
 
 import os
 import json
+import logging
 import subprocess
 
 try:
@@ -33,7 +34,13 @@ try:
 except Exception:  # pragma: no cover - filelock is a declared dependency
     filelock = None
 
+logger = logging.getLogger(__name__)
+
 SIDECAR_NAME = "repos_version.json"
+
+# Seconds to wait for the sidecar lock before falling back to an uncached
+# compute. Kept as a module constant so it is easy to tune in one place.
+_LOCK_TIMEOUT = 10
 
 # Keys stored only for cache invalidation; stripped from the returned version.
 _CACHE_ONLY_KEYS = ("head_mtime", "index_mtime")
@@ -71,17 +78,22 @@ def _fallback(repo_path):
             if commit:
                 return {"source": "commit_file", "commit": commit,
                         "branch": "", "dirty": False}
-        except OSError:
-            pass
+            logger.debug("git_commit_hash.txt in %s is empty", repo_path)
+        except OSError as e:
+            logger.debug("Could not read %s: %s", hash_file, e)
+    else:
+        logger.debug("No git_commit_hash.txt in %s", repo_path)
     try:
         from importlib.metadata import version, PackageNotFoundError
         try:
             return {"source": "package", "commit": "", "branch": "",
                     "dirty": False, "version": version("mlc-scripts")}
         except PackageNotFoundError:
-            pass
-    except Exception:
-        pass
+            logger.debug("mlc-scripts package metadata not found")
+    except Exception as e:
+        logger.debug("mlc-scripts version lookup failed: %s", e)
+    logger.debug(
+        "Could not resolve a version for %s (source=unknown)", repo_path)
     return {"source": "unknown", "commit": "", "branch": "", "dirty": False}
 
 
@@ -131,7 +143,7 @@ def get_repo_version(repo_path, repos_path):
 
     lock = filelock.FileLock(sidecar + ".lock")
     try:
-        with lock.acquire(timeout=10):
+        with lock.acquire(timeout=_LOCK_TIMEOUT):
             cache = {}
             if os.path.isfile(sidecar):
                 try:
@@ -139,7 +151,9 @@ def get_repo_version(repo_path, repos_path):
                         cache = json.load(f)
                     if not isinstance(cache, dict):
                         cache = {}
-                except (json.JSONDecodeError, OSError):
+                except (json.JSONDecodeError, OSError) as e:
+                    logger.debug(
+                        "Ignoring unreadable %s (%s); rebuilding", sidecar, e)
                     cache = {}
 
             entry = cache.get(repo_path)
@@ -158,6 +172,8 @@ def get_repo_version(repo_path, repos_path):
             except OSError:
                 pass
             return info
-    except Exception:
+    except Exception as e:
         # Lock timeout or any I/O problem: compute without caching.
+        logger.debug(
+            "repos_version cache unavailable (%s); computing uncached", e)
         return _resolve()
