@@ -20,7 +20,8 @@ def get_repo_version(repo_path):
 
     Returns ``{source, commit, branch, dirty}`` (``source='git'``), or a
     ``git_commit_hash.txt`` fallback for pip installs (``source='commit_file'``),
-    or ``{}`` if nothing can be resolved. Computed fresh (no caching).
+    or an empty dict ``{}`` when neither is available (callers should treat an
+    empty result as "version unknown"). Computed fresh (no caching).
 
     Used by ``main._get_repo_hashes`` (the on-error hash display) and by scripts
     that stamp their output with the producing repo's version.
@@ -48,6 +49,9 @@ def get_repo_version(repo_path):
             with open(hash_file) as f:
                 commit = f.read().strip()
             if commit:
+                logger.debug(
+                    "get_repo_version: using git_commit_hash.txt for %s (no git)",
+                    repo_path)
                 return {"source": "commit_file", "commit": commit,
                         "branch": "", "dirty": False}
         except OSError:
