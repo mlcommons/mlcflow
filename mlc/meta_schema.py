@@ -101,7 +101,7 @@ TOP_LEVEL_SCHEMA = {
     # Tests
     "tests": DICT,        # dict - see TESTS_SCHEMA
 
-    # Version compatibility requirements (see mlc/compat.py)
+    # Version compatibility requirements (see automation/script/compat.py in mlperf-automations)
     "mlc_compat": LIST,   # list[mlc_compat_entry]
 }
 
