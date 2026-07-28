@@ -101,7 +101,8 @@ TOP_LEVEL_SCHEMA = {
     # Tests
     "tests": DICT,        # dict - see TESTS_SCHEMA
 
-    # Version compatibility requirements (see automation/script/compat.py in mlperf-automations)
+    # Version compatibility requirements (see automation/script/compat.py in
+    # mlperf-automations)
     "mlc_compat": LIST,   # list[mlc_compat_entry]
 }
 
@@ -466,12 +467,15 @@ def validate_meta(data, file_path=""):
                 errors.append(f"{prefix}mlc_compat[{i}] is not a dict")
                 continue
             if "min_version" not in entry:
-                errors.append(f"{prefix}mlc_compat[{i}]: missing required key 'min_version'")
+                errors.append(
+                    f"{prefix}mlc_compat[{i}]: missing required key 'min_version'")
             if "message" not in entry:
-                errors.append(f"{prefix}mlc_compat[{i}]: missing required key 'message'")
+                errors.append(
+                    f"{prefix}mlc_compat[{i}]: missing required key 'message'")
             for ck, cv in entry.items():
                 if ck not in MLC_COMPAT_ENTRY_SCHEMA:
-                    warnings.append(f"{prefix}mlc_compat[{i}]: unknown key '{ck}'")
+                    warnings.append(
+                        f"{prefix}mlc_compat[{i}]: unknown key '{ck}'")
                     continue
                 actual = type(cv).__name__
                 allowed = MLC_COMPAT_ENTRY_SCHEMA[ck]
