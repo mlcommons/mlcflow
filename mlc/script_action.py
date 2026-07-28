@@ -9,6 +9,11 @@ from .index import Index
 from . import utils
 from .error_codes import get_error_guidance
 from .logger import logger
+from .compat import (
+    get_installed_version,
+    check_mlc_compat,
+    format_compat_notice,
+)
 
 
 class ScriptAction(Action):
@@ -228,9 +233,60 @@ Main Script Meta:""")
 
         return module
 
+    def _check_mlc_compat_for_script(self, run_args):
+        """
+        Pre-flight mlc_compat check: search for the script by run_args, read
+        its mlc_compat field, and either warn or block execution.
+
+        Returns {'return': 1, 'error': ...} to block, {'return': 0} otherwise.
+        """
+        try:
+            search_i = dict(run_args)
+            search_i['target_name'] = 'script'
+            res = self.parent.search(search_i)
+        except Exception:
+            return {'return': 0}
+
+        if res.get('return', 1) != 0 or not res.get('list'):
+            return {'return': 0}
+
+        script_item = res['list'][0]
+        compat_entries = script_item.meta.get('mlc_compat')
+        if not compat_entries:
+            return {'return': 0}
+
+        script_name = script_item.meta.get('alias', run_args.get('tags', ''))
+        installed_version = get_installed_version()
+        unmet_warnings, unmet_blockers = check_mlc_compat(compat_entries, installed_version)
+
+        notice, is_blocking = format_compat_notice(
+            script_name, unmet_warnings, unmet_blockers, installed_version)
+
+        if not notice:
+            return {'return': 0}
+
+        if is_blocking:
+            logger.error(notice)
+            return {
+                'return': 1,
+                'error': (
+                    f"Script '{script_name}' requires a newer mlcflow version. "
+                    f"Run `pip install --upgrade mlcflow` and retry."
+                ),
+            }
+        else:
+            logger.warning(notice)
+            return {'return': 0}
+
     def call_script_module_function(self, function_name, run_args):
         self.action_type = "script"
         repos_folder = self.repos_path
+
+        # mlc_compat pre-flight: check script version requirements before loading
+        if run_args.get('tags') or run_args.get('details'):
+            compat_result = self._check_mlc_compat_for_script(run_args)
+            if compat_result and compat_result['return'] > 0:
+                return compat_result
 
         # Import script submodule
         script_path = self.find_target_folder("script")

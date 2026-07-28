@@ -25,7 +25,8 @@ dependencies = [
     "pyyaml",
     "giturlparse",
     "colorama",
-    "filelock"
+    "filelock",
+    "packaging"
 ]
 
 [project.urls]

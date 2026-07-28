@@ -10,6 +10,7 @@ from .logger import logger
 from urllib.parse import urlparse
 from .repo import Repo
 from .index import Index
+from .compat import get_installed_version, print_repo_compat_summary
 
 
 class RepoAction(Action):
@@ -374,6 +375,7 @@ class RepoAction(Action):
                         repo_path]
 
                 subprocess.run(clone_command, check=True)
+                print_repo_compat_summary(repo_path, get_installed_version())
 
             else:
                 logger.info(
@@ -495,6 +497,7 @@ class RepoAction(Action):
                     subprocess.run(
                         ['git', '-C', repo_path, 'pull'], check=True)
                     logger.info("Repository successfully pulled.")
+                    print_repo_compat_summary(repo_path, get_installed_version())
 
             if tag:
                 checkout = "tags/" + tag
