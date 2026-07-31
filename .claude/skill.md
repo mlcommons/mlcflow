@@ -10,8 +10,8 @@ Compact task playbooks. Read AGENTS.md for full technical detail.
 mlcr <tags>  →  mlc_expand_short("run")  →  main()
   →  get_action("script", parent)  →  ScriptAction.run(run_args)
     →  call_script_module_function("run", run_args)
-      →  find_target_folder("script")        # bundled automation/script/ first,
-                                              # falls back to scanning registered repos
+      →  find_target_folder("script")        # bundled automation/script/ always preferred first,
+                                              # falls back to scanning registered repos only if absent
       →  dynamic_import_module(module.py)    # loads ScriptAutomation
       →  ScriptAutomation(self, path).run(run_args)   # engine bundled in this repo
 ```

@@ -68,18 +68,37 @@ class Action:
         return {'return': 0}
 
     def bundled_automation_path(self, target):
-        # automation/ ships as a top-level package alongside mlc/, both in the
-        # editable checkout (mlcflow/automation) and in site-packages once
-        # installed, since mlc/action.py always lives one level under the
-        # package root that automation/ is a sibling of.
+        """
+        Resolve <target> (e.g. "script") relative to the automation/ engine
+        bundled with this mlcflow install.
+
+        automation/ ships as a top-level package alongside mlc/, both in the
+        editable checkout (mlcflow/automation) and in site-packages once
+        installed, since mlc/action.py always lives one level under the
+        package root that automation/ is a sibling of.
+
+        Returns the absolute path if it exists, else None.
+        """
         pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         target_folder = os.path.join(pkg_root, 'automation', target)
         return target_folder if os.path.isdir(target_folder) else None
 
     def find_target_folder(self, target):
-        # Prefer the automation engine bundled with mlcflow itself; fall back
-        # to scanning registered repos for a custom/external 'automation'
-        # folder (e.g. a dev override) if the bundled one isn't present.
+        """
+        Resolve the automation/<target> folder to load the engine from, in
+        order:
+
+        1. The engine bundled with mlcflow itself (bundled_automation_path())
+           - this is always preferred and covers the normal case, since
+           automation/ ships inside every mlcflow install.
+        2. A fallback scan of registered repos for a custom/external
+           'automation' folder (a dev-override escape hatch), used only if
+           step 1 finds nothing - e.g. a bundled install is missing/corrupted.
+
+        Returns the absolute path to automation/<target>, or None if neither
+        source has it (the caller then auto-pulls mlperf-automations as a
+        last resort - see call_script_module_function()).
+        """
         bundled = self.bundled_automation_path(target)
         if bundled:
             return bundled
