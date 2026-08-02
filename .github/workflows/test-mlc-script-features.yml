@@ -1,0 +1,328 @@
+name: MLC script automation features test
+
+# Ported from mlperf-automations/.github/workflows/test-mlc-script-features.yml
+# as part of the automation engine migration. These jobs exercise the *engine*
+# (automation/), which now lives here, so they must run here. mlperf-automations
+# keeps only the jobs that exercise script *content*.
+
+on:
+  pull_request:
+    branches: [ "main", "dev" ]
+    paths:
+      - '.github/workflows/test-mlc-script-features.yml'
+      - 'automation/**'
+      - 'mlc/**'
+      - '!**.md'
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test_mlc_script_features:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Configure git longpaths (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        git config --system core.longpaths true
+
+    # Install the engine under test from this checkout, not from PyPI - the
+    # bundled automation/ is not released yet.
+    - name: Install mlcflow from this checkout
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install .
+
+    - name: Pull script content repo
+      run: |
+        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+
+    - name: Test Python venv
+      run: |
+        mlcr install,python-venv --name=test --quiet
+        mlc search cache --tags=get,python,virtual,name-test --quiet
+
+    - name: Test variations
+      run: |
+        mlcr get,dataset,preprocessed,imagenet,_NHWC --quiet
+        mlc search cache --tags=get,dataset,preprocessed,imagenet,-_NCHW
+        mlc search cache --tags=get,dataset,preprocessed,imagenet,-_NHWC
+
+    - name: Test native script name variants
+      run: |
+        mlcr get,wkhtmltopdf --quiet
+
+    - name: Test versions
+      if: runner.os == 'Linux'
+      run: |
+        mlcr get,generic-python-lib,_package.scipy --version=1.11.4 --quiet
+        test $? -eq 0 || exit $?
+        mlcr get,generic-python-lib,_package.scipy --version=1.11.3 --quiet
+        test $? -eq 0 || exit $?
+        mlc find cache --tags=get,generic-python-lib,_package.scipy,version-1.11.3
+        test $? -eq 0 || exit $?
+
+    - name: Test python install from src
+      run: |
+        mlcr python,src,install,_shared --version=3.9.10 --quiet
+        mlc search cache --tags=python,src,install,_shared,version-3.9.10
+
+    # Guards the contract that ~188 content customize.py files depend on:
+    # `from utils import ...` must resolve against the *bundled* automation/
+    # once mlperf-automations no longer ships its own copy. See test plan T-1.4.
+    - name: Test bare 'utils' import resolves against the bundled engine
+      run: |
+        mlcr get,generic-python-lib,_package.wheel --quiet
+
+  test_docker:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install mlcflow from this checkout
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install .
+
+    - name: Pull script content repo
+      run: |
+        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+
+    - name: Run docker container from dockerhub on linux
+      run: |
+        mlcr run,docker,container --adr.compiler.tags=gcc --docker_mlc_repo=mlcommons@mlperf-automations --docker_mlc_repo_branch=dev --image_name=cm-script-app-image-classification-onnx-py --env.MLC_DOCKER_RUN_SCRIPT_TAGS=app,image-classification,onnx,python --env.MLC_DOCKER_IMAGE_BASE=ubuntu:22.04 --env.MLC_DOCKER_IMAGE_REPO=cknowledge --quiet
+
+    - name: Run docker container locally on linux
+      run: |
+        mlcr run,docker,container --adr.compiler.tags=gcc --docker_mlc_repo=mlcommons@mlperf-automations --docker_mlc_repo_branch=dev --image_name=mlc-script-app-image-classification-onnx-py --env.MLC_DOCKER_RUN_SCRIPT_TAGS=app,image-classification,onnx,python --env.MLC_DOCKER_IMAGE_BASE=ubuntu:22.04 --env.MLC_DOCKER_IMAGE_REPO=local --quiet
+
+    - name: Test docker process_mounts input_mapping fallback (src_path fix)
+      shell: bash
+      run: |
+        python3 << 'PYTEST'
+        import os
+        import sys
+
+        # Resolve the engine through the same code path mlcflow itself uses,
+        # so this also asserts bundled_automation_path() works (test plan T-1.1).
+        from mlc.action import Action
+
+        script_dir = Action().bundled_automation_path('script')
+        assert script_dir, "bundled automation/script not found"
+        sys.path.insert(0, os.path.dirname(script_dir))
+
+        from script.docker_utils import process_mounts
+
+        # Test 1: input_mapping in run_state is used as fallback for docker path remapping
+        docker_settings = {'user': 'mlcuser'}
+        _expr = '$' + '{{ MLC_SRC_REPO_PATH }}'
+        mounts = [_expr + ':' + _expr]
+        env = {'MLC_SRC_REPO_PATH': '/home/user/repos/my-project'}
+        run_state = {
+            'input_mapping': {'src_path': 'MLC_SRC_REPO_PATH'},
+            'file_path_env_keys': [],
+            'folder_path_env_keys': []
+        }
+        f_run_cmd = {'src_path': '/home/user/repos/my-project'}
+
+        result = process_mounts(mounts, env, docker_settings, f_run_cmd, run_state)
+        assert result['return'] == 0, f"process_mounts failed: {result}"
+        assert f_run_cmd['src_path'] != '/home/user/repos/my-project', \
+            f"FAIL: src_path was not remapped to container path! Got: {f_run_cmd['src_path']}"
+        assert '/mlc-mount/' in f_run_cmd['src_path'], \
+            f"FAIL: Expected /mlc-mount/ in remapped path, got: {f_run_cmd['src_path']}"
+        print(f"PASS: src_path correctly remapped to {f_run_cmd['src_path']}")
+
+        # Test 2: without input_mapping, f_run_cmd should not be modified
+        f_run_cmd2 = {'src_path': '/home/user/repos/my-project'}
+        run_state2 = {
+            'input_mapping': {},
+            'file_path_env_keys': [],
+            'folder_path_env_keys': []
+        }
+        _expr2 = '$' + '{{ MLC_SRC_REPO_PATH }}'
+        mounts2 = [_expr2 + ':' + _expr2]
+        result2 = process_mounts(mounts2, env, docker_settings, f_run_cmd2, run_state2)
+        assert result2['return'] == 0
+        assert f_run_cmd2['src_path'] == '/home/user/repos/my-project', \
+            f"FAIL: Without input_mapping, src_path should be unchanged, got: {f_run_cmd2['src_path']}"
+        print("PASS: Without input_mapping, src_path stays as host path")
+
+        print("\nAll process_mounts tests passed!")
+        PYTEST
+
+  test_experiment:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Configure git longpaths (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        git config --system core.longpaths true
+
+    - name: Install mlcflow from this checkout
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install .
+
+    - name: Pull script content repo
+      run: |
+        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+
+    - name: Test mlc experiment script
+      run: |
+        mlc experiment script --tags=detect,os --quiet --exp.repeat,=1,2,3
+        mlc experiment script --tags=detect,cpu --quiet --exp.explore=2:10:2
+
+  test_error_handling:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Configure git longpaths (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        git config --system core.longpaths true
+
+    - name: Install mlcflow from this checkout
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install .
+
+    - name: Pull script content repo
+      run: |
+        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+
+    - name: Test script search failure for non-existent tags
+      shell: bash
+      run: |
+        if mlcr nonexistent,script,tags,xxxyyyzzz --quiet 2>&1; then
+          echo "ERROR: Expected script search to fail but it succeeded"
+          exit 1
+        else
+          echo "PASS: Script search correctly returned an error for non-existent tags"
+        fi
+
+    - name: Test script search failure error message
+      shell: bash
+      run: |
+        OUTPUT=$(mlcr nonexistent,script,tags,xxxyyyzzz --quiet 2>&1 || true)
+        if echo "$OUTPUT" | grep -qi "no scripts were found"; then
+          echo "PASS: Error message correctly reports no scripts found"
+        else
+          echo "ERROR: Unexpected error message: $OUTPUT"
+          exit 1
+        fi
+
+    - name: Create test scripts for dependency failure tests
+      shell: bash
+      run: |
+        REPO_SCRIPT_DIR=$(python3 -c "import subprocess, re, os; out = subprocess.run(['mlc', 'find', 'script', '--tags=detect,os', '--quiet'], capture_output=True, text=True); combined = out.stdout + out.stderr; match = re.search(r'Item path:\s*(.+)', combined); print(os.path.dirname(match.group(1).strip())) if match else exit(1)")
+        echo "MLC repo script dir: $REPO_SCRIPT_DIR"
+
+        mkdir -p "$REPO_SCRIPT_DIR/test-dep-failure"
+        printf 'alias: test-dep-failure\nautomation_alias: script\nautomation_uid: 5b4e0237da074764\ndeps:\n- tags: nonexistent,dep,script,xxxyyyzzz\ntags:\n- test\n- dep-failure\nuid: aaaa1111bbbb2222\n' > "$REPO_SCRIPT_DIR/test-dep-failure/meta.yaml"
+        printf '#!/bin/bash\necho "This should not run"\n' > "$REPO_SCRIPT_DIR/test-dep-failure/run.sh"
+        chmod +x "$REPO_SCRIPT_DIR/test-dep-failure/run.sh"
+        printf '@echo off\necho This should not run\n' > "$REPO_SCRIPT_DIR/test-dep-failure/run.bat"
+
+        mkdir -p "$REPO_SCRIPT_DIR/test-postdep-failure"
+        printf 'alias: test-postdep-failure\nautomation_alias: script\nautomation_uid: 5b4e0237da074764\npost_deps:\n- tags: nonexistent,postdep,script,xxxyyyzzz\ntags:\n- test\n- postdep-failure\nuid: aaaa2222bbbb3333\n' > "$REPO_SCRIPT_DIR/test-postdep-failure/meta.yaml"
+        printf '#!/bin/bash\necho "Main script runs"\n' > "$REPO_SCRIPT_DIR/test-postdep-failure/run.sh"
+        chmod +x "$REPO_SCRIPT_DIR/test-postdep-failure/run.sh"
+        printf '@echo off\necho Main script runs\n' > "$REPO_SCRIPT_DIR/test-postdep-failure/run.bat"
+
+        mkdir -p "$REPO_SCRIPT_DIR/test-prehookdep-failure"
+        printf 'alias: test-prehookdep-failure\nautomation_alias: script\nautomation_uid: 5b4e0237da074764\nprehook_deps:\n- tags: nonexistent,prehookdep,script,xxxyyyzzz\ntags:\n- test\n- prehookdep-failure\nuid: aaaa3333bbbb4444\n' > "$REPO_SCRIPT_DIR/test-prehookdep-failure/meta.yaml"
+        printf '#!/bin/bash\necho "Main script runs"\n' > "$REPO_SCRIPT_DIR/test-prehookdep-failure/run.sh"
+        chmod +x "$REPO_SCRIPT_DIR/test-prehookdep-failure/run.sh"
+        printf '@echo off\necho Main script runs\n' > "$REPO_SCRIPT_DIR/test-prehookdep-failure/run.bat"
+
+        mkdir -p "$REPO_SCRIPT_DIR/test-posthookdep-failure"
+        printf 'alias: test-posthookdep-failure\nautomation_alias: script\nautomation_uid: 5b4e0237da074764\nposthook_deps:\n- tags: nonexistent,posthookdep,script,xxxyyyzzz\ntags:\n- test\n- posthookdep-failure\nuid: aaaa4444bbbb5555\n' > "$REPO_SCRIPT_DIR/test-posthookdep-failure/meta.yaml"
+        printf '#!/bin/bash\necho "Main script runs"\n' > "$REPO_SCRIPT_DIR/test-posthookdep-failure/run.sh"
+        chmod +x "$REPO_SCRIPT_DIR/test-posthookdep-failure/run.sh"
+        printf '@echo off\necho Main script runs\n' > "$REPO_SCRIPT_DIR/test-posthookdep-failure/run.bat"
+
+    - name: Test dep script search failure
+      shell: bash
+      run: |
+        if mlcr test,dep-failure --quiet 2>&1; then
+          echo "ERROR: Expected dep failure but script succeeded"
+          exit 1
+        else
+          echo "PASS: Dependency search failure correctly caused an error"
+        fi
+
+    - name: Test post_dep script search failure
+      shell: bash
+      run: |
+        if mlcr test,postdep-failure --quiet 2>&1; then
+          echo "ERROR: Expected post_dep failure but script succeeded"
+          exit 1
+        else
+          echo "PASS: post_dep search failure correctly caused an error"
+        fi
+
+    - name: Test prehook_dep script search failure
+      shell: bash
+      run: |
+        if mlcr test,prehookdep-failure --quiet 2>&1; then
+          echo "ERROR: Expected prehook_dep failure but script succeeded"
+          exit 1
+        else
+          echo "PASS: prehook_dep search failure correctly caused an error"
+        fi
+
+    - name: Test posthook_dep script search failure
+      shell: bash
+      run: |
+        if mlcr test,posthookdep-failure --quiet 2>&1; then
+          echo "ERROR: Expected posthook_dep failure but script succeeded"
+          exit 1
+        else
+          echo "PASS: posthook_dep search failure correctly caused an error"
+        fi

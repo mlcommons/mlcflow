@@ -17,22 +17,24 @@ mlcr <tags>  →  mlc_expand_short("run")  →  main()
 ```
 
 **This repo = CLI driver + script execution engine.** Engine logic lives in
-`automation/script/module.py` in this repo (originally developed in
-`mlperf-automations`, and now bundled here as the primary copy mlcflow
-actually loads). `mlperf-automations` still has its own `automation/` folder
-too — it was **not** removed there, kept for backward compatibility — but
-`find_target_folder()` prefers the bundled copy in this repo, so that copy is
-no longer what runs. Script *content* (the 377+ `script/<alias>/` directories
-with `meta.yaml`, `customize.py`, `run.sh`) still lives in `mlperf-automations`
-and is pulled into `~/MLC/repos/` as before.
+`automation/script/module.py` here (originally developed in
+`mlperf-automations`, now bundled here as the copy mlcflow actually loads).
+A companion PR removes `automation/` from `mlperf-automations`, leaving only
+a signpost README. Script *content* (the 350+ `script/<alias>/` directories
+with `meta.yaml`, `customize.py`, `run.sh`) still lives there and is pulled
+into `~/MLC/repos/` as before.
 
-**Version drift risk:** because `mlperf-automations`' copy of `automation/`
-is dead code (never executed, per the above), it's easy to patch a bug in
-*this* repo's `automation/script/module.py` and forget the old copy still
-exists there, unchanged and diverging. That copy has no functional effect,
-but a contributor could mistakenly edit it expecting it to do something.
-Treat any edit to `mlperf-automations/automation/` as a no-op until/unless
-that repo formally removes it.
+**Release ordering:** mlcflow must reach PyPI *before* the `mlperf-automations`
+removal merges — otherwise an older mlcflow plus a de-engined content repo
+leaves no engine anywhere and every run fails. Until then, CI on both sides
+installs mlcflow from the migration branch, not PyPI. Remote runs are the
+exception - `remote_run.py` still installs from `dev` + PyPI on the remote
+host, so remote testing waits for the release.
+
+**Don't break `from utils import …`:** `dynamic_import_module()` puts the
+bundled `automation/` dir on `sys.path`, and ~188 `customize.py` files in
+`mlperf-automations` rely on that to resolve a bare `from utils import ...`.
+Touching that insertion breaks all of them at once.
 
 **Result dict contract** — every action method must return:
 - `{'return': 0}` on success

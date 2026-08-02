@@ -28,13 +28,19 @@ Once your contribution exceeds 50 lines of code (in total), we will:
 
 ## Current Contributors
 
-- **[Arjun Suresh](https://github.com/arjunsuresh)** - *Initial Development Discussions, {Script,Cache} Action implementations*  
-- **[Anandhu Sooraj](https://github.com/anandhu-eng)** - *Initial Development Discussions, RepoAction implementation, Github Tests*
+- **[Grigori Fursin](https://github.com/gfursin)** - *Initial development of the CM Script automations that became the `automation/` engine bundled here, CMind development to drive the automations, core automation features*
+- **[Arjun Suresh](https://github.com/arjunsuresh)** - *Initial Development Discussions, {Script,Cache} Action implementations, core automation features in the `automation/` engine*  
+- **[Anandhu Sooraj](https://github.com/anandhu-eng)** - *Initial Development Discussions, RepoAction implementation, Github Tests, `automation/` engine features*
 - **[Sujith Kanakkassery](https://github.com/sujik18)** - *Initial Development Discussions, Persistent index implementation*
 - **[Shaik Masthan](https://github.com/csemasthan)** - *Initial Development Discussions*  
 - **[Sahil Avaran](https://github.com/sahilavaran)** - *Initial Development Discussions*, added logging
 - **[R.A Sidharth](https://github.com/Sid9993)** - *Find repo implementation*
 - **[Your Name Here]** - This could be you! 🎉  
+
+The `automation/` engine was moved into this repository from
+[mlperf-automations](https://github.com/mlcommons/mlperf-automations); see
+`COPYRIGHT.txt` for its provenance. Contributors recognised there for engine
+work are recognised here too.
 
 ---
 

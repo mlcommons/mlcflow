@@ -41,25 +41,34 @@ mlc/main.py:mlcr()
   arg parsing, repo/index management, dynamic dispatch, error reporting, and
   `automation/` (the `ScriptAutomation` engine, originally developed in
   `mlperf-automations`). This is now the *primary/authoritative* copy.
-- `mlperf-automations` — the content (377+ script directories:
-  `meta.yaml`/`customize.py`/`run.sh` per script), plus a copy of its own
-  `automation/` folder kept for backward compatibility. It has **not** been
-  removed there — see the "Bundled-first, external fallback" note below for
-  why that copy is no longer the one mlcflow actually loads.
+- `mlperf-automations` — the content only (350+ script directories:
+  `meta.yaml`/`customize.py`/`run.sh` per script). Its `automation/` folder is
+  being removed in a companion PR; only a `automation/README.md` signpost
+  remains there.
 
 mlcflow finds the bundled engine first and loads that, and hands off
 `run_args`. It still does not contain benchmark *content* (individual script
 directories) — those are pulled from `mlperf-automations` into `~/MLC/repos/`
 like before.
 
-**Version drift risk:** `mlperf-automations`' copy of `automation/` is dead
-code — never executed, since the bundled copy here always wins. It's easy to
-fix a bug in this repo's `automation/script/module.py` and forget the old
-copy still exists there, unchanged and diverging further over time. That's
-harmless functionally, but a contributor could waste time editing the wrong
-copy expecting it to have an effect. Treat edits to
-`mlperf-automations/automation/` as inert until/unless that repo formally
-removes it.
+**Release ordering — read before merging anything here.** The engine removal
+in `mlperf-automations` and this bundling change are coupled. An mlcflow
+release that predates bundling cannot run a `mlperf-automations` checkout
+that has already dropped `automation/` — neither side ships an engine and
+every run fails. So: merge and **release mlcflow to PyPI first**, then merge
+the `mlperf-automations` removal. Until that release lands, both repos' CI
+installs mlcflow from the migration branch rather than PyPI (in
+`mlperf-automations` this is the `MLCFLOW_PIP_SPEC` repo variable; here it is
+`pip install .` from the checkout). Remote runs are the exception:
+`remote_run.py` still provisions remote hosts from `dev` + PyPI, so remote
+testing of the bundled engine has to wait for the release.
+
+**The `from utils import …` contract.** `dynamic_import_module()` puts the
+bundled `automation/` directory itself on `sys.path`. Roughly 188 of the
+`customize.py` files in `mlperf-automations` depend on that: they do a bare
+`from utils import is_true`, which resolves to `automation/utils.py` here.
+Changing that sys.path insertion breaks 188 scripts at once, and it is the
+single most load-bearing line in the migration.
 
 ---
 

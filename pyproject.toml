@@ -41,6 +41,7 @@ py-modules = []
 include-package-data = true
 
 [tool.setuptools.package-data]
+"automation" = ["COPYRIGHT.txt"]
 "automation.script" = ["meta.json", "README.md"]
 
 [project.scripts]
