@@ -55,6 +55,7 @@ jobs:
           OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
           MAX_DIFF_CHARS = 15000
           MAX_ATTEMPTS = 3
+          BACKOFF_BASE_SECONDS = 5
 
           FULL_DIFF = open("pr.diff").read()
           DIFF = FULL_DIFF[:MAX_DIFF_CHARS]
@@ -176,6 +177,11 @@ jobs:
               raise json.JSONDecodeError("no JSON object found", candidate, 0)
 
 
+          def backoff_seconds(attempt):
+              """Exponential backoff: 5s, 10s, 20s, ... between retries."""
+              return BACKOFF_BASE_SECONDS * 2 ** (attempt - 1)
+
+
           parsed = None
           for attempt in range(1, MAX_ATTEMPTS + 1):
               try:
@@ -199,7 +205,7 @@ jobs:
                   if attempt == MAX_ATTEMPTS:
                       print("::error::OpenAI API request failed after retries")
                       raise SystemExit(1)
-                  time.sleep(5 * attempt)
+                  time.sleep(backoff_seconds(attempt))
                   continue
 
               if response.status_code == 429 or response.status_code >= 500:
@@ -210,7 +216,7 @@ jobs:
                   if attempt == MAX_ATTEMPTS:
                       print(f"::error::OpenAI API request failed with HTTP {response.status_code}")
                       raise SystemExit(1)
-                  time.sleep(5 * attempt)
+                  time.sleep(backoff_seconds(attempt))
                   continue
 
               if not response.ok:
@@ -242,7 +248,7 @@ jobs:
                   if attempt == MAX_ATTEMPTS:
                       print(f"::error::Failed to parse JSON from OpenAI response: {e}\nRaw text: {text[:2000]}")
                       raise SystemExit(1)
-                  time.sleep(5 * attempt)
+                  time.sleep(backoff_seconds(attempt))
 
           commentable = diff_commentable_lines(FULL_DIFF)
           kept = []
