@@ -28,18 +28,29 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      # Step 1: Checkout the tagged commit
+      # Step 1: Only ever publish from a tag. A manual workflow_dispatch exists
+      # so a failed release can be re-run without re-tagging, but it must be
+      # dispatched against the tag ref — publishing off a branch would put a
+      # wheel on PyPI with no tag and no GitHub Release behind it.
+      - name: Require a tag ref
+        run: |
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "::error::This workflow must run against a tag (got ${GITHUB_REF})."
+            echo "Re-run it from the Actions UI with a tag such as v1.2.5 selected as the ref."
+            exit 1
+          fi
+
+      # Step 2: Checkout the tagged commit
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.ref_name }}
 
-      # Step 2: Set up Python
+      # Step 3: Set up Python
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
 
-      # Step 3: The tag and the VERSION file must agree, otherwise we would
+      # Step 4: The tag and the VERSION file must agree, otherwise we would
       # publish a wheel whose version does not match the ref it came from.
       - name: Verify tag matches VERSION
-        if: startsWith(github.ref, 'refs/tags/')
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
           file_version="$(cat VERSION)"
@@ -50,16 +61,16 @@ jobs:
           fi
           echo "Releasing version $file_version"
 
-      # Step 4: Install required dependencies
+      # Step 5: Install required dependencies
       - name: Install requirements
         run: python3 -m pip install setuptools wheel build
 
-      # Step 5: Build the Python wheel and sdist
+      # Step 6: Build the Python wheel and sdist
       - name: Build wheels
         working-directory: ./
         run: python3 -m build
 
-      # Step 6: Publish to PyPI
+      # Step 7: Publish to PyPI
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
@@ -68,9 +79,8 @@ jobs:
           repository-url: https://upload.pypi.org/legacy/
           verbose: true
 
-      # Step 7: Create the GitHub Release with auto-generated notes
+      # Step 8: Create the GitHub Release with auto-generated notes
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
