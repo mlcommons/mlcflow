@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mlcflow"
-version = "1.2.4"
+dynamic = ["version"]
 
 description = "An automation interface tailored for CPU/GPU benchmarking"
 authors = [
@@ -34,6 +34,9 @@ Homepage = "https://github.com/mlcommons/mlcflow"
 Documentation = "https://docs.mlcommons.org/mlcflow"
 Repository = "https://github.com/mlcommons/mlcflow"
 Issues = "https://github.com/mlcommons/mlcflow/issues"
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
 
 [tool.setuptools]
 packages = ["mlc", "automation", "automation.script"]
