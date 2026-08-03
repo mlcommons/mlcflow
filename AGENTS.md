@@ -41,27 +41,57 @@ mlc/main.py:mlcr()
   arg parsing, repo/index management, dynamic dispatch, error reporting, and
   `automation/` (the `ScriptAutomation` engine, originally developed in
   `mlperf-automations`). This is now the *primary/authoritative* copy.
-- `mlperf-automations` — the content only (350+ script directories:
-  `meta.yaml`/`customize.py`/`run.sh` per script). Its `automation/` folder is
-  being removed in a companion PR; only a `automation/README.md` signpost
-  remains there.
+- `mlperf-automations` — the content (350+ script directories:
+  `meta.yaml`/`customize.py`/`run.sh` per script), **and it keeps its own
+  `automation/` copy**. That copy is not being removed. It stays so that
+  mlcflow releases predating the bundling can still run: they have no bundled
+  engine and fall back to scanning registered repos for one.
 
 mlcflow finds the bundled engine first and loads that, and hands off
 `run_args`. It still does not contain benchmark *content* (individual script
 directories) — those are pulled from `mlperf-automations` into `~/MLC/repos/`
 like before.
 
-**Release ordering — read before merging anything here.** The engine removal
-in `mlperf-automations` and this bundling change are coupled. An mlcflow
-release that predates bundling cannot run a `mlperf-automations` checkout
-that has already dropped `automation/` — neither side ships an engine and
-every run fails. So: merge and **release mlcflow to PyPI first**, then merge
-the `mlperf-automations` removal. Until that release lands, both repos' CI
-installs mlcflow from the migration branch rather than PyPI (in
-`mlperf-automations` this is the `MLCFLOW_PIP_SPEC` repo variable; here it is
-`pip install .` from the checkout). Remote runs are the exception:
-`remote_run.py` still provisions remote hosts from `dev` + PyPI, so remote
-testing of the bundled engine has to wait for the release.
+**Both copies coexisting is safe.** Verified on real installs:
+
+| Setup | Engine that loads |
+|---|---|
+| this mlcflow (bundled) + `mlperf-automations` with `automation/` | the **bundled** copy |
+| pre-bundling mlcflow + `mlperf-automations` with `automation/` | the **repo** copy |
+
+In both cases `module.py` and `utils.py` resolve from the *same* copy —
+`dynamic_import_module()` derives the `sys.path` entry from the resolved
+`module.py`, so there is never a hybrid load, and exactly one `automation`
+directory lands on `sys.path`.
+
+**Version drift is now a permanent condition, not a transitional one.**
+Because `mlperf-automations` keeps `automation/` and keeps maintaining it, and
+because the bundled copy here always wins, *any* edit to
+`mlperf-automations/automation/` is invisible to a bundled-engine mlcflow.
+Confirmed by patching that copy and watching a bundled install ignore it
+entirely while an older install picked it up.
+
+The dangerous case is not "someone edits the wrong file" — it is that engine
+and content changes usually arrive **coupled in one mlperf-automations PR**.
+Real example, mlperf-automations#1061:
+
+| Engine change there | Paired content change there |
+|---|---|
+| `MLC_TMP_SKIP_SUDO` → `MLC_SKIP_SUDO` | `script/detect-sudo/` |
+| `shell` → `remote_shell` input key | `script/remote-run-commands/` |
+| apptainer `network` / `security_opt` | `script/run-apptainer-container/` |
+
+An older mlcflow gets both halves from that repo and stays consistent. A
+bundled mlcflow gets the new *content* but the *engine* snapshot frozen here —
+so `--skip_sudo` and `--remote_shell` would silently stop working, with no
+error. Those four engine files were ported here in `de001c9` precisely to avoid
+that, and the same will be needed for every future PR touching both sides.
+
+**So: when an mlperf-automations PR touches `automation/`, it needs a companion
+PR here.** Nothing enforces that yet. `mlc_compat` in a script's `meta.yaml` is
+the available guard — it works in this arrangement because an engine is always
+loadable, so a content script can demand a minimum mlcflow version and have it
+honoured.
 
 **The `from utils import …` contract.** `dynamic_import_module()` puts the
 bundled `automation/` directory itself on `sys.path`. Roughly 188 of the
@@ -103,7 +133,6 @@ mlcflow/
   tests/
     test_action_invalid_meta_entries.py
     test_cache_mark_tmp.py
-    test_automation_bundled.py
   .github/
     workflows/         # CI: core actions test, script features, MLPerf inference runs
     scripts/
@@ -124,8 +153,10 @@ mlcflow/
   modified_times.json             # mtime map used for incremental index
   mlcommons@mlperf-automations/   # pulled repo
     script/<alias>/meta.yaml      # script content, not in this repo
-    automation/script/module.py   # still present there too (backward compat,
-                                   # kept for now) but NOT what mlcflow loads
+    automation/script/module.py   # kept there permanently, for pre-bundling
+                                   # mlcflow releases; NOT what a bundled
+                                   # mlcflow loads - edits here are invisible
+                                   # to it (see "Version drift" above)
 ```
 
 The engine itself (`automation/script/module.py`) is resolved from the
