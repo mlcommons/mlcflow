@@ -349,6 +349,16 @@ class RepoAction(Action):
             index.add_repo(repo_obj)
             logger.debug("Index file has been updated")
 
+            # search()/find()/rm() on any action dispatched through access()
+            # (RepoAction, ScriptAction, ...) delegate to self.parent, which
+            # is a different object than the one register_repo() just updated
+            # (get_action() constructs a fresh instance per dispatch). Without
+            # this, a search immediately after any pull in the same process
+            # would still see self.parent's pre-pull repos/index.
+            if self.parent is not None and self.parent is not self:
+                self.parent.repos = self.repos
+                self.parent._index = index
+
         return {'return': 0}
 
     def unregister_repo(self, repo_path):

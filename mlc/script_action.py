@@ -5,7 +5,6 @@ import sys
 import importlib
 import json
 import inspect
-from .index import Index
 from . import utils
 from .error_codes import get_error_guidance
 from .logger import logger
@@ -268,21 +267,11 @@ Main Script Meta:""")
             })
 
             if result['return'] == 0:
+                # Needed on self so the find_target_folder() retry just below
+                # sees the newly pulled repo. register_repo() (called via the
+                # access() pull above) already refreshes the index itself and
+                # propagates it to self.parent for search()/find()/rm().
                 self.repos = self.load_repos_and_meta()
-                # Must be self._index, not self.index: get_index() (used by
-                # search()/find()/rm()) reads self._index, lazily building it
-                # only if still None (see Action.get_index/__init__). Writing
-                # self.index here would leave self._index untouched, so the
-                # refresh would silently never be seen.
-                self._index = Index(self.repos_path, self.repos)
-
-                # search()/find()/rm() on this action delegate to self.parent
-                # (see ScriptAction.search), so the refreshed repos/index must
-                # also land there, or a search immediately after this auto-pull
-                # would still consult self.parent's stale, pre-pull state.
-                if self.parent is not None and self.parent is not self:
-                    self.parent.repos = self.repos
-                    self.parent._index = self._index
 
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
