@@ -40,7 +40,6 @@ TOP_LEVEL_SCHEMA = {
     "sort": INT,
     "category_sort": INT,
     "private": BOOL,
-    "min_mlc_version": STR,
 
     # Environment
     "env": DICT,        # dict[str, str]
