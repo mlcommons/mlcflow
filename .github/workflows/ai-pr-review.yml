@@ -179,8 +179,39 @@ jobs:
             array. An empty list is a good answer; padding is not.
           """ if existing_block else ""
 
+          def extract_response_text(data):
+              output_text = data.get("output_text")
+              if isinstance(output_text, str) and output_text.strip():
+                  return output_text.strip()
+
+              texts = []
+              for item in data.get("output", []):
+                  for content in item.get("content", []):
+                      text = content.get("text")
+                      if isinstance(text, str) and text.strip():
+                          texts.append(text.strip())
+                      elif isinstance(text, dict):
+                          value = text.get("value")
+                          if isinstance(value, str) and value.strip():
+                              texts.append(value.strip())
+
+              return "\n".join(texts).strip()
+
+          def strip_code_fences(text):
+              text = text.strip()
+              if not text.startswith("```"):
+                  return text
+
+              lines = text.splitlines()
+              if len(lines) < 2 or lines[-1].strip() != "```":
+                  return text
+
+              lines = lines[1:-1]
+
+              return "\n".join(lines).strip()
+
           prompt = f"""
-          Review this incremental pull request diff.
+          Review this incremental pull request diff for a public engineering repository.
 
           Tasks:
           1. Write a concise PR summary (overall risks, design issues).
@@ -393,7 +424,12 @@ jobs:
 
       - name: Post PR summary comment
         if: env.EMPTY_DIFF != 'true'
+        shell: bash
         run: |
+          if [ ! -f ai_output.json ] || ! jq -e . ai_output.json >/dev/null; then
+            echo "::warning::Skipping AI PR summary comment because ai_output.json is missing or invalid"
+            exit 0
+          fi
           {
             echo "## 🤖 AI PR Review Summary"
             echo
@@ -407,6 +443,7 @@ jobs:
       - name: Post inline review comments
         if: env.EMPTY_DIFF != 'true'
         continue-on-error: true
+        shell: bash
         run: |
           jq -c '.comments[]?' ai_output.json | while read -r c; do
             FILE=$(echo "$c" | jq -r '.file')
@@ -415,6 +452,10 @@ jobs:
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
+              continue
+            fi
+            if [ -z "$COMMENT" ] || [ "$COMMENT" = "null" ]; then
+              echo "::warning::Skipping AI review comment with empty body for $FILE:$LINE"
               continue
             fi
 

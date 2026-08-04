@@ -20,6 +20,7 @@ MIN_PYTHON_VERSION="3.7"
 DEFAULT_VENV_DIR="$HOME/mlcflow"
 DEFAULT_REPO="mlcommons@mlperf-automations"
 DEFAULT_BRANCH="dev"
+PYTHON_CMD="python3"
 
 # What to hand to `pip install` for mlcflow itself. Defaults to the PyPI
 # release; override to test an unreleased build, e.g.
@@ -60,7 +61,7 @@ else
 fi
 
 log_info() {
-    $QUIET && return
+    $QUIET && return 0
     echo -e "${COLOR_GREEN}[INFO]${COLOR_RESET} $1"
 }
 
@@ -73,7 +74,7 @@ log_error() {
 }
 
 log_debug() {
-    $VERBOSE || return
+    $VERBOSE || return 0
     echo -e "${COLOR_BLUE}[DEBUG]${COLOR_RESET} $1"
 }
 
@@ -210,11 +211,11 @@ require_root_if_needed() {
 }
 
 have_pip_module() {
-    python3 -m pip --version >/dev/null 2>&1
+    "$PYTHON_CMD" -m pip --version >/dev/null 2>&1
 }
 
 have_venv_module() {
-    python3 -c 'import venv' >/dev/null 2>&1
+    "$PYTHON_CMD" -c 'import venv' >/dev/null 2>&1
 }
 
 check_missing_dependencies() {
@@ -269,18 +270,22 @@ version_ge() {
 }
 
 ensure_python() {
-    if ! command -v python3 >/dev/null 2>&1; then
+    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
         log_warn "Python3 not found."
         handle_python_install
     fi
 
-    if ! command -v python3 >/dev/null 2>&1; then
+    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
         log_error "Python3 is still unavailable after attempted installation."
         exit 1
     fi
 
-    PY_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+    PY_VERSION=$("$PYTHON_CMD" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+    PY_MAJOR_MINOR="$(get_python_major_minor_version)"
+    PY_ARCH="$(normalize_architecture "$("$PYTHON_CMD" -c 'import platform; print(platform.machine())')")"
     log_info "Detected Python version: $PY_VERSION"
+    log_debug "Detected Python major.minor: $PY_MAJOR_MINOR"
+    log_debug "Detected Python architecture: $PY_ARCH"
 
     if version_ge "$PY_VERSION" "$MIN_PYTHON_VERSION"; then
         log_info "Python version is compatible."
@@ -329,13 +334,127 @@ handle_python_install() {
 # Virtual Environment
 # ------------------------------------------------------------------------------
 
-setup_venv() {
-    log_info "Setting up virtual environment at: $VENV_DIR"
+normalize_architecture() {
+    local architecture="${1:-$(uname -m)}"
 
-    if [ -d "$VENV_DIR" ]; then
+    case "$architecture" in
+        x86_64|amd64)
+            echo "x86_64"
+            ;;
+        aarch64|arm64)
+            echo "aarch64"
+            ;;
+        *)
+            echo "$architecture"
+            ;;
+    esac
+}
+
+get_python_major_minor_version() {
+    "$PYTHON_CMD" -c 'import sys; print("{}.{}".format(sys.version_info[0], sys.version_info[1]))'
+}
+
+# $1 should be a Python executable (for example python3 or <venv>/bin/python).
+# Returns a compatibility signature in the format architecture|major.minor
+# (for example x86_64|3.11).
+get_python_compatibility_signature() {
+    "$1" -c 'import platform, sys; print("{}|{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))' 2>/dev/null
+}
+
+get_venv_suffix() {
+    "$PYTHON_CMD" -c 'import platform, sys; print("_{}_py{}.{}".format(platform.machine(), sys.version_info[0], sys.version_info[1]))'
+}
+
+is_compatible_venv() {
+    local venv_dir="$1"
+    local venv_python="$venv_dir/bin/python3"
+    local current_signature
+    local venv_signature
+
+    if [ ! -x "$venv_python" ]; then
+        venv_python="$venv_dir/bin/python"
+    fi
+    if [ ! -x "$venv_python" ]; then
+        return 1
+    fi
+
+    if ! current_signature="$(get_python_compatibility_signature "$PYTHON_CMD")"; then
+        log_debug "Failed to determine compatibility signature for $PYTHON_CMD."
+        return 1
+    fi
+    if ! venv_signature="$(get_python_compatibility_signature "$venv_python")"; then
+        log_debug "Failed to determine compatibility signature for $venv_python."
+        return 1
+    fi
+
+    [ "$venv_signature" = "$current_signature" ]
+}
+
+resolve_venv_dir() {
+    local requested_venv_dir="$1"
+    local resolved_venv_dir="$requested_venv_dir"
+    local compatible_venv_dir="${requested_venv_dir}$(get_venv_suffix)"
+
+    if [ -d "$requested_venv_dir" ]; then
+        if is_compatible_venv "$requested_venv_dir"; then
+            echo "$resolved_venv_dir"
+            return
+        fi
+
+        resolved_venv_dir="$compatible_venv_dir"
+        if [ -d "$resolved_venv_dir" ] && ! is_compatible_venv "$resolved_venv_dir"; then
+            log_warn "Removing stale/incompatible virtual environment: $resolved_venv_dir" >&2
+            rm -rf "$resolved_venv_dir"
+        fi
+        echo "$resolved_venv_dir"
+        return
+    fi
+
+    if [ -d "$compatible_venv_dir" ] && is_compatible_venv "$compatible_venv_dir"; then
+        resolved_venv_dir="$compatible_venv_dir"
+    fi
+
+    echo "$resolved_venv_dir"
+}
+
+is_venv_compatible() {
+    is_compatible_venv "$1"
+}
+
+resolve_default_venv_dir() {
+    local shared_venv_dir="${DEFAULT_VENV_DIR}$(get_venv_suffix)"
+
+    VENV_DIR="$(resolve_venv_dir "$DEFAULT_VENV_DIR")"
+
+    if [ "$VENV_DIR" = "$DEFAULT_VENV_DIR" ] && [ -d "$DEFAULT_VENV_DIR" ]; then
+        log_info "Reusing default virtual environment: $DEFAULT_VENV_DIR"
+        return
+    fi
+
+    if [ "$VENV_DIR" != "$DEFAULT_VENV_DIR" ]; then
+        if [ -d "$DEFAULT_VENV_DIR" ]; then
+            log_warn "Default virtual environment is incompatible with Python ${PY_MAJOR_MINOR} (${PY_ARCH})."
+        fi
+        if [ "$VENV_DIR" = "$shared_venv_dir" ] && [ -d "$shared_venv_dir" ]; then
+            log_info "Reusing platform/python-specific virtual environment: $VENV_DIR"
+        else
+            log_info "Using platform/python-specific virtual environment: $VENV_DIR"
+        fi
+    fi
+}
+
+setup_venv() {
+    local requested_venv_dir="$VENV_DIR"
+    VENV_DIR="$(resolve_venv_dir "$VENV_DIR")"
+    log_info "Setting up virtual environment at: $VENV_DIR"
+    if [ "$VENV_DIR" != "$requested_venv_dir" ]; then
+        log_warn "Virtual environment at $requested_venv_dir is incompatible with current Python/platform. Using $VENV_DIR instead."
+    fi
+
+    if [ -d "$VENV_DIR" ] && is_compatible_venv "$VENV_DIR"; then
         log_info "Reusing existing virtual environment."
     else
-        python3 -m venv "$VENV_DIR"
+        "$PYTHON_CMD" -m venv "$VENV_DIR"
     fi
 
     # Activate venv
@@ -348,16 +467,16 @@ setup_venv() {
 # ------------------------------------------------------------------------------
 
 install_mlcflow() {
-    if python3 -m pip show mlcflow >/dev/null 2>&1; then
+    if "$PYTHON_CMD" -m pip show mlcflow >/dev/null 2>&1; then
         if $UPGRADE; then
             log_info "Upgrading mlcflow (${MLCFLOW_PIP_SPEC})..."
-            python3 -m pip install --upgrade "$MLCFLOW_PIP_SPEC"
+            "$PYTHON_CMD" -m pip install --upgrade "$MLCFLOW_PIP_SPEC"
         else
             log_info "mlcflow already installed. Skipping."
         fi
     else
         log_info "Installing mlcflow (${MLCFLOW_PIP_SPEC})..."
-        python3 -m pip install "$MLCFLOW_PIP_SPEC"
+        "$PYTHON_CMD" -m pip install "$MLCFLOW_PIP_SPEC"
     fi
 }
 
@@ -430,4 +549,6 @@ main() {
     echo "  mlc --help"
 }
 
-main
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+    main
+fi
