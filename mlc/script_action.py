@@ -228,15 +228,34 @@ Main Script Meta:""")
 
         return module
 
+    def _content_repo_registered(self):
+        # automation/ ships bundled with mlcflow, so find_target_folder()
+        # always succeeds regardless of whether any script *content* repo
+        # (mlcommons@mlperf-automations or a fork/custom clone of it) is
+        # registered. "engine missing" is no longer a reliable signal that
+        # content needs pulling. Don't hardcode a specific repo alias here —
+        # forks (e.g. gateoverflow@mlperf-automations) are valid too — check
+        # generically for any repo with actual script content instead, same
+        # as find_target_folder() does for the (now-bundled) automation/
+        # folder, just one level up at <repo>/script/ instead of
+        # <repo>/automation/script/.
+        for repo in self.repos:
+            script_dir = os.path.join(repo.path, 'script')
+            if os.path.isdir(script_dir) and os.listdir(script_dir):
+                return True
+        return False
+
     def call_script_module_function(self, function_name, run_args):
         self.action_type = "script"
         repos_folder = self.repos_path
 
         # Import script submodule
         script_path = self.find_target_folder("script")
-        if not script_path:
+        if not script_path or not self._content_repo_registered():
             logger.warning(
-                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository...")
+                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository..."
+                if not script_path else
+                "No script content repo registered. Automatically pulling mlcommons@mlperf-automations...")
 
             # Use the access method to pull the required repository
             result = self.access({
@@ -252,7 +271,7 @@ Main Script Meta:""")
 
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
-                if not script_path:
+                if not script_path or not self._content_repo_registered():
                     return {
                         'return': 1, 'error': f"""Script automation still not found after pulling mlcommons@mlperf-automations --branch=dev."""}
             else:

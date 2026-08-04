@@ -25,7 +25,8 @@ dependencies = [
     "pyyaml",
     "giturlparse",
     "colorama",
-    "filelock"
+    "filelock",
+    "packaging"
 ]
 
 [project.urls]
@@ -38,13 +39,13 @@ Issues = "https://github.com/mlcommons/mlcflow/issues"
 version = {file = "VERSION"}
 
 [tool.setuptools]
-packages = ["mlc"]
+packages = ["mlc", "automation", "automation.script"]
 py-modules = []
-#include-package-data = true
+include-package-data = true
 
-#[tool.setuptools.package-data]
-# This includes the config.yaml file
-#"mlc" = ["config.yaml"]
+[tool.setuptools.package-data]
+"automation" = ["COPYRIGHT.txt"]
+"automation.script" = ["meta.json", "README.md"]
 
 [project.scripts]
 mlc = "mlc.main:main"

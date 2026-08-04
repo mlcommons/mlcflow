@@ -21,6 +21,11 @@ DEFAULT_VENV_DIR="$HOME/mlcflow"
 DEFAULT_REPO="mlcommons@mlperf-automations"
 DEFAULT_BRANCH="dev"
 
+# What to hand to `pip install` for mlcflow itself. Defaults to the PyPI
+# release; override to test an unreleased build, e.g.
+#   MLCFLOW_PIP_SPEC="git+https://github.com/mlcommons/mlcflow@some-branch"
+MLCFLOW_PIP_SPEC="${MLCFLOW_PIP_SPEC:-mlcflow}"
+
 UPGRADE=false
 ASSUME_YES=false
 INSTALL_PYTHON=false
@@ -345,14 +350,14 @@ setup_venv() {
 install_mlcflow() {
     if python3 -m pip show mlcflow >/dev/null 2>&1; then
         if $UPGRADE; then
-            log_info "Upgrading mlcflow..."
-            python3 -m pip install --upgrade mlcflow
+            log_info "Upgrading mlcflow (${MLCFLOW_PIP_SPEC})..."
+            python3 -m pip install --upgrade "$MLCFLOW_PIP_SPEC"
         else
             log_info "mlcflow already installed. Skipping."
         fi
     else
-        log_info "Installing mlcflow..."
-        python3 -m pip install mlcflow
+        log_info "Installing mlcflow (${MLCFLOW_PIP_SPEC})..."
+        python3 -m pip install "$MLCFLOW_PIP_SPEC"
     fi
 }
 

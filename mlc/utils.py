@@ -12,6 +12,7 @@ import shutil
 import tarfile
 import zipfile
 import logging
+from packaging import version
 logger = logging.getLogger("mlc")
 
 
