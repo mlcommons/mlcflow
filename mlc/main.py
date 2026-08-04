@@ -97,32 +97,14 @@ def get_version_info():
 
 def _get_repo_hashes():
     """Get git info for all repos. Returns list of (alias, branch, hash, has_local_changes)."""
-    import subprocess
     if default_parent is None:
         return []
     results = []
     for repo in default_parent.repos:
-        alias = os.path.basename(repo.path)
-        git_dir = os.path.join(repo.path, '.git')
-        if not os.path.isdir(git_dir):
-            continue
-        try:
-            commit = subprocess.check_output(
-                ["git", "-C", repo.path, "rev-parse", "--short", "HEAD"],
-                stderr=subprocess.DEVNULL, text=True
-            ).strip()
-            branch = subprocess.check_output(
-                ["git", "-C", repo.path, "rev-parse", "--abbrev-ref", "HEAD"],
-                stderr=subprocess.DEVNULL, text=True
-            ).strip()
-            # Only tracked file changes (ignore untracked files)
-            dirty = subprocess.check_output(
-                ["git", "-C", repo.path, "status", "--porcelain", "-uno"],
-                stderr=subprocess.DEVNULL, text=True
-            ).strip()
-            results.append((alias, branch, commit, bool(dirty)))
-        except Exception:
-            pass
+        v = utils.get_repo_version(repo.path)
+        if v.get("source") == "git":
+            results.append((os.path.basename(repo.path), v["branch"],
+                            v["commit"][:9], v["dirty"]))
     return results
 
 

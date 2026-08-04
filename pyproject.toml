@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mlcflow"
-version = "1.2.9"
+dynamic = ["version"]
 
 description = "An automation interface tailored for CPU/GPU benchmarking"
 authors = [
@@ -25,7 +25,8 @@ dependencies = [
     "pyyaml",
     "giturlparse",
     "colorama",
-    "filelock"
+    "filelock",
+    "packaging"
 ]
 
 [project.urls]
@@ -34,14 +35,17 @@ Documentation = "https://docs.mlcommons.org/mlcflow"
 Repository = "https://github.com/mlcommons/mlcflow"
 Issues = "https://github.com/mlcommons/mlcflow/issues"
 
-[tool.setuptools]
-packages = ["mlc"]
-py-modules = []
-#include-package-data = true
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
 
-#[tool.setuptools.package-data]
-# This includes the config.yaml file
-#"mlc" = ["config.yaml"]
+[tool.setuptools]
+packages = ["mlc", "automation", "automation.script"]
+py-modules = []
+include-package-data = true
+
+[tool.setuptools.package-data]
+"automation" = ["COPYRIGHT.txt"]
+"automation.script" = ["meta.json", "README.md"]
 
 [project.scripts]
 mlc = "mlc.main:main"

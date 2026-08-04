@@ -12,7 +12,55 @@ import shutil
 import tarfile
 import zipfile
 import logging
+from packaging import version
 logger = logging.getLogger("mlc")
+
+
+def get_repo_version(repo_path):
+    """Resolve the git version of a single repo checkout.
+
+    Returns ``{source, commit, branch, dirty}`` (``source='git'``), or a
+    ``git_commit_hash.txt`` fallback for pip installs (``source='commit_file'``),
+    or an empty dict ``{}`` when neither is available (callers should treat an
+    empty result as "version unknown"). Computed fresh (no caching).
+
+    Used by ``main._get_repo_hashes`` (the on-error hash display) and by scripts
+    that stamp their output with the producing repo's version.
+    """
+    if not repo_path:
+        return {}
+    if os.path.isdir(os.path.join(repo_path, '.git')):
+        def _git(*args):
+            return subprocess.check_output(
+                ["git", "-C", repo_path, *args],
+                stderr=subprocess.DEVNULL, text=True).strip()
+        try:
+            return {
+                "source": "git",
+                "commit": _git("rev-parse", "HEAD"),
+                "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+                # Only tracked file changes (ignore untracked files)
+                "dirty": bool(_git("status", "--porcelain", "-uno")),
+            }
+        except Exception as e:
+            # Broad by design: never raise into a caller. Log for debugging.
+            logger.debug(
+                "get_repo_version: git failed for %s (%s); trying fallback",
+                repo_path, e)
+    hash_file = os.path.join(repo_path, "git_commit_hash.txt")
+    if os.path.isfile(hash_file):
+        try:
+            with open(hash_file) as f:
+                commit = f.read().strip()
+            if commit:
+                logger.debug(
+                    "get_repo_version: using git_commit_hash.txt for %s (no git)",
+                    repo_path)
+                return {"source": "commit_file", "commit": commit,
+                        "branch": "", "dirty": False}
+        except OSError:
+            pass
+    return {}
 
 
 def generate_temp_file(i):
