@@ -288,7 +288,7 @@ def search_script_cache(
     rc = cache_action.access(
         {
             "action": "search",
-            "target_name": "cache",
+            "target": "cache",
             "tags": cache_tags,
         }
     )

@@ -89,6 +89,52 @@ jobs:
       run: |
         mlcr get,generic-python-lib,_package.wheel --quiet
 
+    - name: Test cache expiration filtering
+      shell: bash
+      run: |
+        python3 <<'PYTEST'
+        import os
+        import time
+        import tempfile
+        import yaml
+
+        from mlc.cache_action import CacheAction
+        from mlc.action import Action
+
+        with tempfile.TemporaryDirectory() as repos_dir:
+            os.environ['MLC_REPOS'] = repos_dir
+
+            action = Action()
+            local_cache_dir = action.local_cache_path
+            os.makedirs(local_cache_dir, exist_ok=True)
+
+            def write_cache(name, expiration):
+                path = os.path.join(local_cache_dir, name)
+                os.makedirs(path, exist_ok=True)
+                with open(os.path.join(path, 'meta.yaml'), 'w') as f:
+                    yaml.safe_dump({
+                        'uid': name,
+                        'tags': ['cache-expiration-test', name],
+                        'cache_expiration': expiration,
+                    }, f, sort_keys=False)
+
+            now = time.time()
+            write_cache('expired-entry', now - 60)
+            write_cache('live-entry', now + 3600)
+
+            cache_action = CacheAction(action)
+
+            expired = cache_action.search({'tags': 'cache-expiration-test,expired-entry'})
+            assert expired['return'] == 0, expired
+            assert len(expired['list']) == 0, expired['list']
+
+            live = cache_action.search({'tags': 'cache-expiration-test,live-entry'})
+            assert live['return'] == 0, live
+            assert len(live['list']) == 1, live['list']
+
+            print('PASS: expired cache entries are filtered while live entries remain searchable')
+        PYTEST
+
   test_docker:
     runs-on: ubuntu-latest
     strategy:
