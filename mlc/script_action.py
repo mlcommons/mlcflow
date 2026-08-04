@@ -269,7 +269,15 @@ Main Script Meta:""")
 
             if result['return'] == 0:
                 self.repos = self.load_repos_and_meta()
-                self.index = Index(self.repos_path, self.repos)
+                self._index = Index(self.repos_path, self.repos)
+
+                # search()/find()/rm() on this action delegate to self.parent
+                # (see ScriptAction.search), so the refreshed repos/index must
+                # also land there, or a search immediately after this auto-pull
+                # would still consult self.parent's stale, pre-pull state.
+                if self.parent is not None and self.parent is not self:
+                    self.parent.repos = self.repos
+                    self.parent._index = self._index
 
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
