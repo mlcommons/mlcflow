@@ -269,6 +269,11 @@ Main Script Meta:""")
 
             if result['return'] == 0:
                 self.repos = self.load_repos_and_meta()
+                # Must be self._index, not self.index: get_index() (used by
+                # search()/find()/rm()) reads self._index, lazily building it
+                # only if still None (see Action.get_index/__init__). Writing
+                # self.index here would leave self._index untouched, so the
+                # refresh would silently never be seen.
                 self._index = Index(self.repos_path, self.repos)
 
                 # search()/find()/rm() on this action delegate to self.parent
