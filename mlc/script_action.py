@@ -267,10 +267,6 @@ Main Script Meta:""")
             })
 
             if result['return'] == 0:
-                # Needed on self so the find_target_folder() retry just below
-                # sees the newly pulled repo. register_repo() (called via the
-                # access() pull above) already refreshes the index itself and
-                # propagates it to self.parent for search()/find()/rm().
                 self.repos = self.load_repos_and_meta()
 
                 # Try to find the script path again after pulling
