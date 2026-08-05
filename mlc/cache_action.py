@@ -4,6 +4,7 @@ import json
 import time
 from . import utils
 from .logger import logger
+from filelock import FileLock, Timeout
 
 
 class CacheAction(Action):
@@ -135,22 +136,25 @@ class CacheAction(Action):
         updated_count = 0
 
         for item in res['list']:
-            tags = item.meta.get("tags", [])
-            if 'tmp' in tags:
-                continue
-
-            tags.append('tmp')
-            item.meta["tags"] = tags
             meta_yaml_path = os.path.join(item.path, "meta.yaml")
             meta_json_path = os.path.join(item.path, "meta.json")
+            lock_file = item.path + ".lock"
 
-            if os.path.exists(meta_yaml_path):
-                save_result = utils.save_yaml(meta_yaml_path, meta=item.meta)
-            else:
-                save_result = utils.save_json(meta_json_path, meta=item.meta)
+            with FileLock(lock_file, timeout=60):
+                tags = item.meta.get("tags", [])
+                if 'tmp' in tags:
+                    continue
 
-            if save_result['return'] > 0:
-                return save_result
+                tags.append('tmp')
+                item.meta["tags"] = tags
+
+                if os.path.exists(meta_yaml_path):
+                    save_result = utils.save_yaml(meta_yaml_path, meta=item.meta)
+                else:
+                    save_result = utils.save_json(meta_json_path, meta=item.meta)
+
+                if save_result['return'] > 0:
+                    return save_result
 
             self.get_index().update(item.meta, "cache", item.path, item.repo)
             updated_count += 1
