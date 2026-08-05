@@ -5,7 +5,6 @@ import yaml
 from .repo import Repo
 from datetime import datetime
 from .meta_schema import validate_meta
-from contextlib import contextmanager
 from filelock import Timeout
 from . import utils
 
@@ -62,7 +61,7 @@ class Index:
         """
         lock_file = self.modified_times_file + ".lock"
         try:
-            with self._file_lock_with_incremental_timeout(lock_file):
+            with utils.file_lock_with_incremental_timeout(lock_file):
                 # logger.debug(f"Lock acquired at {lock_file} for Loading Modified Times")
 
                 if os.path.exists(self.modified_times_file):
@@ -80,27 +79,13 @@ class Index:
             logger.error(f"Error acquiring lock {lock_file}: {e}")
             return {}
 
-    @contextmanager
-    def _file_lock_with_incremental_timeout(
-            self, lock_file, timeout_seconds=60):
-        """
-        Acquire a file lock by waiting up to a minute, then retrying once if it times out.
-
-        Thin wrapper kept for the existing call sites; the implementation is
-        shared with the repos.json writers in utils so there is only one
-        locking policy in the codebase.
-        """
-        with utils.file_lock_with_incremental_timeout(
-                lock_file, timeout_seconds):
-            yield
-
     def _save_modified_times(self):
         """
         Save updated mtimes in modified_times json file.
         """
         lock_file = self.modified_times_file + ".lock"
         try:
-            with self._file_lock_with_incremental_timeout(lock_file):
+            with utils.file_lock_with_incremental_timeout(lock_file):
                 # logger.debug(f"Lock acquired at {lock_file} for Saving Modified Times")
 
                 # logger.debug(f"Saving modified times to {self.modified_times_file}")
@@ -121,7 +106,7 @@ class Index:
         for folder_type, file_path in self.index_files.items():
             lock_file = file_path + ".lock"
             try:
-                with self._file_lock_with_incremental_timeout(lock_file):
+                with utils.file_lock_with_incremental_timeout(lock_file):
                     # logger.debug(f"Lock acquired at {lock_file} for Loading Index for {folder_type}")
 
                     if os.path.exists(file_path):
@@ -444,7 +429,7 @@ class Index:
             output_file = self.index_files[folder_type]
             lock_file = output_file + ".lock"
             try:
-                with self._file_lock_with_incremental_timeout(lock_file):
+                with utils.file_lock_with_incremental_timeout(lock_file):
                     # logger.debug(f"Lock acquired at {lock_file} for Saving Index for {folder_type}")
 
                     with open(output_file, "w") as f:
