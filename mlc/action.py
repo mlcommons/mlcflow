@@ -34,22 +34,17 @@ class Action:
     _repos = []  # list of Repo objects
     _index = None
 
-    # Never handed down to a delegate: copying the state fields would create a
-    # second copy that diverges from the owner's the moment either changes,
-    # and copying `parent` would collapse the chain the delegate resolves
-    # through (a grandparent would silently replace its parent).
+    # Never handed down to a delegate: copying these would diverge from the
+    # owner on the next write, and copying `parent` would collapse the chain.
     _NOT_INHERITED = ('parent', '_repos', '_index')
 
     def _state_owner(self):
         """Return the one object that owns repos/index state for this chain.
 
         Action subclasses are throwaway delegates - get_action() builds a fresh
-        one per dispatch - while the state they mutate has to outlive them: the
-        long-lived root (`default_parent`) is reused for every later
-        search()/find()/rm() in the same process. Resolving through that root
-        means a repo pulled by one delegate is visible to the next one at once,
-        instead of each delegate mutating a private copy that has to be pushed
-        back by hand.
+        one per dispatch - but the long-lived root (`default_parent`) is reused
+        for every later search()/find()/rm() in the same process. Resolving
+        through that root keeps every delegate looking at the same state.
 
         A parent that is not an Action (tests pass a stub carrying just
         repos_path) cannot own state, so there the delegate owns its own.

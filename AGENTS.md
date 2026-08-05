@@ -533,6 +533,21 @@ this reason.
 
 ---
 
+## Comment style
+
+- Comment *why code is this way* (a non-obvious invariant, a trade-off, a
+  constraint another part of the codebase imposes) — keep it concise, a
+  sentence or two.
+- Don't comment *why code used to be different* ("previously this did X",
+  "removed the Y workaround", "no longer need to..."). That history belongs in
+  the commit message or PR description, not in a comment that outlives the
+  PR and has nothing to contrast against for a reader who never saw the old
+  code.
+- Don't explain *what* the code does when the code already says it — comment
+  the reasoning, not a restatement of the next line.
+
+---
+
 ## Branch policy
 
 - PRs target `main`.

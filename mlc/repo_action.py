@@ -16,17 +16,13 @@ from .index import Index
 def repos_json_lock(repos_file_path):
     """Serialize the read-modify-write of repos.json across mlc processes.
 
-    Registering and unregistering both read the whole list, change one entry
-    and write the list back. Two concurrent `mlc pull repo` runs would
-    otherwise both read the pre-change list and the slower writer would
-    overwrite the other's entry with a list that never contained it, so a repo
-    silently vanishes from repos.json (and `mlc rm repo` racing a pull can
-    resurrect one). Hold this lock across the whole read-modify-write.
+    Without this, two concurrent `mlc pull repo` runs can each read the same
+    list and the slower write silently drops the other's entry. Hold this
+    across the whole read-modify-write.
 
-    Keep the locked region narrow: nothing inside it may call back into a
-    function that takes the same lock (register_repo() unregisters conflicts
-    and pulls deps *before* entering it) or two lock objects on one file
-    deadlock within a single process.
+    Keep the locked region narrow - nothing inside it may call a function that
+    takes this same lock, or two FileLocks on one file deadlock within a
+    single process.
     """
     return utils.file_lock_with_incremental_timeout(
         repos_file_path + ".lock")
@@ -364,10 +360,8 @@ class RepoAction(Action):
         )
 
         if repo_obj:
-            # Both the reload above and this index update land on the shared
-            # state owner (see Action._state_owner()), so a search()/find()/rm()
-            # dispatched after this pull sees the new repo without anything
-            # having to be copied back onto self.parent by hand.
+            # Lands on the shared state owner (Action._state_owner()), so any
+            # search()/find()/rm() dispatched after this pull sees it too.
             index = Action.get_index(self)
             index.add_repo(repo_obj)
             logger.debug("Index file has been updated")
