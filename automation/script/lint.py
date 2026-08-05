@@ -98,7 +98,6 @@ TOP_LEVEL_KEY_ORDER = [
     "tags",
     "tags_help",
     "private",
-    "min_mlc_version",
     "mlc_compat",
 
     # Cache
@@ -174,7 +173,6 @@ SECTION_GROUPS = [
       "tags",
       "tags_help",
       "private",
-      "min_mlc_version",
       "mlc_compat"]),
     ("# Cache",
      ["cache",
