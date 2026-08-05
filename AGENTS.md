@@ -361,6 +361,37 @@ For `script` target: variation tags (prefixed `_`) are stripped before
 matching. For `cache`/`experiment`: all tags are matched. Negative tags use
 `-` prefix.
 
+### State ownership — `repos` and the index live on one object per process
+
+`get_action()` builds a **fresh, throwaway delegate** (`RepoAction`,
+`ScriptAction`, …) for every dispatch, while the state those delegates mutate
+has to outlive them: `default_parent` is the long-lived root reused for every
+later `search()`/`find()`/`rm()` in the same process.
+
+`Action._state_owner()` walks the `parent` chain and returns that root.
+`Action.repos` is a property that reads/writes through it, and `get_index()`
+caches the `Index` on it. So:
+
+- `self.repos = self.load_repos_and_meta()` inside any delegate updates the
+  state every *other* delegate sees — no copying back onto `self.parent`.
+- `self.get_index()` returns the same `Index` object everywhere, built once.
+- Subclass `__init__` must call `self._inherit_from_parent(parent)`, never
+  `self.__dict__.update(vars(parent))`. The helper copies startup config
+  (`repos_path`, `local_cache_path`, …) but deliberately **not** `repos`,
+  `_index` or `parent` (`Action._NOT_INHERITED`) — copying state would create a
+  second copy that diverges on the next write, and copying `parent` would let a
+  grandparent replace the parent and collapse the chain.
+- A parent that is not an `Action` (test stubs holding just `repos_path`) can't
+  own state, so that delegate owns its own. `parent=None` makes the delegate a
+  root via `Action.__init__`.
+
+`CacheAction.rm()`/`search()` and `ScriptAction.rm()`/`search()` still call
+`self.parent.rm(i)` / `self.parent.search(i)`. That is **not** a state
+workaround and must not become `super()`: those methods override the base ones,
+and `Action.rm()` calls `self.search()`, so a `CacheAction` receiver would apply
+the expiry filter and skip exactly the expired caches `mlc rm cache` is meant to
+delete.
+
 ### `Index` class (`index.py`)
 
 Maintains three index files plus `modified_times.json`:
@@ -466,6 +497,19 @@ should not normally be triggered if the repo is already registered.
 i.get("template_tags", "template,generic")`. If multiple scripts match
 `template_tags`, it interactively prompts. Passing an exact unique tag set
 avoids the prompt.
+
+**8. Every `repos.json` write needs `repos_json_lock()`, and must not nest**
+Registering/unregistering is a read-modify-write of one shared list, so two
+concurrent `mlc pull repo` runs can otherwise lose an entry (or a reader hits a
+half-written file). `register_repo()` and `unregister_repo()` hold
+`repo_action.repos_json_lock()` across the whole read-modify-write and write via
+`utils.save_json_atomic()` so unlocked readers never see a partial file.
+
+Keep the locked region narrow: **nothing inside it may call a function that
+takes the same lock** — two `FileLock` objects on one file deadlock even within a
+single process. `register_repo()` unregisters conflicting repos and pulls deps
+*before* entering the lock, and reloads repos *after* leaving it, for exactly
+this reason.
 
 ---
 

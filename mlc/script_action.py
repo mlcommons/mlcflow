@@ -37,11 +37,9 @@ class ScriptAction(Action):
     Using both alias and UID: <script_alias>,<script_uid> (e.g., detect-os,5b4e0237da074764)
 
     """
-    parent = None
 
     def __init__(self, parent=None):
-        self.parent = parent
-        self.__dict__.update(vars(parent))
+        self._inherit_from_parent(parent)
 
     def search(self, i):
         """

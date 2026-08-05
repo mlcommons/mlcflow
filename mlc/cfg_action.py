@@ -8,9 +8,7 @@ class CfgAction(Action):
     def __init__(self, parent=None):
         if parent is None:
             parent = default_parent
-        #super().__init__(parent)
-        self.parent = parent
-        self.__dict__.update(vars(parent))
+        self._inherit_from_parent(parent)
 
     def load(self, args):
         """

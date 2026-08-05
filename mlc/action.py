@@ -26,7 +26,69 @@ class Action:
     logger = None
     local_repo = None
     current_repo_path = None
-    repos = []  # list of Repo objects
+    parent = None
+
+    # Backing state for the `repos` property and get_index(). These live on a
+    # single object per process (see _state_owner()), so the values here are
+    # only the defaults for an object that owns its own state.
+    _repos = []  # list of Repo objects
+    _index = None
+
+    # Never handed down to a delegate: copying the state fields would create a
+    # second copy that diverges from the owner's the moment either changes,
+    # and copying `parent` would collapse the chain the delegate resolves
+    # through (a grandparent would silently replace its parent).
+    _NOT_INHERITED = ('parent', '_repos', '_index')
+
+    def _state_owner(self):
+        """Return the one object that owns repos/index state for this chain.
+
+        Action subclasses are throwaway delegates - get_action() builds a fresh
+        one per dispatch - while the state they mutate has to outlive them: the
+        long-lived root (`default_parent`) is reused for every later
+        search()/find()/rm() in the same process. Resolving through that root
+        means a repo pulled by one delegate is visible to the next one at once,
+        instead of each delegate mutating a private copy that has to be pushed
+        back by hand.
+
+        A parent that is not an Action (tests pass a stub carrying just
+        repos_path) cannot own state, so there the delegate owns its own.
+        """
+        owner = self
+        seen = {id(owner)}
+        while isinstance(owner.parent, Action):
+            if id(owner.parent) in seen:
+                break  # self-referential chain; stop instead of looping
+            owner = owner.parent
+            seen.add(id(owner))
+        return owner
+
+    def _inherit_from_parent(self, parent):
+        """Set this delegate up from the object that dispatched to it.
+
+        Configuration (repos_path, local_cache_path, ...) is copied because it
+        does not change after startup; repos/index deliberately are not - see
+        _state_owner() and _NOT_INHERITED.
+        """
+        self.parent = parent
+
+        if parent is None:
+            # No one to inherit from, so this instance owns its own state.
+            Action.__init__(self)
+            return
+
+        for key, value in vars(parent).items():
+            if key not in Action._NOT_INHERITED:
+                setattr(self, key, value)
+
+    @property
+    def repos(self):
+        """The registered repos, resolved from the state owner (never a copy)."""
+        return self._state_owner()._repos
+
+    @repos.setter
+    def repos(self, value):
+        self._state_owner()._repos = value
 
     # Main access function to simulate a Python interface for CLI
     def access(self, options):
@@ -217,9 +279,12 @@ class Action:
             return None
 
     def get_index(self):
-        if self._index is None:
-            self._index = Index(self.repos_path, self.repos)
-        return self._index
+        # Built once per process and cached on the state owner, so a delegate
+        # never rebuilds an index the root already has (or vice versa).
+        owner = self._state_owner()
+        if owner._index is None:
+            owner._index = Index(owner.repos_path, owner.repos)
+        return owner._index
 
     def _item_from_index_entry(self, res, target_name):
         """Create an Item from an index entry and skip entries with invalid meta."""
@@ -259,10 +324,17 @@ class Action:
 
         repo_json_path = os.path.join(self.repos_path, "repos.json")
         if not os.path.exists(repo_json_path):
-            with open(repo_json_path, 'w') as f:
-                json.dump([str(mlc_local_repo_path_expanded)], f, indent=2)
-                logger.info(
-                    f"Created repos.json in {os.path.dirname(self.repos_path)} and initialised with local cache folder path: {mlc_local_repo_path}")
+            # Same lock the register/unregister writers take, so a first run
+            # racing another one cannot have its fresh list clobbered, and
+            # readers never observe the file mid-creation.
+            with utils.file_lock_with_incremental_timeout(
+                    repo_json_path + ".lock"):
+                if not os.path.exists(repo_json_path):
+                    utils.save_json_atomic(
+                        repo_json_path, [
+                            str(mlc_local_repo_path_expanded)], indent=2)
+                    logger.info(
+                        f"Created repos.json in {os.path.dirname(self.repos_path)} and initialised with local cache folder path: {mlc_local_repo_path}")
 
         self.local_cache_path = os.path.join(mlc_local_repo_path, "cache")
         if not os.path.exists(self.local_cache_path):

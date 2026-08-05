@@ -6,7 +6,8 @@ from .repo import Repo
 from datetime import datetime
 from .meta_schema import validate_meta
 from contextlib import contextmanager
-from filelock import FileLock, Timeout
+from filelock import Timeout
+from . import utils
 
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -84,18 +85,13 @@ class Index:
             self, lock_file, timeout_seconds=60):
         """
         Acquire a file lock by waiting up to a minute, then retrying once if it times out.
-        """
-        try:
-            with FileLock(lock_file, timeout=timeout_seconds):
-                yield  # Control goes to the caller's 'with' block while the file lock is held
-                return
-        except Timeout:
-            logger.warning(
-                f"Timeout acquiring lock {lock_file} after {int(timeout_seconds)}s. "
-                f"Retrying once for another {int(timeout_seconds)}s..."
-            )
 
-        with FileLock(lock_file, timeout=timeout_seconds):
+        Thin wrapper kept for the existing call sites; the implementation is
+        shared with the repos.json writers in utils so there is only one
+        locking policy in the codebase.
+        """
+        with utils.file_lock_with_incremental_timeout(
+                lock_file, timeout_seconds):
             yield
 
     def _save_modified_times(self):

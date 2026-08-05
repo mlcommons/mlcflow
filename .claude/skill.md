@@ -221,4 +221,7 @@ python -m pytest tests/
 - Don't push directly to `main` — open a PR; use `dev` only for urgent merges without approval
 - Don't hard-code `~/MLC/repos` — use `self.repos_path` (which reads `MLC_REPOS` env var)
 - Don't edit `index_script.json` or `modified_times.json` by hand — use `mlc reindex`
+- Don't write `self.__dict__.update(vars(parent))` in an Action subclass `__init__` — call `self._inherit_from_parent(parent)`; `repos`/`_index` resolve to one owner per process (`Action._state_owner()`), so never copy them back onto `self.parent` by hand
+- Don't turn `self.parent.rm(i)` / `self.parent.search(i)` in `CacheAction`/`ScriptAction` into `super()` — those need the *base* receiver, or `mlc rm cache` starts skipping expired caches
+- Don't read-modify-write `repos.json` without `repo_action.repos_json_lock()`, and don't call anything that takes that lock from inside it (same-file `FileLock`s deadlock in one process)
 - Don't call `ScriptAutomation` directly — always go through `call_script_module_function()`
