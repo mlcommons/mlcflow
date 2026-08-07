@@ -586,7 +586,19 @@ def main():
         if not pre_args.action and not pre_args.target:
             help_text += main.__doc__
         elif pre_args.action and not pre_args.target:
-            if pre_args.action not in ['script', 'cache', 'repo']:
+            script_only_actions = {
+                a.replace("-", "_")
+                for a in [
+                    'docker', 'docker-run', 'apptainer', 'apptainer-run',
+                    'experiment', 'remote-run', 'remote-experiment',
+                    'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                    'slurm-run', 'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
+                    'doc', 'lint',
+                ]
+            }
+            if pre_args.action in script_only_actions:
+                pre_args.target = 'script'
+            elif pre_args.action not in ['script', 'cache', 'repo']:
                 logger.error(f"Invalid target {pre_args.action}")
                 raise Exception(f"""Invalid target {pre_args.action}""")
             else:
