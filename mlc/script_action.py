@@ -329,6 +329,8 @@ Main Script Meta:""")
                     result = automation_instance.slurm_experiment(run_args)
                 elif function_name == "remote_slurm":
                     result = automation_instance.remote_slurm(run_args)
+                elif function_name == "remote_slurm_experiment":
+                    result = automation_instance.remote_slurm_experiment(run_args)
                 elif function_name == "help":
                     result = automation_instance.help(
                         run_args)  # Pass args to the help method
@@ -887,6 +889,25 @@ Main Script Meta:""")
 
         """
         return self.call_script_module_function("remote_slurm", run_args)
+
+    def remote_slurm_experiment(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: remote-slurm-experiment
+    ################################################################################
+
+    The `remote-slurm-experiment` action connects to a remote machine via SSH
+    and runs an MLC slurm-experiment script there.  Accepts all --remote_* flags
+    from remote-run as well as all --slurm_* flags from slurm-run.
+
+    Example Command:
+
+    mlc remote-slurm-experiment script --tags=detect,os --remote_host=mycluster.example.com
+    mlcres detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function("remote_slurm_experiment", run_args)
 
 
 class ScriptExecutionError(Exception):

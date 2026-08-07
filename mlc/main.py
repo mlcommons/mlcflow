@@ -260,6 +260,10 @@ def mlcrs():
     mlc_expand_short("remote-slurm")
 
 
+def mlcres():
+    mlc_expand_short("remote-slurm-experiment")
+
+
 def mlce():
     mlc_expand_short("experiment")
 
@@ -394,7 +398,8 @@ def build_parser(pre_args):
     # Script-only
     for action in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
                    'experiment', 'remote-run', 'remote-experiment',
-                   'remote-docker', 'remote-slurm', 'slurm-run',
+                   'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                   'slurm-run',
                    'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
                    'doc', 'lint']:
         p = subparsers.add_parser(action, add_help=False)
@@ -438,7 +443,8 @@ def build_run_args(args):
 
     if args.command in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
                         'experiment', 'remote-run', 'remote-experiment',
-                        'remote-docker', 'remote-slurm', 'slurm-run',
+                        'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                        'slurm-run',
                         'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
                         'doc', 'lint'] and args.target == "run":
         # run_args['target'] = 'script' #dont modify this as script might have

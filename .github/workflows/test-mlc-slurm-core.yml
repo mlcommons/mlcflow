@@ -74,3 +74,11 @@ jobs:
     - name: Smoke test - remote-slurm command registered
       run: |
         mlc remote-slurm --help | grep -q "remote-slurm"
+
+    - name: Smoke test - mlcres help
+      run: |
+        mlcres --help | grep -q "remote-slurm-experiment"
+
+    - name: Smoke test - remote-slurm-experiment command registered
+      run: |
+        mlc remote-slurm-experiment --help | grep -q "remote-slurm-experiment"
