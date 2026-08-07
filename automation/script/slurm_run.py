@@ -1,0 +1,241 @@
+from collections import defaultdict
+import os
+import mlc.utils as utils
+from mlc import utils
+from utils import *
+import logging
+from pathlib import PureWindowsPath, PurePosixPath
+import time
+import copy
+from datetime import datetime
+from script.script_utils import *
+
+
+def slurm_run(self_module, i):
+    """
+    Run MLC scripts on a SLURM cluster node via srun.
+
+    Args:
+        self_module: Reference to the current module for internal calls.
+        i: Dictionary containing input parameters for the slurm execution.
+
+    Returns:
+        Dictionary with the result of the operation. Keys:
+        - 'return': 0 on success, >0 on error.
+        - 'error': Error message (if any).
+    """
+
+    # Extract and handle basic inputs
+    quiet = i.get('quiet', False)
+    logger = self_module.logger
+    env = i.get('env', {})
+
+    # SLURM-specific options with reasonable defaults
+    slurm_partition = i.get('slurm_partition', '')
+    slurm_nodes = i.get('slurm_nodes', '1')
+    slurm_ntasks = i.get('slurm_ntasks', '1')
+    slurm_ntasks_per_node = i.get('slurm_ntasks_per_node', '')
+    slurm_cpus_per_task = i.get('slurm_cpus_per_task', '')
+    slurm_gpus = i.get('slurm_gpus', '')
+    slurm_gpus_per_node = i.get('slurm_gpus_per_node', '')
+    slurm_gpus_per_task = i.get('slurm_gpus_per_task', '')
+    slurm_mem = i.get('slurm_mem', '')
+    slurm_mem_per_cpu = i.get('slurm_mem_per_cpu', '')
+    slurm_mem_per_gpu = i.get('slurm_mem_per_gpu', '')
+    slurm_time = i.get('slurm_time', '')
+    slurm_job_name = i.get('slurm_job_name', '')
+    slurm_output = i.get('slurm_output', '')
+    slurm_error = i.get('slurm_error', '')
+    slurm_account = i.get('slurm_account', '')
+    slurm_qos = i.get('slurm_qos', '')
+    slurm_constraint = i.get('slurm_constraint', '')
+    slurm_exclusive = i.get('slurm_exclusive', False)
+    slurm_export = i.get('slurm_export', 'ALL')
+    slurm_srun_extra_args = i.get('slurm_srun_extra_args', '')
+    slurm_python_venv = i.get('slurm_python_venv', 'mlcflow')
+    slurm_pull_mlc_repos = i.get('slurm_pull_mlc_repos', False)
+    slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
+    slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
+
+    prune_result = prune_input(
+        {'input': i, 'extra_keys_starts_with': ['slurm_']})
+    if prune_result['return'] > 0:
+        return prune_result
+
+    run_input = prune_result['new_input']
+
+    cur_dir = os.getcwd()
+
+    r = self_module._select_script(i)
+    if r['return'] > 0:
+        return r
+
+    script = r['script']
+
+    meta, script_path = script.meta, script.path
+    tags, script_alias, script_uid = meta.get(
+        "tags", []), meta.get(
+        'alias', ''), meta.get(
+        'uid', '')
+
+    r = self_module.update_run_state_for_selected_script_and_variations(
+        script, i)
+    if r['return'] > 0:
+        return r
+
+    run_state = self_module.run_state
+
+    env = self_module.env
+    state = self_module.state
+
+    i_copy = copy.deepcopy(i)
+    i_copy['run_cmd'] = run_input
+
+    r = regenerate_script_cmd(i_copy)
+    if r['return'] > 0:
+        return r
+
+    script_run_cmd = r['run_cmd_string']
+
+    if quiet:
+        script_run_cmd += ' --quiet'
+
+    # Build the commands to run inside srun
+    run_cmds = []
+
+    # Bootstrap mlcflow on the node
+    run_cmds.append(
+        f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {slurm_python_venv}')
+    run_cmds.append(f'. {slurm_python_venv}/bin/activate')
+
+    if is_true(slurm_pull_mlc_repos):
+        run_cmds.append('mlc pull repo')
+
+    # Pre-run commands (after mlcflow is available)
+    run_cmds.extend(slurm_pre_run_cmds)
+
+    # The actual script command
+    run_cmds.append(script_run_cmd)
+
+    # Post-run commands
+    run_cmds.extend(slurm_post_run_cmds)
+
+    # Join all commands with && so failure stops execution
+    combined_cmd = ' && '.join(run_cmds)
+
+    # Build srun command
+    srun_args = []
+    srun_args.append('srun')
+
+    if slurm_partition:
+        srun_args.extend(['--partition', slurm_partition])
+    if slurm_nodes:
+        srun_args.extend(['--nodes', str(slurm_nodes)])
+    if slurm_ntasks:
+        srun_args.extend(['--ntasks', str(slurm_ntasks)])
+    if slurm_ntasks_per_node:
+        srun_args.extend(['--ntasks-per-node', str(slurm_ntasks_per_node)])
+    if slurm_cpus_per_task:
+        srun_args.extend(['--cpus-per-task', str(slurm_cpus_per_task)])
+    if slurm_gpus:
+        srun_args.extend(['--gpus', str(slurm_gpus)])
+    if slurm_gpus_per_node:
+        srun_args.extend(['--gpus-per-node', str(slurm_gpus_per_node)])
+    if slurm_gpus_per_task:
+        srun_args.extend(['--gpus-per-task', str(slurm_gpus_per_task)])
+    if slurm_mem:
+        srun_args.extend(['--mem', str(slurm_mem)])
+    if slurm_mem_per_cpu:
+        srun_args.extend(['--mem-per-cpu', str(slurm_mem_per_cpu)])
+    if slurm_mem_per_gpu:
+        srun_args.extend(['--mem-per-gpu', str(slurm_mem_per_gpu)])
+    if slurm_time:
+        srun_args.extend(['--time', str(slurm_time)])
+    if slurm_job_name:
+        srun_args.extend(['--job-name', slurm_job_name])
+    if slurm_output:
+        srun_args.extend(['--output', slurm_output])
+    if slurm_error:
+        srun_args.extend(['--error', slurm_error])
+    if slurm_account:
+        srun_args.extend(['--account', slurm_account])
+    if slurm_qos:
+        srun_args.extend(['--qos', slurm_qos])
+    if slurm_constraint:
+        srun_args.extend(['--constraint', slurm_constraint])
+    if is_true(slurm_exclusive):
+        srun_args.append('--exclusive')
+    if slurm_export:
+        srun_args.extend(['--export', slurm_export])
+
+    # Append any extra srun arguments the user provided
+    if slurm_srun_extra_args:
+        srun_args.extend(slurm_srun_extra_args.split())
+
+    # Wrap the combined command in bash -c for srun
+    srun_args.extend(['bash', '-c', combined_cmd])
+
+    srun_cmd = ' '.join(
+        _shell_quote(arg) for arg in srun_args
+    )
+
+    logger.info(f'Running on SLURM: {srun_cmd}')
+
+    import subprocess
+    rc = subprocess.call(srun_cmd, shell=True)
+
+    if rc != 0:
+        return {'return': 1,
+                'error': f'srun exited with return code {rc}'}
+
+    return {'return': 0}
+
+
+def regenerate_script_cmd(i):
+    """
+    Rebuild the mlcr command string from the pruned input dict.
+    """
+
+    i_run_cmd = i['run_cmd']
+
+    run_cmd = 'mlcr'
+
+    def rebuild_flags(command_dict, prefix):
+        command_line = ""
+        keys = sorted(command_dict.keys(), key=lambda x: x != "tags")
+
+        for key in keys:
+            full_key = f"{prefix}.{key}" if prefix else key
+            value = command_dict[key]
+
+            if isinstance(value, dict):
+                if value:
+                    command_line += rebuild_flags(value, full_key)
+            elif isinstance(value, list):
+                if value:
+                    list_values = ",".join(
+                        _shell_quote(str(item)) for item in value)
+                    command_line += f" --{full_key},={list_values}"
+            else:
+                if full_key in ['s', 'v']:
+                    command_line += f" -{full_key}"
+                else:
+                    command_line += f" --{full_key}={_shell_quote(str(value))}"
+
+        return command_line
+
+    run_cmd += rebuild_flags(i_run_cmd, "")
+
+    return {'return': 0, 'run_cmd_string': run_cmd}
+
+
+def _shell_quote(s):
+    """Quote a string for safe shell usage if it contains special characters."""
+    if not s:
+        return "''"
+    # If the string is safe, return as-is
+    import re
+    if re.match(r'^[a-zA-Z0-9_./:@=,+-]+$', s):
+        return s
+    # Otherwise single-quote it, escaping any embedded single quotes
+    return "'" + s.replace("'", "'\\''") + "'"
