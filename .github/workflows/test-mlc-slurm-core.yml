@@ -79,6 +79,10 @@ jobs:
       run: |
         mlcres --help | grep -q "remote-slurm-experiment"
 
+    - name: Smoke test - mlcrse help
+      run: |
+        mlcrse --help | grep -q "remote-slurm-experiment"
+
     - name: Smoke test - remote-slurm-experiment command registered
       run: |
         mlc remote-slurm-experiment --help | grep -q "remote-slurm-experiment"

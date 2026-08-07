@@ -264,6 +264,10 @@ def mlcres():
     mlc_expand_short("remote-slurm-experiment")
 
 
+def mlcrse():
+    mlc_expand_short("remote-slurm-experiment")
+
+
 def mlce():
     mlc_expand_short("experiment")
 

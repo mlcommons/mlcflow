@@ -196,6 +196,7 @@ mlc <action> <target> [options]
 | `mlcsa <tags>` | `mlc slurm-apptainer script <tags>` |
 | `mlcrs <tags>` | `mlc remote-slurm script <tags>` |
 | `mlcres <tags>` | `mlc remote-slurm-experiment script <tags>` |
+| `mlcrse <tags>` | `mlc remote-slurm-experiment script <tags>` |
 
 All short commands call `mlc_expand_short(action)` in `main.py`, which inserts
 the missing positional args into `sys.argv` and calls `main()`.
