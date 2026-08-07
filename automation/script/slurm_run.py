@@ -1,13 +1,13 @@
 from collections import defaultdict
 import os
-import mlc.utils as utils
-from mlc import utils
-from utils import *
+import shlex
 import logging
+import subprocess
 from pathlib import PureWindowsPath, PurePosixPath
 import time
 import copy
 from datetime import datetime
+from utils import is_true, prune_input
 from script.script_utils import *
 
 
@@ -58,6 +58,27 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_pull_mlc_repos = i.get('slurm_pull_mlc_repos', False)
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
+
+    # Validate and normalize integer SLURM parameters
+    int_params = {
+        'slurm_nodes': slurm_nodes,
+        'slurm_ntasks': slurm_ntasks,
+        'slurm_ntasks_per_node': slurm_ntasks_per_node,
+        'slurm_cpus_per_task': slurm_cpus_per_task,
+    }
+    for param_name, param_val in int_params.items():
+        if param_val != '':
+            try:
+                int(param_val)
+            except (ValueError, TypeError):
+                return {
+                    'return': 1,
+                    'error': f'Invalid value for {param_name}: {param_val!r} (must be an integer)'
+                }
+    slurm_nodes = str(int(slurm_nodes)) if slurm_nodes else ''
+    slurm_ntasks = str(int(slurm_ntasks)) if slurm_ntasks else ''
+    slurm_ntasks_per_node = str(int(slurm_ntasks_per_node)) if slurm_ntasks_per_node else ''
+    slurm_cpus_per_task = str(int(slurm_cpus_per_task)) if slurm_cpus_per_task else ''
 
     prune_result = prune_input(
         {'input': i, 'extra_keys_starts_with': ['slurm_']})
@@ -173,19 +194,14 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     # Append any extra srun arguments the user provided
     if slurm_srun_extra_args:
-        srun_args.extend(slurm_srun_extra_args.split())
+        srun_args.extend(shlex.split(slurm_srun_extra_args))
 
     # Wrap the combined command in bash -c for srun
     srun_args.extend(['bash', '-c', combined_cmd])
 
-    srun_cmd = ' '.join(
-        _shell_quote(arg) for arg in srun_args
-    )
+    logger.info(f'Running on SLURM: {shlex.join(srun_args)}')
 
-    logger.info(f'Running on SLURM: {srun_cmd}')
-
-    import subprocess
-    rc = subprocess.call(srun_cmd, shell=True)
+    rc = subprocess.call(srun_args)
 
     if rc != 0:
         return {'return': 1,
@@ -224,31 +240,19 @@ def regenerate_script_cmd(i):
             elif isinstance(value, list):
                 if value:
                     list_values = ",".join(
-                        _shell_quote(str(item)) for item in value)
+                        shlex.quote(str(item)) for item in value)
                     command_line += f" --{full_key},={list_values}"
             else:
                 if full_key in ['s', 'v']:
                     command_line += f" -{full_key}"
                 else:
-                    command_line += f" --{full_key}={_shell_quote(str(value))}"
+                    command_line += f" --{full_key}={shlex.quote(str(value))}"
 
         return command_line
 
     run_cmd += rebuild_flags(i_run_cmd, "")
 
     return {'return': 0, 'run_cmd_string': run_cmd}
-
-
-def _shell_quote(s):
-    """Quote a string for safe shell usage if it contains special characters."""
-    if not s:
-        return "''"
-    # If the string is safe, return as-is
-    import re
-    if re.match(r'^[a-zA-Z0-9_./:@=,+-]+$', s):
-        return s
-    # Otherwise single-quote it, escaping any embedded single quotes
-    return "'" + s.replace("'", "'\\''") + "'"
 
 
 def slurm_docker(self_module, i):
