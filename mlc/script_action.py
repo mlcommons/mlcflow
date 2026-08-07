@@ -321,6 +321,14 @@ Main Script Meta:""")
                 elif function_name == "slurm_run":
                     result = automation_instance.slurm_run(
                         run_args)  # Pass args to the slurm run method
+                elif function_name == "slurm_docker":
+                    result = automation_instance.slurm_docker(run_args)
+                elif function_name == "slurm_apptainer":
+                    result = automation_instance.slurm_apptainer(run_args)
+                elif function_name == "slurm_experiment":
+                    result = automation_instance.slurm_experiment(run_args)
+                elif function_name == "remote_slurm":
+                    result = automation_instance.remote_slurm(run_args)
                 elif function_name == "help":
                     result = automation_instance.help(
                         run_args)  # Pass args to the help method
@@ -806,6 +814,79 @@ Main Script Meta:""")
 
         """
         return self.call_script_module_function("slurm_run", run_args)
+
+    def slurm_docker(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-docker
+    ################################################################################
+
+    The `slurm-docker` action runs an MLC docker script on a SLURM cluster node
+    via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-docker script --tags=detect,os
+    mlcsd detect,os --slurm_partition=gpu --slurm_gpus=1
+
+        """
+        return self.call_script_module_function("slurm_docker", run_args)
+
+    def slurm_apptainer(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-apptainer
+    ################################################################################
+
+    The `slurm-apptainer` action runs an MLC apptainer script on a SLURM cluster
+    node via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-apptainer script --tags=detect,os
+    mlcsa detect,os --slurm_partition=gpu --slurm_gpus=1
+
+        """
+        return self.call_script_module_function("slurm_apptainer", run_args)
+
+    def slurm_experiment(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-experiment
+    ################################################################################
+
+    The `slurm-experiment` action runs an MLC experiment on a SLURM cluster node
+    via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-experiment script --tags=detect,os
+    mlcse detect,os --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function("slurm_experiment", run_args)
+
+    def remote_slurm(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: remote-slurm
+    ################################################################################
+
+    The `remote-slurm` action connects to a remote machine via SSH and runs an
+    MLC slurm-run script there.  Accepts all --remote_* flags from remote-run as
+    well as all --slurm_* flags from slurm-run.
+
+    Example Command:
+
+    mlc remote-slurm script --tags=detect,os --remote_host=mycluster.example.com
+    mlcrs detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function("remote_slurm", run_args)
 
 
 class ScriptExecutionError(Exception):

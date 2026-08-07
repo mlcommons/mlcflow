@@ -11,13 +11,15 @@ from datetime import datetime
 from script.script_utils import *
 
 
-def slurm_run(self_module, i):
+def slurm_run(self_module, i, slurm_action='run'):
     """
     Run MLC scripts on a SLURM cluster node via srun.
 
     Args:
         self_module: Reference to the current module for internal calls.
         i: Dictionary containing input parameters for the slurm execution.
+        slurm_action: The MLC action to use on the node ('run', 'docker',
+            'apptainer', 'experiment'). Defaults to 'run'.
 
     Returns:
         Dictionary with the result of the operation. Keys:
@@ -90,6 +92,7 @@ def slurm_run(self_module, i):
 
     i_copy = copy.deepcopy(i)
     i_copy['run_cmd'] = run_input
+    i_copy['slurm_action'] = slurm_action
 
     r = regenerate_script_cmd(i_copy)
     if r['return'] > 0:
@@ -193,12 +196,19 @@ def slurm_run(self_module, i):
 
 def regenerate_script_cmd(i):
     """
-    Rebuild the mlcr command string from the pruned input dict.
+    Rebuild the mlcr/mlcd/mlce/mlca command string from the pruned input dict.
     """
 
     i_run_cmd = i['run_cmd']
+    slurm_action = i.get('slurm_action', 'run')
 
-    run_cmd = 'mlcr'
+    action_to_cmd = {
+        'run': 'mlcr',
+        'docker': 'mlcd',
+        'apptainer': 'mlca',
+        'experiment': 'mlce',
+    }
+    run_cmd = action_to_cmd.get(slurm_action, 'mlcr')
 
     def rebuild_flags(command_dict, prefix):
         command_line = ""
@@ -239,3 +249,18 @@ def _shell_quote(s):
         return s
     # Otherwise single-quote it, escaping any embedded single quotes
     return "'" + s.replace("'", "'\\''") + "'"
+
+
+def slurm_docker(self_module, i):
+    """Run an MLC docker script on a SLURM cluster node via srun."""
+    return slurm_run(self_module, i, slurm_action='docker')
+
+
+def slurm_apptainer(self_module, i):
+    """Run an MLC apptainer script on a SLURM cluster node via srun."""
+    return slurm_run(self_module, i, slurm_action='apptainer')
+
+
+def slurm_experiment(self_module, i):
+    """Run an MLC experiment on a SLURM cluster node via srun."""
+    return slurm_run(self_module, i, slurm_action='experiment')

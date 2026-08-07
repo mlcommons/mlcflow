@@ -4531,6 +4531,27 @@ pip install mlcflow
         from script.slurm_run import slurm_run
         return slurm_run(self, i)
 
+    ############################################################
+    def slurm_docker(self, i):
+        from script.slurm_run import slurm_docker
+        return slurm_docker(self, i)
+
+    ############################################################
+    def slurm_apptainer(self, i):
+        from script.slurm_run import slurm_apptainer
+        return slurm_apptainer(self, i)
+
+    ############################################################
+    def slurm_experiment(self, i):
+        from script.slurm_run import slurm_experiment
+        return slurm_experiment(self, i)
+
+    ############################################################
+    def remote_slurm(self, i):
+        from script.remote_run import remote_run
+        i['remote_action'] = 'slurm-run'
+        return remote_run(self, i)
+
     ##########################################################################
 
     def _available_variations(self, i):
