@@ -21,11 +21,6 @@ class CacheAction(Action):
 
     """
 
-    def __init__(self, parent=None):
-        # super().__init__(parent)
-        self.parent = parent
-        self.__dict__.update(vars(parent))
-
     def search(self, i):
         """
     ####################################################################################################################

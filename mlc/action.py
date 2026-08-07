@@ -15,6 +15,7 @@ from .index import Index
 from .repo import Repo
 from .item import Item
 from .error_codes import WarningCode
+from .state import MLCState
 
 # Base class for actions
 
@@ -24,9 +25,40 @@ class Action:
     cfg = None
     action_type = None
     logger = None
-    local_repo = None
-    current_repo_path = None
-    repos = []  # list of Repo objects
+    local_cache_path = None
+
+    # Startup configuration, handed down to a delegate by value because it does
+    # not change after __init__ bootstraps the root. Anything that *does* change
+    # while mlc runs belongs on MLCState instead, so that a write from one
+    # delegate is visible to all the others.
+    _CONFIG_ATTRS = ('repos_path', 'local_cache_path', 'cfg', 'logger')
+
+    # Read/written as plain attributes throughout the codebase; routing them
+    # through self.state means `self.repos = ...` in a delegate updates the one
+    # shared object rather than rebinding a private copy that dies with it.
+    @property
+    def repos(self):
+        return self.state.repos
+
+    @repos.setter
+    def repos(self, value):
+        self.state.repos = value
+
+    @property
+    def local_repo(self):
+        return self.state.local_repo
+
+    @local_repo.setter
+    def local_repo(self, value):
+        self.state.local_repo = value
+
+    @property
+    def current_repo_path(self):
+        return self.state.current_repo_path
+
+    @current_repo_path.setter
+    def current_repo_path(self, value):
+        self.state.current_repo_path = value
 
     # Main access function to simulate a Python interface for CLI
     def access(self, options):
@@ -217,9 +249,11 @@ class Action:
             return None
 
     def get_index(self):
-        if self._index is None:
-            self._index = Index(self.repos_path, self.repos)
-        return self._index
+        # Cached on the shared state, so the index a delegate updates during a
+        # pull is the same one a later search reads.
+        if self.state.index is None:
+            self.state.index = Index(self.repos_path, self.repos)
+        return self.state.index
 
     def _item_from_index_entry(self, res, target_name):
         """Create an Item from an index entry and skip entries with invalid meta."""
@@ -230,7 +264,23 @@ class Action:
             return None
         return it
 
-    def __init__(self):
+    def __init__(self, parent=None):
+        self.parent = parent
+
+        if parent is not None:
+            # A delegate built by get_action(): share the dispatcher's state
+            # object and take its startup config. A parent that is not an
+            # Action (test stubs carrying just repos_path) has no state to
+            # share, so the delegate gets its own; attributes the stub lacks
+            # fall back to the class defaults.
+            self.state = getattr(parent, 'state', None) or MLCState()
+            for attr in self._CONFIG_ATTRS:
+                if hasattr(parent, attr):
+                    setattr(self, attr, getattr(parent, attr))
+            return
+
+        self.state = MLCState()
+
         setup_logging(log_path=os.getcwd(), log_file='.mlc-log.txt')
         self.logger = logger
 
@@ -270,7 +320,6 @@ class Action:
 
         self.repos = self.load_repos_and_meta()
         # logger.info(f"In Action class: {self.repos_path}")
-        self._index = None
 
     def add(self, i):
         """
