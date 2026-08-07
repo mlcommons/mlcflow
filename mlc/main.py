@@ -288,10 +288,6 @@ def process_console_output(res, target, action, run_args):
                 f"Warning code: {warning['code']}, Discription: {warning['description']}")
 
 
-if default_parent is None:
-    default_parent = Action()
-
-
 log_flag_aliases = {'-v': '--verbose', '-s': '--silent'}
 log_levels = {'--verbose': logging.DEBUG, '--silent': logging.WARNING}
 
