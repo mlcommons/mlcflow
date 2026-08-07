@@ -77,8 +77,10 @@ def slurm_run(self_module, i, slurm_action='run'):
                 }
     slurm_nodes = str(int(slurm_nodes)) if slurm_nodes else ''
     slurm_ntasks = str(int(slurm_ntasks)) if slurm_ntasks else ''
-    slurm_ntasks_per_node = str(int(slurm_ntasks_per_node)) if slurm_ntasks_per_node else ''
-    slurm_cpus_per_task = str(int(slurm_cpus_per_task)) if slurm_cpus_per_task else ''
+    slurm_ntasks_per_node = str(
+        int(slurm_ntasks_per_node)) if slurm_ntasks_per_node else ''
+    slurm_cpus_per_task = str(
+        int(slurm_cpus_per_task)) if slurm_cpus_per_task else ''
 
     prune_result = prune_input(
         {'input': i, 'extra_keys_starts_with': ['slurm_']})
