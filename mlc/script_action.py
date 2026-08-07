@@ -318,6 +318,9 @@ Main Script Meta:""")
                 elif function_name == "remote_run":
                     result = automation_instance.remote_run(
                         run_args)  # Pass args to the experiment method
+                elif function_name == "slurm_run":
+                    result = automation_instance.slurm_run(
+                        run_args)  # Pass args to the slurm run method
                 elif function_name == "help":
                     result = automation_instance.help(
                         run_args)  # Pass args to the help method
@@ -733,6 +736,76 @@ Main Script Meta:""")
         """
         run_args["remote_action"] = "docker"
         return self.call_script_module_function("remote_run", run_args)
+
+    def slurm_run(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-run
+    ################################################################################
+
+    The `slurm-run` action runs an MLC script on a SLURM cluster node via srun.
+
+    Flags Available:
+
+    1. --slurm_partition:
+        SLURM partition to submit to
+    2. --slurm_nodes:
+        Number of nodes (default: 1)
+    3. --slurm_ntasks:
+        Number of tasks (default: 1)
+    4. --slurm_ntasks_per_node:
+        Number of tasks per node
+    5. --slurm_cpus_per_task:
+        Number of CPUs per task
+    6. --slurm_gpus:
+        Total number of GPUs
+    7. --slurm_gpus_per_node:
+        Number of GPUs per node
+    8. --slurm_gpus_per_task:
+        Number of GPUs per task
+    9. --slurm_mem:
+        Total memory (e.g., 16G)
+    10. --slurm_mem_per_cpu:
+        Memory per CPU (e.g., 4G)
+    11. --slurm_mem_per_gpu:
+        Memory per GPU (e.g., 8G)
+    12. --slurm_time:
+        Time limit (e.g., 01:00:00)
+    13. --slurm_job_name:
+        Job name
+    14. --slurm_output:
+        Output file pattern (e.g., slurm-%j.out)
+    15. --slurm_error:
+        Error file pattern (e.g., slurm-%j.err)
+    16. --slurm_account:
+        Account to charge
+    17. --slurm_qos:
+        Quality of service
+    18. --slurm_constraint:
+        Node feature constraint
+    19. --slurm_exclusive:
+        Request exclusive node access (default: False)
+    20. --slurm_export:
+        Environment export mode (default: ALL)
+    21. --slurm_srun_extra_args:
+        Additional arguments to pass directly to srun
+    22. --slurm_python_venv:
+        Python virtual environment name on the node (default: mlcflow)
+    23. --slurm_pull_mlc_repos:
+        Pull MLC repos on the node before running
+    24. --slurm_pre_run_cmds:
+        Commands to run on the node before the main script
+    25. --slurm_post_run_cmds:
+        Commands to run on the node after the main script
+
+    Example Command:
+
+    mlc slurm-run script --tags=detect,os
+    mlcsr detect,os --slurm_partition=gpu --slurm_gpus=1 --slurm_time=01:00:00
+
+        """
+        return self.call_script_module_function("slurm_run", run_args)
 
 
 class ScriptExecutionError(Exception):

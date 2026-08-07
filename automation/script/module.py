@@ -4526,6 +4526,11 @@ pip install mlcflow
         from script.remote_run import remote_run
         return remote_run(self, i)
 
+    ############################################################
+    def slurm_run(self, i):
+        from script.slurm_run import slurm_run
+        return slurm_run(self, i)
+
     ##########################################################################
 
     def _available_variations(self, i):
