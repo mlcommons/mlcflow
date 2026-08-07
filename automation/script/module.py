@@ -611,9 +611,8 @@ class ScriptAutomation(Automation):
         meta = script_item.meta
         path = script_item.path
 
-        # Check mlcflow version requirements
-        # mlc_compat (new): multi-entry, per-entry messages, warn or block
-        # min_mlc_version (legacy): single threshold, always blocks
+        # Check mlcflow version requirements (mlc_compat: multi-entry,
+        # per-entry messages, warn or block)
         script_alias = meta.get('alias', '')
         try:
             from script.compat import get_installed_version, check_mlc_compat, format_compat_notice
@@ -635,18 +634,6 @@ class ScriptAutomation(Automation):
                         )}
                     else:
                         self.logger.warning(notice)
-            else:
-                # Fall back to legacy min_mlc_version (single threshold, always
-                # blocks)
-                min_mlc_version = meta.get('min_mlc_version', '').strip()
-                if min_mlc_version and current_mlc_version:
-                    if utils.compare_versions(
-                            current_mlc_version, min_mlc_version) < 0:
-                        return {'return': 1, 'error': (
-                            'This script requires mlcflow >= {} (installed: {}) '
-                            '— please upgrade: pip install --upgrade mlcflow'.format(
-                                min_mlc_version, current_mlc_version)
-                        )}
         except Exception as e:
             # Never let a compat-check failure block script execution
             self.logger.debug('mlc_compat check skipped: {}'.format(e))
