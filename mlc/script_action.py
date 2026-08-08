@@ -300,49 +300,17 @@ Main Script Meta:""")
                     self, module_path)
 
             try:
-                if function_name == "run":
-                    result = automation_instance.run(
-                        run_args)  # Pass args to the run method
-                elif function_name == "docker":
-                    result = automation_instance.docker(
-                        run_args)  # Pass args to the run method
-                elif function_name == "apptainer":
-                    result = automation_instance.apptainer(
-                        run_args)  # Pass args to the apptainer method
-                elif function_name == "test":
-                    result = automation_instance.test(
-                        run_args)  # Pass args to the run method
-                elif function_name == "experiment":
-                    result = automation_instance.experiment(
-                        run_args)  # Pass args to the experiment method
-                elif function_name == "remote_run":
-                    result = automation_instance.remote_run(
-                        run_args)  # Pass args to the experiment method
-                elif function_name == "slurm_run":
-                    result = automation_instance.slurm_run(
-                        run_args)  # Pass args to the slurm run method
-                elif function_name == "slurm_docker":
-                    result = automation_instance.slurm_docker(run_args)
-                elif function_name == "slurm_apptainer":
-                    result = automation_instance.slurm_apptainer(run_args)
-                elif function_name == "slurm_experiment":
-                    result = automation_instance.slurm_experiment(run_args)
-                elif function_name == "remote_slurm":
-                    result = automation_instance.remote_slurm(run_args)
-                elif function_name == "remote_slurm_experiment":
-                    result = automation_instance.remote_slurm_experiment(run_args)
-                elif function_name == "help":
-                    result = automation_instance.help(
-                        run_args)  # Pass args to the help method
-                elif function_name == "doc":
-                    result = automation_instance.doc(
-                        run_args)  # Pass args to the doc method
-                elif function_name == "lint":
-                    result = automation_instance.lint(
-                        run_args)  # Pass args to the lint method
-                else:
+                method = getattr(automation_instance, function_name, None)
+                if method is None:
                     return {
-                        'return': 1, 'error': f'Function {function_name} is not supported'}
+                        'return': 1,
+                        'error': (
+                            f"Action '{function_name}' is not supported by the loaded "
+                            f"automation engine at '{module_path}'. "
+                            "You may need a newer version of mlcflow."
+                        )
+                    }
+                result = method(run_args)
             except ScriptExecutionError:
                 raise
             except Exception as exc:

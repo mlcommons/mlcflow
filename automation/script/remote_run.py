@@ -320,9 +320,15 @@ def regenerate_script_cmd(i):
     # docker_run_cmd_prefix = i.get('docker_run_cmd_prefix', '')
 
     # Regenerate command from dictionary input
-    run_cmd = 'mlcd' if remote_action == 'docker' else (
-        'mlce' if remote_action == 'experiment' else (
-            'mlcsr' if remote_action == 'slurm-run' else 'mlcr'))
+    _remote_action_cmd = {
+        'docker': 'mlcd',
+        'experiment': 'mlce',
+        'slurm-run': 'mlcsr',
+        'slurm-experiment': 'mlcse',
+        'slurm-docker': 'mlcsd',
+        'slurm-apptainer': 'mlcsa',
+    }
+    run_cmd = _remote_action_cmd.get(remote_action, 'mlcr')
 
     skip_input_for_fake_run = remote_run_settings.get(
         'skip_input_for_fake_run', [])

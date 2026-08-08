@@ -12,6 +12,8 @@ on:
       - 'automation/script/slurm_run.py'
       - 'automation/script/remote_run.py'
       - 'automation/script/module.py'
+      - 'automation/utils.py'
+      - 'tests/test_slurm_run.py'
       - '!**.md'
 
 jobs:
@@ -34,6 +36,10 @@ jobs:
     - name: Pull automation repo
       run: |
         mlc pull repo mlcommons@mlperf-automations --checkout=dev
+
+    - name: Run slurm unit tests
+      run: |
+        python -m pytest tests/test_slurm_run.py -v
 
     - name: Smoke test - mlcsr help
       run: |

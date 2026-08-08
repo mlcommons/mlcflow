@@ -1,12 +1,8 @@
-from collections import defaultdict
 import os
 import shlex
-import logging
+import shutil
 import subprocess
-from pathlib import PureWindowsPath, PurePosixPath
-import time
 import copy
-from datetime import datetime
 from utils import is_true, prune_input
 from script.script_utils import *
 
@@ -58,6 +54,19 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_pull_mlc_repos = i.get('slurm_pull_mlc_repos', False)
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
+
+    # Normalize str → list so a single command string doesn't get iterated char-by-char
+    if isinstance(slurm_pre_run_cmds, str):
+        slurm_pre_run_cmds = [slurm_pre_run_cmds] if slurm_pre_run_cmds else []
+    if isinstance(slurm_post_run_cmds, str):
+        slurm_post_run_cmds = [slurm_post_run_cmds] if slurm_post_run_cmds else []
+
+    # Check that srun is available before proceeding
+    if not shutil.which('srun'):
+        return {
+            'return': 1,
+            'error': "srun not found in PATH -- are you on a SLURM login node?"
+        }
 
     # Validate and normalize integer SLURM parameters
     int_params = {
@@ -130,9 +139,10 @@ def slurm_run(self_module, i, slurm_action='run'):
     run_cmds = []
 
     # Bootstrap mlcflow on the node
+    quoted_venv = shlex.quote(slurm_python_venv)
     run_cmds.append(
-        f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {slurm_python_venv}')
-    run_cmds.append(f'. {slurm_python_venv}/bin/activate')
+        f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {quoted_venv}')
+    run_cmds.append(f'. {quoted_venv}/bin/activate')
 
     if is_true(slurm_pull_mlc_repos):
         run_cmds.append('mlc pull repo')
