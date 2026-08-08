@@ -386,6 +386,12 @@ is_compatible_venv() {
         return 1
     fi
 
+    # Verify pip is functional inside the venv
+    if ! "$venv_python" -m pip --version >/dev/null 2>&1; then
+        log_debug "Virtual environment at $venv_dir has broken or missing pip."
+        return 1
+    fi
+
     if ! current_signature="$(get_python_compatibility_signature "$PYTHON_CMD")"; then
         log_debug "Failed to determine compatibility signature for $PYTHON_CMD."
         return 1
