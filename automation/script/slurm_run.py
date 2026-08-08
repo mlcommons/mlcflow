@@ -54,6 +54,7 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_pull_mlc_repos = i.get('slurm_pull_mlc_repos', False)
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
+    slurm_no_internet = is_true(i.get('slurm_no_internet', False))
 
     # Normalize str → list so a single command string doesn't get iterated
     # char-by-char
@@ -142,8 +143,13 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     # Bootstrap mlcflow on the node
     quoted_venv = shlex.quote(slurm_python_venv)
-    run_cmds.append(
-        f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {quoted_venv}')
+    if slurm_no_internet:
+        # Use installer from local mlcflow repo or pre-downloaded copy
+        installer_path = _get_local_installer()
+        run_cmds.append(f'bash {shlex.quote(installer_path)} --yes --venv-dir {quoted_venv}')
+    else:
+        run_cmds.append(
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {quoted_venv}')
     run_cmds.append(f'. {quoted_venv}/bin/activate')
 
     if is_true(slurm_pull_mlc_repos):
@@ -282,3 +288,28 @@ def slurm_apptainer(self_module, i):
 def slurm_experiment(self_module, i):
     """Run an MLC experiment on a SLURM cluster node via srun."""
     return slurm_run(self_module, i, slurm_action='experiment')
+
+
+INSTALLER_URL = 'https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh'
+
+
+def _get_local_installer():
+    """
+    Get the mlcflow installer script locally. First checks if it's available
+    in the local mlcflow repo, otherwise downloads it to a temp location.
+    Returns the local path to the installer script.
+    """
+    import tempfile
+
+    # Check if the installer exists in the local mlcflow package
+    local_installer = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        'docs', 'install', 'mlcflow_unix_installer.sh')
+    if os.path.isfile(local_installer):
+        return local_installer
+
+    # Download to a temp file
+    import urllib.request
+    tmp_path = os.path.join(tempfile.gettempdir(), 'mlcflow_unix_installer.sh')
+    urllib.request.urlretrieve(INSTALLER_URL, tmp_path)
+    return tmp_path
