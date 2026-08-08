@@ -378,6 +378,12 @@ is_compatible_venv() {
         return 1
     fi
 
+    # Verify the venv python is actually functional (not broken/dangling)
+    if ! "$venv_python" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
+        log_debug "Virtual environment python at $venv_python is broken."
+        return 1
+    fi
+
     if ! current_signature="$(get_python_compatibility_signature "$PYTHON_CMD")"; then
         log_debug "Failed to determine compatibility signature for $PYTHON_CMD."
         return 1
@@ -401,8 +407,15 @@ resolve_venv_dir() {
             return
         fi
 
+        # Default venv exists but is broken or incompatible — try the
+        # platform/python-versioned alternative
+        log_debug "Virtual environment at $requested_venv_dir is broken or incompatible." >&2
         resolved_venv_dir="$compatible_venv_dir"
-        if [ -d "$resolved_venv_dir" ] && ! is_compatible_venv "$resolved_venv_dir"; then
+        if [ -d "$resolved_venv_dir" ]; then
+            if is_compatible_venv "$resolved_venv_dir"; then
+                echo "$resolved_venv_dir"
+                return
+            fi
             log_warn "Removing stale/incompatible virtual environment: $resolved_venv_dir" >&2
             rm -rf "$resolved_venv_dir"
         fi
