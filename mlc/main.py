@@ -240,6 +240,34 @@ def mlcrd():
     mlc_expand_short("remote-docker")
 
 
+def mlcsr():
+    mlc_expand_short("slurm-run")
+
+
+def mlcse():
+    mlc_expand_short("slurm-experiment")
+
+
+def mlcsd():
+    mlc_expand_short("slurm-docker")
+
+
+def mlcsa():
+    mlc_expand_short("slurm-apptainer")
+
+
+def mlcrs():
+    mlc_expand_short("remote-slurm")
+
+
+def mlcres():
+    mlc_expand_short("remote-slurm-experiment")
+
+
+def mlcrse():
+    mlc_expand_short("remote-slurm-experiment")
+
+
 def mlce():
     mlc_expand_short("experiment")
 
@@ -374,7 +402,10 @@ def build_parser(pre_args):
     # Script-only
     for action in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
                    'experiment', 'remote-run', 'remote-experiment',
-                   'remote-docker', 'doc', 'lint']:
+                   'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                   'slurm-run',
+                   'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
+                   'doc', 'lint']:
         p = subparsers.add_parser(action, add_help=False)
         p.add_argument('target', choices=['script', 'run'])
         p.add_argument(
@@ -416,7 +447,10 @@ def build_run_args(args):
 
     if args.command in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
                         'experiment', 'remote-run', 'remote-experiment',
-                        'remote-docker', 'doc', 'lint'] and args.target == "run":
+                        'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                        'slurm-run',
+                        'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
+                        'doc', 'lint'] and args.target == "run":
         # run_args['target'] = 'script' #dont modify this as script might have
         # target as in input
         args.target = "script"
@@ -552,7 +586,19 @@ def main():
         if not pre_args.action and not pre_args.target:
             help_text += main.__doc__
         elif pre_args.action and not pre_args.target:
-            if pre_args.action not in ['script', 'cache', 'repo']:
+            script_only_actions = {
+                a.replace("-", "_")
+                for a in [
+                    'docker', 'docker-run', 'apptainer', 'apptainer-run',
+                    'experiment', 'remote-run', 'remote-experiment',
+                    'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                    'slurm-run', 'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
+                    'doc', 'lint',
+                ]
+            }
+            if pre_args.action in script_only_actions:
+                pre_args.target = 'script'
+            elif pre_args.action not in ['script', 'cache', 'repo']:
                 logger.error(f"Invalid target {pre_args.action}")
                 raise Exception(f"""Invalid target {pre_args.action}""")
             else:
