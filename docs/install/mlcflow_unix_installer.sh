@@ -581,8 +581,6 @@ main() {
     fi
 
     install_mlcflow
-    prompt_repo_details
-    pull_repo
 
     log_info "Installation completed successfully."
     echo ""
