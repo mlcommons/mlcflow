@@ -35,6 +35,7 @@ def remote_run(self_module, i):
     remote_port = i.get('remote_port', '22')
     remote_action = i.get('remote_action', 'run')
     remote_shell = i.get('remote_shell', '')
+    remote_no_internet = is_true(i.get('remote_no_internet', False))
 
     prune_result = prune_input(
         {'input': i, 'extra_keys_starts_with': ['remote_']})
@@ -101,8 +102,15 @@ def remote_run(self_module, i):
     # Note: The remote activation command uses Unix syntax because we're SSHing into a (likely) Unix server
     # Even if we're running from Windows locally, the remote commands execute
     # on the remote server
-    run_cmds.append(
-        f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {remote_mlc_python_venv}')
+    if remote_no_internet:
+        # Download installer locally and copy it to the remote machine
+        installer_local_path = _get_local_installer()
+        files_to_copy.append(installer_local_path)
+        remote_installer = "mlc-remote-artifacts/" + os.path.basename(installer_local_path)
+        run_cmds.append(f'bash {remote_installer} --yes --venv-dir {remote_mlc_python_venv}')
+    else:
+        run_cmds.append(
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {remote_mlc_python_venv}')
     run_cmds.append(f". {remote_mlc_python_venv}/bin/activate")
     # is_true() rather than a bare truthiness check: this arrives from the CLI
     # as a string, so '--remote_pull_mlc_repos=no' is a non-empty (truthy)
@@ -405,3 +413,28 @@ def regenerate_script_cmd(i):
     #    run_cmd if docker_run_cmd_prefix != '' else run_cmd
 
     return {'return': 0, 'run_cmd_string': run_cmd}
+
+
+INSTALLER_URL = 'https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh'
+
+
+def _get_local_installer():
+    """
+    Get the mlcflow installer script locally. First checks if it's available
+    in the local mlcflow repo, otherwise downloads it to a temp location.
+    Returns the local path to the installer script.
+    """
+    import tempfile
+
+    # Check if the installer exists in the local mlcflow package
+    local_installer = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        'docs', 'install', 'mlcflow_unix_installer.sh')
+    if os.path.isfile(local_installer):
+        return local_installer
+
+    # Download to a temp file
+    import urllib.request
+    tmp_path = os.path.join(tempfile.gettempdir(), 'mlcflow_unix_installer.sh')
+    urllib.request.urlretrieve(INSTALLER_URL, tmp_path)
+    return tmp_path
