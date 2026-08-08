@@ -13,6 +13,21 @@
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
+# Deactivate any active virtual environment so checks use the system Python.
+# The installer will activate the correct venv later.
+# ------------------------------------------------------------------------------
+if [ -n "${VIRTUAL_ENV:-}" ]; then
+    # 'deactivate' may not be available (e.g. venv is broken), so fall back
+    # to manually stripping the venv from PATH.
+    if command -v deactivate >/dev/null 2>&1; then
+        deactivate 2>/dev/null || true
+    fi
+    # Ensure the venv bin dir is removed from PATH even if deactivate failed
+    PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "^${VIRTUAL_ENV}/" | paste -sd: -)"
+    unset VIRTUAL_ENV
+fi
+
+# ------------------------------------------------------------------------------
 # Default Configuration
 # ------------------------------------------------------------------------------
 
@@ -228,10 +243,11 @@ check_missing_dependencies() {
 
     if ! command -v python3 >/dev/null 2>&1; then
         MISSING_DEPS+=("python3")
-    else
-        have_pip_module || MISSING_DEPS+=("python3-pip")
-        have_venv_module || MISSING_DEPS+=("python3-venv")
     fi
+    # Note: pip/venv module checks are deferred to ensure_python() which runs
+    # after venv resolution. Checking them here would falsely flag them as
+    # missing when a working venv already exists but the system python lacks
+    # the modules (they are not needed if the venv is already set up).
 }
 
 install_packages() {
@@ -294,20 +310,6 @@ ensure_python() {
         handle_python_install
     fi
 
-    if ! have_pip_module; then
-        log_warn "python3 pip module is missing. Installing..."
-        install_packages
-    fi
-
-    if ! have_venv_module; then
-        log_warn "python3 venv module is missing. Installing..."
-        install_packages
-    fi
-
-    if ! have_pip_module || ! have_venv_module; then
-        log_error "pip/venv modules are still missing after attempted installation."
-        exit 1
-    fi
 }
 
 handle_python_install() {
@@ -545,7 +547,33 @@ main() {
     fi
 
     ensure_python
-    setup_venv
+
+    # If a compatible venv already exists at the target path, we can skip
+    # the pip/venv system-package requirement — just activate and go.
+    local target_venv
+    target_venv="$(resolve_venv_dir "$VENV_DIR")"
+    if [ -d "$target_venv" ] && is_compatible_venv "$target_venv"; then
+        log_info "Found working virtual environment at: $target_venv"
+        VENV_DIR="$target_venv"
+        # shellcheck disable=SC1090
+        source "$VENV_DIR/bin/activate"
+    else
+        # We need pip and venv to create a new environment
+        if ! have_pip_module; then
+            log_warn "python3 pip module is missing. Installing..."
+            install_packages
+        fi
+        if ! have_venv_module; then
+            log_warn "python3 venv module is missing. Installing..."
+            install_packages
+        fi
+        if ! have_pip_module || ! have_venv_module; then
+            log_error "pip/venv modules are still missing after attempted installation."
+            exit 1
+        fi
+        setup_venv
+    fi
+
     install_mlcflow
     prompt_repo_details
     pull_repo
