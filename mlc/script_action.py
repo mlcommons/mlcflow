@@ -5,7 +5,6 @@ import sys
 import importlib
 import json
 import inspect
-from .index import Index
 from . import utils
 from .error_codes import get_error_guidance
 from .logger import logger
@@ -38,11 +37,6 @@ class ScriptAction(Action):
     Using both alias and UID: <script_alias>,<script_uid> (e.g., detect-os,5b4e0237da074764)
 
     """
-    parent = None
-
-    def __init__(self, parent=None):
-        self.parent = parent
-        self.__dict__.update(vars(parent))
 
     def search(self, i):
         """
@@ -268,9 +262,6 @@ Main Script Meta:""")
             })
 
             if result['return'] == 0:
-                self.repos = self.load_repos_and_meta()
-                self.index = Index(self.repos_path, self.repos)
-
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
                 if not script_path or not self._content_repo_registered():

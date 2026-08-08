@@ -45,11 +45,6 @@ class RepoAction(Action):
     GIT_MISSING_BRANCH_PHRASE = "did not match any file(s) known to git"
     GIT_FAST_FORWARD_FAILURE_PHRASE = "not possible to fast-forward"
 
-    def __init__(self, parent=None):
-        # super().__init__(parent)
-        self.parent = parent
-        self.__dict__.update(vars(parent))
-
     def _build_pull_command(self, repo_path, branch=None, clone_depth=None,
                             fast_forward_only=False):
         pull_command = ['git', '-C', repo_path, 'pull']

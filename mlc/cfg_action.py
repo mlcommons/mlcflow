@@ -6,11 +6,7 @@ from .logger import logger
 
 class CfgAction(Action):
     def __init__(self, parent=None):
-        if parent is None:
-            parent = default_parent
-        #super().__init__(parent)
-        self.parent = parent
-        self.__dict__.update(vars(parent))
+        super().__init__(parent if parent is not None else default_parent)
 
     def load(self, args):
         """
