@@ -22,9 +22,7 @@ class CacheAction(Action):
     """
 
     def __init__(self, parent=None):
-        # super().__init__(parent)
-        self.parent = parent
-        self.__dict__.update(vars(parent))
+        self._inherit_from_parent(parent)
 
     def search(self, i):
         """
@@ -102,6 +100,10 @@ class CacheAction(Action):
         """
         i['target_name'] = "cache"
         # logger.debug(f"Removing cache with input: {i}")
+        # Deliberately the base implementation on the *base* receiver, not
+        # super().rm(i): Action.rm() calls self.search(), and going through
+        # this class's search() would filter out expired caches, i.e. leave
+        # exactly the entries a user runs `mlc rm cache` to get rid of.
         return self.parent.rm(i)
 
     def mark_tmp(self, i):

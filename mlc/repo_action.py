@@ -13,6 +13,21 @@ from .repo import Repo
 from .index import Index
 
 
+def repos_json_lock(repos_file_path):
+    """Serialize the read-modify-write of repos.json across mlc processes.
+
+    Without this, two concurrent `mlc pull repo` runs can each read the same
+    list and the slower write silently drops the other's entry. Hold this
+    across the whole read-modify-write.
+
+    Keep the locked region narrow - nothing inside it may call a function that
+    takes this same lock, or two FileLocks on one file deadlock within a
+    single process.
+    """
+    return utils.file_lock_with_incremental_timeout(
+        repos_file_path + ".lock")
+
+
 class RepoAction(Action):
     """
     ####################################################################################################################
@@ -46,9 +61,7 @@ class RepoAction(Action):
     GIT_FAST_FORWARD_FAILURE_PHRASE = "not possible to fast-forward"
 
     def __init__(self, parent=None):
-        # super().__init__(parent)
-        self.parent = parent
-        self.__dict__.update(vars(parent))
+        self._inherit_from_parent(parent)
 
     def _build_pull_command(self, repo_path, branch=None, clone_depth=None,
                             fast_forward_only=False):
@@ -327,15 +340,17 @@ class RepoAction(Action):
         # Get the path to the repos.json file in $HOME/MLC
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
 
-        with open(repos_file_path, 'r') as f:
-            repos_list = json.load(f)
+        with repos_json_lock(repos_file_path):
+            with open(repos_file_path, 'r') as f:
+                repos_list = json.load(f)
 
-        if repo_path not in repos_list:
-            repos_list.append(repo_path)
-            logger.info(f"Added new repo path: {repo_path}")
+            if repo_path not in repos_list:
+                repos_list.append(repo_path)
+                logger.info(f"Added new repo path: {repo_path}")
 
-        with open(repos_file_path, 'w') as f:
-            json.dump(repos_list, f, indent=2)
+            res = utils.save_json_atomic(repos_file_path, repos_list, indent=2)
+            if res['return'] > 0:
+                return res
             logger.info(f"Updated repos.json at {repos_file_path}")
 
         self.repos = self.load_repos_and_meta()
@@ -345,6 +360,8 @@ class RepoAction(Action):
         )
 
         if repo_obj:
+            # Lands on the shared state owner (Action._state_owner()), so any
+            # search()/find()/rm() dispatched after this pull sees it too.
             index = Action.get_index(self)
             index.add_repo(repo_obj)
             logger.debug("Index file has been updated")
@@ -1033,16 +1050,18 @@ def rm_repo(repo_path, repos_file_path, force_remove):
 def unregister_repo(repo_path, repos_file_path):
     logger.info(f"Unregistering the repo in path {repo_path}")
 
-    with open(repos_file_path, 'r') as f:
-        repos_list = json.load(f)
+    with repos_json_lock(repos_file_path):
+        with open(repos_file_path, 'r') as f:
+            repos_list = json.load(f)
 
-    if repo_path in repos_list:
-        repos_list.remove(repo_path)
-        with open(repos_file_path, 'w') as f:
-            json.dump(repos_list, f, indent=2)
-        logger.info(f"Path: {repo_path} has been removed.")
-    else:
-        logger.info(
-            f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
+        if repo_path in repos_list:
+            repos_list.remove(repo_path)
+            res = utils.save_json_atomic(repos_file_path, repos_list, indent=2)
+            if res['return'] > 0:
+                return res
+            logger.info(f"Path: {repo_path} has been removed.")
+        else:
+            logger.info(
+                f"Path: {repo_path} not found in {repos_file_path}. Nothing to be unregistered!")
 
     return {'return': 0}

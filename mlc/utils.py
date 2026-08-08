@@ -12,8 +12,30 @@ import shutil
 import tarfile
 import zipfile
 import logging
+from contextlib import contextmanager
+from filelock import FileLock, Timeout
 from packaging import version
 logger = logging.getLogger("mlc")
+
+
+@contextmanager
+def file_lock_with_incremental_timeout(lock_file, timeout_seconds=60):
+    """
+    Acquire a file lock by waiting up to a minute, then retrying once if it times out.
+    """
+    try:
+        with FileLock(lock_file, timeout=timeout_seconds):
+            yield  # Control goes to the caller's 'with' block while the file lock is held
+            return
+    except Timeout:
+        waited = int(timeout_seconds)
+        logger.warning(
+            f"Timeout acquiring lock {lock_file} after {waited}s. "
+            f"Retrying once for another {waited}s..."
+        )
+
+    with FileLock(lock_file, timeout=timeout_seconds):
+        yield
 
 
 def get_repo_version(repo_path):
@@ -412,6 +434,40 @@ def save_json(file_name, meta):
             json.dump(meta, f, indent=4)
         return {'return': 0, 'error': ''}
     except Exception as e:
+        return {'return': 1, 'error': str(e)}
+
+
+def save_json_atomic(file_name, meta, indent=4):
+    """
+    Saves the provided meta data to a JSON file, replacing it atomically.
+
+    The data is written to a temporary file in the same directory and then
+    renamed over the target, so a reader that is not holding the file lock
+    either sees the previous content or the new content, never a half-written
+    file. Use this for files that unlocked readers load (e.g. repos.json).
+
+    Args:
+        file_name (str): The name of the file where the JSON data will be saved.
+        meta (dict): The dictionary containing the data to be saved in JSON format.
+        indent (int): Indentation used in the written JSON.
+
+    Returns:
+        dict: A dictionary indicating success or failure of the operation.
+            - 'return' (int): 0 if the operation was successful, > 0 if an error occurred.
+            - 'error' (str): Error message, if any error occurred.
+    """
+    temp_file_name = f"{file_name}.tmp.{os.getpid()}"
+    try:
+        with open(temp_file_name, 'w') as f:
+            json.dump(meta, f, indent=indent)
+        os.replace(temp_file_name, file_name)
+        return {'return': 0, 'error': ''}
+    except Exception as e:
+        if os.path.exists(temp_file_name):
+            try:
+                os.remove(temp_file_name)
+            except OSError:
+                pass
         return {'return': 1, 'error': str(e)}
 
 
