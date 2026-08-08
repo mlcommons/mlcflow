@@ -875,7 +875,8 @@ Main Script Meta:""")
     mlcres detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
 
         """
-        return self.call_script_module_function("remote_slurm_experiment", run_args)
+        return self.call_script_module_function(
+            "remote_slurm_experiment", run_args)
 
 
 class ScriptExecutionError(Exception):

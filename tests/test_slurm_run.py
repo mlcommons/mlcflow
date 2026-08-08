@@ -42,13 +42,15 @@ class TestRemoteRunMapping(unittest.TestCase):
 
     def test_slurm_experiment_maps_to_mlcse(self):
         # Regression test for blocker #1: was falling through to 'mlcr'
-        self.assertTrue(self._regenerate('slurm-experiment').startswith('mlcse'))
+        self.assertTrue(self._regenerate(
+            'slurm-experiment').startswith('mlcse'))
 
     def test_slurm_docker_maps_to_mlcsd(self):
         self.assertTrue(self._regenerate('slurm-docker').startswith('mlcsd'))
 
     def test_slurm_apptainer_maps_to_mlcsa(self):
-        self.assertTrue(self._regenerate('slurm-apptainer').startswith('mlcsa'))
+        self.assertTrue(self._regenerate(
+            'slurm-apptainer').startswith('mlcsa'))
 
     def test_unknown_action_defaults_to_mlcr(self):
         self.assertTrue(self._regenerate('unknown-action').startswith('mlcr'))
@@ -91,7 +93,11 @@ class TestSlurmRunCmdGeneration(unittest.TestCase):
         self.assertIn('detect,os', cmd)
 
     def test_flag_included_in_output(self):
-        cmd = self._regenerate('run', run_cmd={'tags': 'detect,os', 'verbose': True})
+        cmd = self._regenerate(
+            'run',
+            run_cmd={
+                'tags': 'detect,os',
+                'verbose': True})
         self.assertIn('--verbose', cmd)
 
 
@@ -119,7 +125,8 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
                 path='/fake/path'
             )
         }
-        mock_self.update_run_state_for_selected_script_and_variations.return_value = {'return': 0}
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
         mock_self.run_state = {}
         mock_self.env = {}
         mock_self.state = {}
@@ -132,7 +139,7 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
             return 0
 
         with patch('script.slurm_run.shutil.which', return_value='/usr/bin/srun'), \
-             patch('script.slurm_run.subprocess.call', side_effect=fake_call):
+                patch('script.slurm_run.subprocess.call', side_effect=fake_call):
             from script.slurm_run import slurm_run
             result = slurm_run(mock_self, {
                 'tags': 'detect,os',

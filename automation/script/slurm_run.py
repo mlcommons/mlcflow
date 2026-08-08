@@ -55,11 +55,13 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
 
-    # Normalize str → list so a single command string doesn't get iterated char-by-char
+    # Normalize str → list so a single command string doesn't get iterated
+    # char-by-char
     if isinstance(slurm_pre_run_cmds, str):
         slurm_pre_run_cmds = [slurm_pre_run_cmds] if slurm_pre_run_cmds else []
     if isinstance(slurm_post_run_cmds, str):
-        slurm_post_run_cmds = [slurm_post_run_cmds] if slurm_post_run_cmds else []
+        slurm_post_run_cmds = [
+            slurm_post_run_cmds] if slurm_post_run_cmds else []
 
     # Check that srun is available before proceeding
     if not shutil.which('srun'):
