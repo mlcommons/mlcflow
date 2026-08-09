@@ -78,6 +78,29 @@ jobs:
       && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
+    # One release preparation at a time. Steps 4 and 5 read VERSION, PyPI and the
+    # tag list, and steps 7 and 8 write back to them — so two dispatches that
+    # overlap both read the pre-release state, both resolve to the same number,
+    # and both clear the tag guard before either has pushed. Nothing corrupt
+    # lands even today, because git refuses the loser (non-fast-forward at step
+    # 7, "already exists" at step 8, and step 8 carries an implicit success() so
+    # a failed push cannot leave an orphan tag) — but the loser dies on a raw git
+    # error, and which dispatch wins is arbitrary.
+    #
+    # Queued, the second run resolves against the state the first one left, and
+    # is refused by the ordinary guards with their own wording instead: bump=none
+    # hits the step 5 tag guard, and a bump level hits "VERSION is already ahead
+    # of the latest release" in the script.
+    #
+    # cancel-in-progress is false — interrupting a release between the VERSION
+    # push and the tag push is the one outcome worse than waiting. GitHub keeps
+    # only a single run pending per group, so a third dispatch displaces the
+    # queued second one; that is harmless here, as a pending run has not read or
+    # written anything yet.
+    concurrency:
+      group: release-prepare
+      cancel-in-progress: false
+
     permissions:
       contents: read    # the bump and the tag are pushed with the App token below
 
@@ -205,6 +228,17 @@ jobs:
       && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     environment: release
+
+    # Serialized per tag, so a re-run cannot overlap the run it is retrying:
+    # both would build the same version and race on the PyPI upload and the
+    # GitHub Release. Keyed on the ref rather than a constant, because two
+    # different tags publish two different versions and share nothing mutable —
+    # holding one behind the other would only delay it. Not cancel-in-progress,
+    # for the same reason as `prepare`: a half-finished publish is worse than a
+    # slow one.
+    concurrency:
+      group: release-publish-${{ github.ref }}
+      cancel-in-progress: false
 
     permissions:
       id-token: write   # OIDC trusted publishing to PyPI
