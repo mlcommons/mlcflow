@@ -40,6 +40,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -48,6 +49,9 @@ SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 BUMP_KINDS = ("none", "patch", "minor", "major")
 PYPI_TIMEOUT = 15
 PYPI_ATTEMPTS = 3
+# PyPI asks API consumers to identify themselves so it can contact them about a
+# misbehaving client rather than blocking a shared default UA.
+USER_AGENT = "mlcflow-release-workflow (+https://github.com/mlcommons/mlcflow)"
 
 
 def fail(message, *hints):
@@ -89,11 +93,14 @@ def released_versions(package):
     the failure to the upload step after a wheel has been built and a tag
     pushed.
     """
-    url = f"https://pypi.org/pypi/{package}/json"
+    request = urllib.request.Request(
+        f"https://pypi.org/pypi/{package}/json",
+        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+    )
     last_error = None
     for attempt in range(1, PYPI_ATTEMPTS + 1):
         try:
-            with urllib.request.urlopen(url, timeout=PYPI_TIMEOUT) as response:
+            with urllib.request.urlopen(request, timeout=PYPI_TIMEOUT) as response:
                 payload = json.load(response)
             break
         except urllib.error.HTTPError as error:
@@ -129,6 +136,48 @@ def write_output(**values):
     with open(target, "a", encoding="utf-8") as handle:
         for key, value in values.items():
             handle.write(f"{key}={value}\n")
+
+
+def write_version_file(path, text):
+    """Replace ``path`` with ``text`` atomically, then read it back.
+
+    Written to a sibling temp file and renamed over the target, so an
+    interrupted or failed write leaves the original VERSION intact rather than
+    a truncated one — the commit that follows in `prepare` would otherwise carry
+    a corrupt VERSION to the default branch. The read-back catches the case
+    where the rename landed something that no longer parses.
+    """
+    directory = os.path.dirname(os.path.abspath(path))
+    temp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=directory,
+            prefix=".VERSION.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_name = handle.name
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+    except OSError as error:
+        if temp_name:
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+        fail(f"Could not write {path}: {error}")
+
+    written, _ = read_version_file(path)
+    back, meant = render(written), text.strip()
+    if back != meant:
+        fail(
+            f"{path} reads back as {back} after writing {meant}.",
+            "Refusing to release from a VERSION file that did not persist.",
+        )
 
 
 def read_version_file(path):
@@ -202,8 +251,8 @@ def do_resolve(version_file, package):
                 f"A {kind} bump of {now} gives {new}, which is already on PyPI.",
                 "Choose a different bump level.",
             )
-        with open(version_file, "w", encoding="utf-8") as handle:
-            handle.write(new + ("\n" if trailing_newline else ""))
+        write_version_file(version_file,
+                           new + ("\n" if trailing_newline else ""))
         print(f"Rewrote {version_file}: {now} -> {new}")
 
     out = render(target)
