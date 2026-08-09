@@ -496,6 +496,46 @@ avoids the prompt.
 
 ---
 
+## Comment style
+
+**Comment the non-obvious "why", never the "what".** Code in this repo has
+repeatedly come back from review with more comment than code. Prefer too few
+comments over too many: a reader skips prose to find the code, and narration
+ages into a lie the moment the code moves.
+
+Write a comment when it stops someone breaking the code:
+
+```python
+# Assigned, not inlined into the `if`: a command substitution inside an
+# if-condition is exempt from errexit, so a failure would pass this guard.
+remote_tag="$(git ls-remote --tags origin "refs/tags/${tag}")"
+```
+
+Do not write one that restates the line, or narrates a sequence:
+
+```yaml
+# Step 2: Set up Python          # <- the `uses:` already says this
+- uses: actions/setup-python@...
+```
+
+Rules of thumb:
+- **One or two lines.** If the rationale genuinely needs a paragraph, it
+  belongs in this file or in the PR description, not inline.
+- **No step numbering** (`# Step 1:`, `# Step 2:`) — it is pure narration, and
+  it silently rots when a step is inserted or removed. Name the step instead.
+- **Don't restate an identifier**: a comment over `def build_index()` saying
+  "builds the index" earns nothing.
+- **Do record**: a non-obvious constraint, a subtle language/tool behaviour, a
+  deliberate rejection of the obvious alternative, or a bug the line prevents.
+- **Docstrings**: one summary line, plus a short paragraph only when the
+  contract is not evident from the signature. Don't restate every argument.
+- Same rule for YAML, shell, and Markdown, not just Python.
+
+The test: delete the comment, and ask whether a competent reader could now
+introduce a bug. If not, leave it deleted.
+
+---
+
 ## Branch policy
 
 - PRs target `main`.

@@ -1,43 +1,20 @@
 name: Build wheel and release into PYPI
 
-# There are two ways to start a release:
+# Two ways to start a release, both of which publish from a v* tag:
 #
-# A. Tag-driven, from a terminal:
-#      1. Land changes on main via PR (CI runs on every push/PR).
-#      2. Bump VERSION on main (single source of truth — pyproject.toml reads it
-#         via [tool.setuptools.dynamic]).
-#      3. Tag that commit and push the tag. Use an annotated tag — it records
-#         who cut the release and when, and it is what `prepare` creates on the
-#         dispatch path, so both paths leave identical tags behind:
-#           git tag -a v1.2.5 -m "v1.2.5" && git push origin v1.2.5
-#      4. The `publish` job below builds the wheel, uploads it to PyPI, and
-#         creates the matching GitHub Release with auto-generated notes.
+#   A. Tag-driven: bump VERSION on main via PR, then
+#      `git tag -a v1.2.5 -m "v1.2.5" && git push origin v1.2.5`.
+#   B. Dispatch-driven: "Run workflow" against main. `prepare` resolves the
+#      version, optionally bumps VERSION, and pushes the tag as the
+#      mlc-automations App — an App-token push re-triggers workflows, so that
+#      tag push enters path A.
 #
-# B. Dispatch-driven, from the Actions UI ("Run workflow" against main):
-#      The `prepare` job resolves the version — optionally incrementing VERSION
-#      itself, see the `bump` input — commits any bump to main, and pushes the
-#      tag as the mlc-automations GitHub App. A push made with an App token does
-#      re-trigger workflows, so that tag push starts path A. Wheels therefore
-#      still only ever reach PyPI from a tag ref, built by the same job, however
-#      the release was started.
-#
-# Retrying a release that failed is not a third path: use GitHub's "Re-run jobs"
-# on the failed run. That replays the same tag push, so it re-enters `publish`
-# with the same ref and no inputs. `publish` accepts nothing else — dispatching
-# against a tag is refused by `prepare` rather than quietly doing half of this.
-#
-# A published version is final. PyPI rejects any re-upload of one, so a release
-# is never re-cut under the same number and there is no input that overrides
-# that — no retagging, and no reusing a version that is already out. Every such
-# situation is refused up front by .github/scripts/resolve_release_version.py,
-# before anything is built, committed, tagged, or uploaded. `prepare` likewise
-# refuses to create a tag that already exists, and never force-updates one. The
-# way forward is always a new version.
-#
-# The corollary: once a version is on PyPI, re-running `publish` for its tag
-# fails by design. If such a release left no GitHub Release behind, create it by
-# hand — `gh release create vX.Y.Z --generate-notes` — rather than reaching for
-# the workflow.
+# A published version is final: PyPI rejects re-uploads, so every path that
+# resolves to an already-released version is refused up front by
+# .github/scripts/resolve_release_version.py, with no override. To retry a
+# failed release use "Re-run jobs" on the failed run, not a second dispatch.
+# If a release published to PyPI but left no GitHub Release, create it by hand
+# with `gh release create vX.Y.Z --generate-notes`.
 on:
   push:
     tags:
@@ -58,19 +35,15 @@ on:
         type: boolean
         default: false
 
-# The implicit shell for `run:` is `bash -e {0}` — errexit, but no pipefail, so a
-# failing command in a pipeline would be masked by whatever follows it. Naming
-# bash explicitly upgrades every step below to `bash --noprofile --norc -eo
-# pipefail {0}`. Nothing here pipes today; this is so nothing has to remember.
+# Upgrades every `run:` from the implicit `bash -e {0}` to `-eo pipefail`.
 defaults:
   run:
     shell: bash
 
 jobs:
-  # Every workflow_dispatch lands here. Turns "release this" into the tag that
-  # path A already knows how to build. Deliberately not narrowed to branch refs:
-  # a dispatch against a tag is a mistake worth a real error message, and step 1
-  # gives one — narrowing it here would instead produce a run with no jobs at all.
+  # Turns a dispatch into the tag path A already knows how to build. Not
+  # narrowed to branch refs here: a dispatch against a tag deserves the error
+  # message below, not a run with no jobs in it.
   prepare:
     name: Resolve version and tag
     if: >-
@@ -78,25 +51,11 @@ jobs:
       && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
-    # One release preparation at a time. Steps 4 and 5 read VERSION, PyPI and the
-    # tag list, and steps 7 and 8 write back to them — so two dispatches that
-    # overlap both read the pre-release state, both resolve to the same number,
-    # and both clear the tag guard before either has pushed. Nothing corrupt
-    # lands even today, because git refuses the loser (non-fast-forward at step
-    # 7, "already exists" at step 8, and step 8 carries an implicit success() so
-    # a failed push cannot leave an orphan tag) — but the loser dies on a raw git
-    # error, and which dispatch wins is arbitrary.
-    #
-    # Queued, the second run resolves against the state the first one left, and
-    # is refused by the ordinary guards with their own wording instead: bump=none
-    # hits the step 5 tag guard, and a bump level hits "VERSION is already ahead
-    # of the latest release" in the script.
-    #
-    # cancel-in-progress is false — interrupting a release between the VERSION
-    # push and the tag push is the one outcome worse than waiting. GitHub keeps
-    # only a single run pending per group, so a third dispatch displaces the
-    # queued second one; that is harmless here, as a pending run has not read or
-    # written anything yet.
+    # One preparation at a time. Overlapping dispatches would both resolve
+    # against the pre-release state and collide on the push; queued, the second
+    # is refused by the tag guard or by the script's "already ahead" check.
+    # Never cancel: interrupting between the VERSION push and the tag push is
+    # worse than waiting.
     concurrency:
       group: release-prepare
       cancel-in-progress: false
@@ -104,9 +63,7 @@ jobs:
     permissions:
       contents: read    # the bump and the tag are pushed with the App token below
 
-    # Git identity for the commit and the tag. Set once here rather than repeating
-    # `git config` in each step that writes: these are the variables git reads
-    # directly, and GIT_COMMITTER_* is also what stamps an annotated tag's tagger.
+    # Read by git directly; GIT_COMMITTER_* also stamps the annotated tag's tagger.
     env:
       GIT_AUTHOR_NAME: mlc-automations
       GIT_COMMITTER_NAME: mlc-automations
@@ -114,8 +71,8 @@ jobs:
       GIT_COMMITTER_EMAIL: "3246381+mlc-automations@users.noreply.github.com"
 
     steps:
-      # Step 1: Releases come from the default branch only(in future we may want to modify this
-      # in such a way that it supports releasing alpha and beta changes from development branches)
+      # Releases come from the default branch only. (We may later want to allow
+      # alpha/beta releases from development branches.)
       - name: Require the default branch
         env:
           default_branch: ${{ github.event.repository.default_branch }}
@@ -127,7 +84,6 @@ jobs:
             exit 1
           fi
 
-      # Step 2: Initialising the mlc-automations App
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -135,15 +91,12 @@ jobs:
           app-id: ${{ secrets.MLC_AUTOMATIONS_APP_ID }}
           private-key: ${{ secrets.MLC_AUTOMATIONS_PRIVATE_KEY }}
 
-      # Step 3: Checkout, with tags
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      # Step 4: Decide which version we are releasing, and refuse the cases
-      # that cannot work. Rewrites VERSION in the working tree when bumping;
-      # nothing is pushed yet.
+      # Rewrites VERSION in the working tree when bumping; nothing is pushed yet.
       - name: Resolve release version
         id: resolve
         env:
@@ -151,17 +104,14 @@ jobs:
           BUMP: ${{ inputs.bump }}
         run: python3 .github/scripts/resolve_release_version.py
 
-      # Step 5: Never move an existing tag — the wheel behind it is already
-      # public, and re-pointing it would silently change what a released
-      # version means.
+      # Never move an existing tag: the wheel behind it is already public.
       - name: Require an unused tag
         env:
           tag: ${{ steps.resolve.outputs.tag }}
         run: |
-          # Assigned rather than inlined into the `if`: a command substitution
-          # inside an if-condition is exempt from errexit, so an ls-remote that
-          # failed would come back empty and silently pass this guard. As an
-          # assignment, a failure aborts the step instead.
+          # Assigned, not inlined into the `if`: a command substitution inside an
+          # if-condition is exempt from errexit, so a failed ls-remote would come
+          # back empty and silently pass this guard.
           remote_tag="$(git ls-remote --tags origin "refs/tags/${tag}")"
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null \
             || [ -n "$remote_tag" ]; then
@@ -172,8 +122,7 @@ jobs:
             exit 1
           fi
 
-      # Step 6: On a dry run, prove the resolved version actually packages
-      # before stopping. Everything after this step is a mutation.
+      # Prove the version packages before stopping. Everything after is a mutation.
       - name: Build wheels (dry run check)
         if: ${{ github.event.inputs.dry_run == 'true' }}
         run: |
@@ -182,8 +131,6 @@ jobs:
           echo "Dry run: resolved ${{ steps.resolve.outputs.version }} and built it successfully."
           echo "Nothing was committed, tagged, or published."
 
-      # Step 7: Commit the bump to the default branch. Skipped when `bump` was
-      # none, since VERSION already held the version being released.
       - name: Commit the VERSION bump
         if: ${{ github.event.inputs.dry_run != 'true' && steps.resolve.outputs.bumped == 'true' }}
         env:
@@ -193,8 +140,7 @@ jobs:
           git commit -m "[Automated Commit] Bump VERSION to ${version}"
           git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
 
-      # Step 8: Tag it. This push is what starts the `publish` job below, in a
-      # new workflow run against the tag.
+      # This push is what starts `publish`, in a new run against the tag.
       - name: Create and push the release tag
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
@@ -204,24 +150,13 @@ jobs:
           git push origin "refs/tags/${tag}"
           echo "::notice::Pushed ${tag} — follow the release in the workflow run triggered by that tag."
 
-  # The only job that uploads to PyPI, and it has exactly one entry point: a v*
-  # tag push, whether that came from `prepare` or from a terminal. Never from a
-  # dispatch — to retry a release that failed, use GitHub's "Re-run jobs" on the
-  # failed run, which replays that same tag push. A second entry point would only
-  # add a way to hold the `bump`/`dry_run` inputs against a ref that cannot honour
-  # them.
+  # The only job that uploads to PyPI, entered solely by a v* tag push.
   publish:
     name: Build wheel
-    # Two independent conditions, neither redundant:
-    #   event_name == 'push'  — not a dispatch (see the job comment above).
-    #   ref_type == 'tag'     — not a branch push.
-    # The second looks implied by `on.push.tags` today, and is kept precisely
-    # because that is a guarantee living somewhere else in the file. Pushing a tag
-    # and pushing a branch are both `push` events — Actions has no separate tag
-    # event — so if anyone ever re-adds `branches:` to `on.push`, as this workflow
-    # in fact had before 2026-08-03, this job would start uploading to PyPI on
-    # ordinary branch pushes. Stating the requirement locally makes that
-    # impossible instead of merely unlikely.
+    # `ref_type == 'tag'` is not redundant with `on.push.tags`: tag pushes and
+    # branch pushes are both `push` events, so re-adding `branches:` above would
+    # otherwise make this publish on ordinary branch pushes — as this workflow
+    # was configured before 2026-08-03.
     if: >-
       github.repository_owner == 'mlcommons'
       && github.event_name == 'push'
@@ -229,13 +164,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
 
-    # Serialized per tag, so a re-run cannot overlap the run it is retrying:
-    # both would build the same version and race on the PyPI upload and the
-    # GitHub Release. Keyed on the ref rather than a constant, because two
-    # different tags publish two different versions and share nothing mutable —
-    # holding one behind the other would only delay it. Not cancel-in-progress,
-    # for the same reason as `prepare`: a half-finished publish is worse than a
-    # slow one.
+    # Per tag, so a re-run cannot race the run it retries on the upload and the
+    # Release. Keyed on the ref because distinct tags share no mutable state.
     concurrency:
       group: release-publish-${{ github.ref }}
       cancel-in-progress: false
@@ -245,15 +175,11 @@ jobs:
       contents: write   # create the GitHub Release
 
     steps:
-      # Step 1: Checkout the tagged commit. No `ref:` — the default is the ref that
-      # triggered the run, which the job condition has already pinned to a tag.
+      # No `ref:` — the default is the triggering ref, already pinned to a tag.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      # Step 2: Set up Python
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
 
-      # Step 3: The tag and the VERSION file must agree, otherwise we would
-      # publish a wheel whose version does not match the ref it came from.
       - name: Verify tag matches VERSION
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
@@ -265,27 +191,20 @@ jobs:
           fi
           echo "Releasing version $file_version"
 
-      # Step 4: Fail before building if this version is already on PyPI, rather
-      # than after, at the upload. There is deliberately no override: a released
-      # version is never republished under the same number.
+      # Fail before building rather than at the upload. No override by design.
       - name: Verify the version is publishable
         env:
           MODE: verify
         run: python3 .github/scripts/resolve_release_version.py
 
-      # Step 5: Install the build frontend. `build` alone is enough — it creates an
-      # isolated env and installs setuptools/wheel there from [build-system]
-      # requires in pyproject.toml, so naming them here only pins a second copy.
+      # `build` alone is enough: it installs setuptools/wheel into its isolated
+      # env from [build-system] requires.
       - name: Install requirements
         run: python3 -m pip install build
 
-      # Step 6: Build the Python wheel and sdist
       - name: Build wheels
         run: python3 -m build
 
-      # Step 7: Publish to PyPI. No dry_run guard — this job only runs on a tag
-      # push, which carries no inputs, so `dry_run` cannot reach it. Dry runs are
-      # a `prepare` concept: they stop before a tag is ever created.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
@@ -294,11 +213,9 @@ jobs:
           repository-url: https://upload.pypi.org/legacy/
           verbose: true
 
-      # Step 8: Create the GitHub Release with auto-generated notes. A Release for
-      # this tag can pre-exist if someone drafted one by hand, or if this run is a
-      # re-run whose earlier attempt got this far — either way the PyPI upload
-      # above already succeeded, so attach the artifacts instead of losing the run
-      # on `gh release create` at the very last step.
+      # A Release can pre-exist (drafted by hand, or a re-run that got this far).
+      # The upload above already succeeded, so attach artifacts rather than
+      # losing the run on `gh release create` at the last step.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

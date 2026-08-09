@@ -222,3 +222,4 @@ python -m pytest tests/
 - Don't hard-code `~/MLC/repos` — use `self.repos_path` (which reads `MLC_REPOS` env var)
 - Don't edit `index_script.json` or `modified_times.json` by hand — use `mlc reindex`
 - Don't call `ScriptAutomation` directly — always go through `call_script_module_function()`
+- Don't over-comment — explain the non-obvious *why* in 1–2 lines, never narrate the *what*. No `# Step 1:` numbering. If it needs a paragraph, put it in the PR description. See "Comment style" in AGENTS.md

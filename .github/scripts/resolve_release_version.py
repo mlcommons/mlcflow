@@ -3,22 +3,14 @@
 
 Used by ``.github/workflows/build_wheels.yml``.
 
-A published version is final. PyPI rejects any re-upload of one, and a released
-version is never re-cut under the same number — so there is no such thing as
-retagging a release here, and no override for it. Every path that resolves to an
-already-published version is refused unconditionally, *before* anything is
-built, committed, tagged, or uploaded, rather than failing halfway through with
-a 400 from the upload endpoint. The way forward is always a new version.
+A published version is final — PyPI rejects re-uploads — so every path that
+resolves to an already-released version is refused before anything is built,
+committed, tagged, or uploaded, with no override. The way forward is always a
+new version.
 
-Two modes:
-
-``resolve`` (the ``prepare`` job, dispatched against the default branch)
-    Read ``VERSION``, apply ``BUMP``, and emit the version to release.
-    Writes the bumped value back to ``VERSION`` when ``BUMP != none``.
-
-``verify`` (the ``publish`` job, running from a tag)
-    Re-check ``VERSION`` against PyPI from the tagged commit, so a tag whose
-    version is already released fails before the build rather than at upload.
+``resolve`` (the ``prepare`` job) reads ``VERSION``, applies ``BUMP``, and
+writes the bumped value back. ``verify`` (the ``publish`` job) re-checks
+``VERSION`` against PyPI from the tagged commit.
 
 Environment:
     MODE            resolve | verify                      (default: resolve)
@@ -49,8 +41,7 @@ SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 BUMP_KINDS = ("none", "patch", "minor", "major")
 PYPI_TIMEOUT = 15
 PYPI_ATTEMPTS = 3
-# PyPI asks API consumers to identify themselves so it can contact them about a
-# misbehaving client rather than blocking a shared default UA.
+# PyPI asks API consumers to identify themselves, not share a default UA.
 USER_AGENT = "mlcflow-release-workflow (+https://github.com/mlcommons/mlcflow)"
 
 
@@ -87,11 +78,8 @@ def render(parts):
 def released_versions(package):
     """Every version already on PyPI, as a {text: parsed} map.
 
-    A missing project (404) means nothing has been published yet, which is a
-    legitimate state. Any other failure is fatal: the guards below are only
-    meaningful if we actually know what is on PyPI, and guessing would just move
-    the failure to the upload step after a wheel has been built and a tag
-    pushed.
+    A 404 means nothing is published yet, which is legitimate. Any other failure
+    is fatal: the guards below mean nothing if we do not know what is on PyPI.
     """
     request = urllib.request.Request(
         f"https://pypi.org/pypi/{package}/json",
@@ -141,11 +129,9 @@ def write_output(**values):
 def write_version_file(path, text):
     """Replace ``path`` with ``text`` atomically, then read it back.
 
-    Written to a sibling temp file and renamed over the target, so an
-    interrupted or failed write leaves the original VERSION intact rather than
-    a truncated one — the commit that follows in `prepare` would otherwise carry
-    a corrupt VERSION to the default branch. The read-back catches the case
-    where the rename landed something that no longer parses.
+    Renamed over the target from a sibling temp file, so a failed write leaves
+    the original intact instead of handing a truncated VERSION to the commit
+    that follows in `prepare`.
     """
     directory = os.path.dirname(os.path.abspath(path))
     temp_name = None
@@ -210,8 +196,7 @@ def do_resolve(version_file, package):
     print(f"Requested bump:  {kind}")
 
     if kind == "none":
-        # Scenario 1: VERSION on the default branch is already the version we
-        # want to ship.
+        # VERSION already holds the version to ship.
         if current in released.values():
             fail(
                 f"Version {now} is already published on PyPI.",
@@ -222,10 +207,8 @@ def do_resolve(version_file, package):
             )
         target = current
     else:
-        # Scenario 2: VERSION still holds the released version, and we want the
-        # workflow to do the increment. Anything else means the default branch
-        # is not in the state this path assumes, so say which state it is in
-        # rather than silently picking a number.
+        # VERSION should still hold the released version for us to increment.
+        # Any other state gets named rather than silently picking a number.
         if latest is None:
             fail(
                 f"Nothing is published for {package} yet — no version to bump from.",
