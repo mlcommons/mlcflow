@@ -59,8 +59,16 @@ jobs:
       # Step 3: Set up Python
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
 
-      # Step 4: The tag and the VERSION file must agree, otherwise we would
+      # Step 4: Install required dependencies. This runs before the version
+      # check so that check can parse the version with packaging.
+      - name: Install requirements
+        run: python3 -m pip install setuptools wheel build packaging
+
+      # Step 5: The tag and the VERSION file must agree, otherwise we would
       # publish a wheel whose version does not match the ref it came from.
+      # The version is also parsed here, before anything is built or
+      # published: an unparseable version has to stop the release outright
+      # rather than reappear later as a misclassified GitHub Release.
       - name: Verify tag matches VERSION
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
@@ -70,11 +78,36 @@ jobs:
             echo "Bump VERSION on main and re-tag that commit."
             exit 1
           fi
-          echo "Releasing version $file_version"
 
-      # Step 5: Install required dependencies
-      - name: Install requirements
-        run: python3 -m pip install setuptools wheel build packaging
+          # 'invalid' on an unparseable version; empty if python itself failed.
+          # Both are treated as fatal - defaulting either way would silently
+          # publish an alpha as the latest stable, or vice versa.
+          version_kind="$(python3 -c "
+          import sys
+          from packaging.version import Version, InvalidVersion
+          try:
+              v = Version(sys.argv[1])
+          except InvalidVersion:
+              print('invalid')
+          else:
+              print('prerelease' if v.is_prerelease else 'final')
+          " "$file_version")"
+
+          case "$version_kind" in
+            prerelease)
+              echo "IS_PRERELEASE=true" >> "$GITHUB_ENV" ;;
+            final)
+              echo "IS_PRERELEASE=false" >> "$GITHUB_ENV" ;;
+            invalid)
+              echo "::error::VERSION '$file_version' is not a valid PEP 440 version."
+              echo "Use a form such as 1.4.0, 1.4.0a1, 1.4.0b2 or 1.4.0rc1."
+              exit 1 ;;
+            *)
+              echo "::error::Could not determine whether '$file_version' is a prerelease."
+              exit 1 ;;
+          esac
+
+          echo "Releasing version $file_version ($version_kind)"
 
       # Step 6: Build the Python wheel and sdist
       - name: Build wheels
@@ -98,9 +131,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          if python3 -c "import sys; from packaging.version import Version; sys.exit(0 if Version('$version').is_prerelease else 1)"; then
-            echo "$version is a prerelease; marking the GitHub Release accordingly."
+          if [ "${IS_PRERELEASE}" = "true" ]; then
+            echo "${GITHUB_REF_NAME} is a prerelease; marking the GitHub Release accordingly."
             prerelease_flag="--prerelease"
           else
             prerelease_flag=""
