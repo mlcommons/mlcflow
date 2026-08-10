@@ -331,8 +331,26 @@ class Index:
             if repo_changed:
                 changed = True
 
-        # remove deleted scripts
-        deleted_keys = set(self.modified_times) - current_item_keys
+        # Remove deleted items - but only within repos this instance actually
+        # scanned. current_item_keys is filled from self.repos, so subtracting
+        # it wholesale lets an Action holding a smaller repo list purge the
+        # entries another one just wrote: a CacheAction built before a repo
+        # was registered will happily delete every key belonging to it, log
+        # hundreds of "deleted item" warnings for files that exist, and leave
+        # the index empty for the next command to rebuild.
+        known_roots = [
+            os.path.abspath(repo.path) + os.sep
+            for repo in self.repos if repo and repo.path
+        ]
+
+        def scanned_by_this_instance(key):
+            key = os.path.abspath(key)
+            return any(key.startswith(root) for root in known_roots)
+
+        deleted_keys = {
+            key for key in set(self.modified_times) - current_item_keys
+            if scanned_by_this_instance(key)
+        }
         for key in deleted_keys:
             folder_key = os.path.dirname(key)
             logger.warning(f"Detected deleted item: {key}")
