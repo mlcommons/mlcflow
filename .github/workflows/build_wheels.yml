@@ -8,6 +8,17 @@ name: Build wheel and release into PYPI
 #        git tag v1.2.5 && git push origin v1.2.5
 #   4. This workflow builds the wheel, publishes it to PyPI, and creates the
 #      matching GitHub Release with auto-generated notes.
+#
+# Prereleases (alpha/beta/rc) follow the same path:
+#     echo 1.4.0a1 > VERSION      # PEP 440: 1.4.0a1, 1.4.0b2, 1.4.0rc1
+#     git tag v1.4.0a1 && git push origin v1.4.0a1
+# The GitHub Release is then flagged as a prerelease so it does not displace
+# the current stable as "Latest", and PyPI keeps a plain `pip install mlcflow`
+# on the last final — testers opt in with `pip install mlcflow==1.4.0a1`.
+#
+# Note that a prerelease sorts BEFORE its final under PEP 440, so 1.4.0a1 does
+# not satisfy a `mlcflow>=1.4.0` pin. Dependants that need to test against an
+# alpha have to pin `>=1.4.0a1`.
 on:
   push:
     tags:
@@ -63,7 +74,7 @@ jobs:
 
       # Step 5: Install required dependencies
       - name: Install requirements
-        run: python3 -m pip install setuptools wheel build
+        run: python3 -m pip install setuptools wheel build packaging
 
       # Step 6: Build the Python wheel and sdist
       - name: Build wheels
@@ -79,12 +90,23 @@ jobs:
           repository-url: https://upload.pypi.org/legacy/
           verbose: true
 
-      # Step 8: Create the GitHub Release with auto-generated notes
+      # Step 8: Create the GitHub Release with auto-generated notes.
+      # An alpha/beta/rc is marked as a prerelease so it does not take over
+      # "Latest" on the releases page from the current stable. PyPI derives
+      # this from the version itself, but the GitHub Release does not.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          if python3 -c "import sys; from packaging.version import Version; sys.exit(0 if Version('$version').is_prerelease else 1)"; then
+            echo "$version is a prerelease; marking the GitHub Release accordingly."
+            prerelease_flag="--prerelease"
+          else
+            prerelease_flag=""
+          fi
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
+            $prerelease_flag \
             dist/*
