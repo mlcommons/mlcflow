@@ -485,8 +485,13 @@ def prepare_apptainer_inputs(input_params, apptainer_settings,
         script_uid = script_meta['uid']
         script_alias = script_meta.get('alias')
         folder_name = f"""{script_alias}_{script_uid[:5]}"""
+        # See docker_utils.py: build contexts belong inside the resolved
+        # local repo, not in the per environment repo root.
+        local_repo_path = getattr(
+            mlc, 'local_repo_path', os.path.join(
+                getattr(mlc, 'cache_path', mlc.repos_path), 'local'))
         apptainer_path = os.path.join(
-            mlc.repos_path, 'local', 'apptainer', folder_name)
+            local_repo_path, 'apptainer', folder_name)
     def_filename_suffix = (
         apptainer_base_image.replace('/', '-').replace(':', '-')
         if apptainer_base_image else f"{apptainer_inputs['os']}_{apptainer_inputs['os_version']}"

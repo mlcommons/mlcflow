@@ -807,3 +807,34 @@ def extract_file(options):
         raise ValueError(f"Unsupported file format: {filename}")
 
     print(f"Extraction complete. Files extracted to: {extract_to}")
+
+
+def has_git_dir(repo_path):
+    """Whether *repo_path* looks like a git checkout on disk.
+
+    `.git` is a directory in a normal clone but a *file* in a worktree or a
+    submodule, so testing for a directory alone would misclassify both.
+    """
+    return os.path.exists(os.path.join(repo_path, ".git"))
+
+
+def is_git_repo(repo_path):
+    """Whether a registered repo should be treated as a git checkout.
+
+    The `git:` key in meta.yaml is a declaration and wins when present: the
+    packaged mlc-scripts ships `git: false` precisely so that nothing tries to
+    git-pull inside site-packages, and a folder registered with `mlc add repo`
+    may legitimately not be a checkout at all.
+
+    With no declaration, fall back to what is on disk.
+    """
+    meta_file = os.path.join(repo_path, "meta.yaml")
+    if os.path.isfile(meta_file):
+        try:
+            meta = read_yaml(meta_file)
+        except Exception:
+            meta = None
+        if isinstance(meta, dict) and "git" in meta:
+            return bool(meta["git"])
+
+    return has_git_dir(repo_path)

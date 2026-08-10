@@ -1,4 +1,5 @@
 import os
+import hashlib
 import logging
 import json
 import yaml
@@ -7,6 +8,8 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from contextlib import contextmanager
+from filelock import FileLock, Timeout
 
 from .logger import logger, setup_logging
 
@@ -15,6 +18,158 @@ from .index import Index
 from .repo import Repo
 from .item import Item
 from .error_codes import WarningCode
+
+# Distribution name of the packaged script content, and the top level
+# directory it ships that directory under.
+PACKAGE_REPO_DIST = "mlc-scripts"
+PACKAGE_REPO_MODULE = "mlc_scripts"
+
+
+class RootNotWritableError(Exception):
+    """A configured repo or cache root cannot be initialised.
+
+    Raised during Action construction, i.e. before any command runs, so the
+    CLI reports it as a configuration problem rather than a crash.
+    """
+
+
+def default_mlc_root():
+    """The ~/MLC directory everything else hangs off."""
+    return os.path.join(os.path.expanduser("~"), "MLC")
+
+
+def resolve_cache_path():
+    """Resolve the cache root.
+
+    1. $MLC_CACHE when set.
+    2. $MLC_REPOS when *that* is set explicitly. Before the split there was
+       one root, so anyone who pinned MLC_REPOS has their caches under it
+       today. Relocating them silently is exactly the failure this design
+       exists to avoid, so an explicit MLC_REPOS keeps its cache.
+    3. ~/MLC/repos.
+
+    Note what is deliberately absent: the automatically resolved per
+    environment repo root never appears here. If it did, installing
+    mlc-scripts into a fresh environment would relocate every cached dataset
+    and the next benchmark would download all of it again.
+
+    Defaulting to ~/MLC/repos also means the shared local repo is today's
+    local repo, so nothing on disk has to move.
+    """
+    explicit = os.environ.get('MLC_CACHE', '').strip()
+    if explicit:
+        return os.path.abspath(os.path.expanduser(explicit))
+
+    explicit_repos = os.environ.get('MLC_REPOS', '').strip()
+    if explicit_repos:
+        return os.path.abspath(os.path.expanduser(explicit_repos))
+
+    return os.path.join(default_mlc_root(), "repos")
+
+
+def find_package_repo():
+    """Locate an mlc-scripts install in the *running interpreter*.
+
+    Resolved through importlib.metadata rather than the working directory:
+    scripts change directory constantly during a run (run.sh executes inside
+    its cache entry), so a cwd derived answer could change mid run.
+
+    Returns (path, version), or (None, None) when the distribution is absent
+    or ships no repo root.
+    """
+    try:
+        from importlib import metadata as importlib_metadata
+    except ImportError:  # pragma: no cover - Python < 3.8
+        return (None, None)
+
+    try:
+        dist = importlib_metadata.distribution(PACKAGE_REPO_DIST)
+    except Exception:
+        return (None, None)
+
+    version = None
+    try:
+        version = dist.version
+    except Exception:
+        version = None
+
+    candidates = []
+    try:
+        located = dist.locate_file(PACKAGE_REPO_MODULE)
+        if located is not None:
+            candidates.append(str(located))
+    except Exception:
+        pass
+
+    # Fallback for layouts where locate_file cannot resolve the directory
+    # (editable installs using a path hook, for example).
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec(PACKAGE_REPO_MODULE)
+        if spec is not None:
+            if spec.submodule_search_locations:
+                candidates.extend(list(spec.submodule_search_locations))
+            elif spec.origin:
+                candidates.append(os.path.dirname(spec.origin))
+    except Exception:
+        pass
+
+    for candidate in candidates:
+        candidate = os.path.abspath(candidate)
+        if not os.path.isdir(candidate):
+            continue
+        # Deliberately not requiring meta.yaml: a damaged or partially
+        # upgraded install would then look like "no package installed" and
+        # silently relocate the whole repo root back to ~/MLC/repos.
+        # Registration checks the meta and complains; root resolution only
+        # needs to know the environment has mlc-scripts in it.
+        # meta.yaml OR a script/ tree. Requiring meta.yaml alone would make a
+        # damaged install look like "not installed" and silently relocate the
+        # repo root; accepting a bare __init__.py would match the empty
+        # mlc_scripts/ stub in an editable checkout, whose content lives at
+        # the checkout root instead.
+        if os.path.isfile(os.path.join(candidate, "meta.yaml")) or \
+                os.path.isdir(os.path.join(candidate, "script")):
+            return (candidate, version)
+
+        # Editable install: mlc_scripts/ is the stub committed to the repo
+        # and the real payload sits at the checkout root beside it.
+        parent = os.path.dirname(candidate)
+        if os.path.isfile(os.path.join(parent, "meta.yaml")) and \
+                os.path.isdir(os.path.join(parent, "script")):
+            return (parent, version)
+
+    return (None, None)
+
+
+def environment_key(path):
+    """Short, stable key naming the environment a repo root belongs to."""
+    return hashlib.sha256(
+        os.path.abspath(path).encode("utf-8")).hexdigest()[:12]
+
+
+def resolve_repos_path(package_repo_path):
+    """Resolve the repo root.
+
+    1. $MLC_REPOS when set - an explicit value always wins. Note that a
+       packaged mlc-scripts is still registered into that root; what gives
+       you "my checkout and nothing else" is the uid rule, under which a
+       checkout registered there displaces the packaged copy.
+    2. ~/MLC/envs/<hash of site-packages> when mlc-scripts is installed in
+       the running interpreter.
+    3. ~/MLC/repos, today's default.
+    """
+    explicit = os.environ.get('MLC_REPOS', '').strip()
+    if explicit:
+        return os.path.abspath(os.path.expanduser(explicit))
+
+    if package_repo_path:
+        site_packages = os.path.dirname(os.path.abspath(package_repo_path))
+        return os.path.join(
+            default_mlc_root(), "envs", environment_key(site_packages))
+
+    return os.path.join(default_mlc_root(), "repos")
+
 
 # Base class for actions
 
@@ -234,43 +389,268 @@ class Action:
         setup_logging(log_path=os.getcwd(), log_file='.mlc-log.txt')
         self.logger = logger
 
-        temp_repo = os.environ.get('MLC_REPOS', '').strip()
-        if temp_repo == '':
-            self.repos_path = os.path.join(
-                os.path.expanduser("~"), "MLC", "repos")
-        else:
-            self.repos_path = temp_repo
+        # Two roots, resolved on two independent chains. The repo root may
+        # vary per environment; the cache root does not vary with it.
+        self.cache_path = resolve_cache_path()
+        self.package_repo_path, self.package_repo_version = find_package_repo()
+        self.repos_path = resolve_repos_path(self.package_repo_path)
 
-        mlc_local_repo_path = os.path.join(self.repos_path, 'local')
+        os.makedirs(self.repos_path, exist_ok=True)
 
-        mlc_local_repo_path_expanded = Path(
-            mlc_local_repo_path).expanduser().resolve()
-
-        if not os.path.exists(mlc_local_repo_path):
-            os.makedirs(mlc_local_repo_path, exist_ok=True)
-
-        if not os.path.isfile(os.path.join(mlc_local_repo_path, "meta.yaml")):
-            local_repo_meta = {
-                "alias": "local",
-                "name": "MLC local repository",
-                "uid": utils.get_new_uid()['uid']}
-            with open(os.path.join(mlc_local_repo_path, "meta.yaml"), "w") as json_file:
-                json.dump(local_repo_meta, json_file, indent=4)
+        # The local repo always lives under the cache root, never under the
+        # per environment repo root. Cache entries are *items* of this repo -
+        # Action.add() resolves their destination through the registry, not
+        # through a path variable - so this is what makes MLC_CACHE
+        # authoritative. Experiments and scripts from `mlc add script` come
+        # along, which is intended: authored work should not disappear when
+        # you switch environments.
+        candidate_local = str(
+            Path(os.path.join(self.cache_path, 'local')).expanduser().resolve())
 
         repo_json_path = os.path.join(self.repos_path, "repos.json")
         if not os.path.exists(repo_json_path):
-            with open(repo_json_path, 'w') as f:
-                json.dump([str(mlc_local_repo_path_expanded)], f, indent=2)
+            self._create_local_repo(candidate_local)
+            try:
+                with open(repo_json_path, 'w') as f:
+                    json.dump([candidate_local], f, indent=2)
                 logger.info(
-                    f"Created repos.json in {os.path.dirname(self.repos_path)} and initialised with local cache folder path: {mlc_local_repo_path}")
-
-        self.local_cache_path = os.path.join(mlc_local_repo_path, "cache")
-        if not os.path.exists(self.local_cache_path):
-            os.makedirs(self.local_cache_path, exist_ok=True)
+                    f"Created repos.json in {self.repos_path} and initialised with local cache folder path: {candidate_local}")
+            except OSError as e:
+                raise RootNotWritableError(
+                    f"Could not create {repo_json_path} ({e}). "
+                    f"Set MLC_REPOS to a writable directory.") from e
 
         self.repos = self.load_repos_and_meta()
         # logger.info(f"In Action class: {self.repos_path}")
         self._index = None
+
+        # There must be exactly one local repo, and every path derived from
+        # it must agree. Resolving it once and deriving cache_path from the
+        # result is what keeps `mlc list repo`, Action.add()'s destination,
+        # fix_cache_paths() and the docker/apptainer build contexts pointing
+        # at the same directory.
+        local_repo_path = self._ensure_local_registered(candidate_local)
+
+        self.local_repo_path = local_repo_path
+        self.cache_path = os.path.dirname(local_repo_path)
+        self.local_cache_path = os.path.join(local_repo_path, "cache")
+        if not os.path.exists(self.local_cache_path):
+            os.makedirs(self.local_cache_path, exist_ok=True)
+
+        self._sync_package_repo()
+
+    def _create_local_repo(self, local_repo_path):
+        """Create the local repo directory and its meta if absent."""
+        if not os.path.exists(local_repo_path):
+            os.makedirs(local_repo_path, exist_ok=True)
+
+        meta_path = os.path.join(local_repo_path, "meta.yaml")
+        if not os.path.isfile(meta_path):
+            local_repo_meta = {
+                "alias": "local",
+                "name": "MLC local repository",
+                "uid": utils.get_new_uid()['uid']}
+            with open(meta_path, "w") as json_file:
+                json.dump(local_repo_meta, json_file, indent=4)
+
+    @contextmanager
+    def _repos_json_lock(self):
+        """Serialise read-modify-write on repos.json.
+
+        Every index file is already guarded by a FileLock; repos.json was
+        not, and discovery now touches it on far more runs than before.
+        """
+        repos_file_path = os.path.join(self.repos_path, 'repos.json')
+
+        # Acquire explicitly rather than wrapping the yield in a try that
+        # also guards the body: an OSError raised by the *caller* would then
+        # be swallowed here, the generator would yield a second time, and
+        # contextlib would report "generator didn't stop after throw()" -
+        # erasing the real error.
+        lock = FileLock(repos_file_path + ".lock", timeout=60)
+        acquired = False
+        try:
+            lock.acquire()
+            acquired = True
+        except Timeout:
+            logger.warning(
+                f"Timeout acquiring the lock on {repos_file_path}; proceeding unlocked.")
+        except OSError as e:
+            # A read-only or non-writable repo root cannot host a lock file.
+            # That is a legitimate deployment (a shared, admin-managed root)
+            # and must not take every command down with it.
+            logger.debug(
+                f"Could not create the lock for {repos_file_path} ({e}); proceeding unlocked.")
+
+        try:
+            yield
+        finally:
+            if acquired:
+                lock.release()
+
+    def _rewrite_repos_json(self, repos_list):
+        """Persist the registry for the active repo root.
+
+        Returns True on success. A non-writable repo root is a supported
+        deployment (shared, admin-managed), so failing to write is reported
+        and the run continues with the registry it loaded.
+        """
+        repos_file_path = os.path.join(self.repos_path, 'repos.json')
+        try:
+            with open(repos_file_path, 'w') as f:
+                json.dump(repos_list, f, indent=2)
+            return True
+        except OSError as e:
+            logger.warning(
+                f"Could not update {repos_file_path} ({e}). Continuing with the registry as it is on disk; "
+                f"changes to registered repos will not persist.")
+            return False
+
+    def _ensure_local_registered(self, candidate_local):
+        """Resolve the one local repo and make the registry agree.
+
+        Returns its absolute path.
+
+        Two invariants matter and both were violated before. First, exactly
+        one repo may be aliased 'local': load_repos_and_meta() sets
+        self.local_repo from the *last* match while other code took the
+        first, so duplicates make Action.add()'s destination and
+        local_cache_path disagree silently. Second, the answer must be stable
+        within a run, since cache_path and the docker/apptainer build
+        contexts are derived from it.
+
+        Which one wins:
+          - MLC_CACHE set explicitly  -> $MLC_CACHE/local, the user said so.
+          - otherwise, an already registered local -> keep it, so a stray
+            MLC_CACHE cannot silently re-point someone's registry.
+          - nothing registered -> the candidate.
+        """
+        registered_locals = [repo.path for repo in self.repos
+                             if repo.meta.get('alias') == 'local']
+
+        if os.environ.get('MLC_CACHE', '').strip() or not registered_locals:
+            chosen = os.path.abspath(candidate_local)
+        else:
+            chosen = os.path.abspath(registered_locals[0])
+            if os.path.abspath(candidate_local) != chosen:
+                logger.debug(
+                    f"Keeping the registered local repo at {chosen}; set MLC_CACHE to move it.")
+
+        self._create_local_repo(chosen)
+
+        superseded = [p for p in registered_locals
+                      if os.path.abspath(p) != chosen]
+        if not superseded and any(
+                os.path.abspath(p) == chosen for p in registered_locals):
+            return chosen
+
+        repos_file_path = os.path.join(self.repos_path, 'repos.json')
+        with self._repos_json_lock():
+            try:
+                with open(repos_file_path, 'r') as f:
+                    repos_list = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                logger.error(f"Could not read {repos_file_path}: {e}")
+                return chosen
+
+            if superseded:
+                superseded_abs = {os.path.abspath(p) for p in superseded}
+                repos_list = [p for p in repos_list
+                              if os.path.abspath(p) not in superseded_abs]
+                for path in superseded:
+                    logger.info(
+                        f"Local repo is now {chosen}; unregistering the previous one at {path}. "
+                        f"Its contents are left on disk.")
+
+            if not any(os.path.abspath(p) == chosen for p in repos_list):
+                repos_list.insert(0, chosen)
+                logger.debug(
+                    f"Registered the shared local repo {chosen} in {repos_file_path}")
+
+            self._rewrite_repos_json(repos_list)
+
+        self.repos = self.load_repos_and_meta()
+        return chosen
+
+    def _sync_package_repo(self):
+        """Register the mlc-scripts tree shipped in this environment.
+
+        Runs at the start of every command. The package directory is an
+        ordinary non-git repo, so nothing downstream needs to know where it
+        came from.
+
+        When a repo carrying the same uid is already registered it got there
+        through an explicit `mlc pull repo`, and that copy wins. We only say
+        so - on every run, not just at registration, because a shell variable
+        is invisible six months later and a submission that cites a version
+        which never ran is not.
+        """
+        pkg_path = getattr(self, 'package_repo_path', None)
+        if not pkg_path:
+            return
+
+        meta_path = os.path.join(pkg_path, "meta.yaml")
+        if not os.path.isfile(meta_path):
+            logger.warning(
+                f"The installed {PACKAGE_REPO_DIST} has no meta.yaml at {meta_path}, so it cannot be registered as a repo. "
+                f"Reinstall it with `pip install --force-reinstall {PACKAGE_REPO_DIST}`.")
+            return
+
+        # read_yaml logs and returns None on a parse error rather than
+        # raising, so distinguish the cases by what came back.
+        pkg_meta = utils.read_yaml(meta_path)
+
+        if not isinstance(pkg_meta, dict):
+            logger.warning(
+                f"{meta_path} is empty or not valid YAML, so the installed {PACKAGE_REPO_DIST} cannot be registered. "
+                f"Reinstall it with `pip install --force-reinstall {PACKAGE_REPO_DIST}`.")
+            return
+
+        if not pkg_meta.get('uid'):
+            logger.warning(
+                f"{meta_path} has no uid. The installed {PACKAGE_REPO_DIST} cannot be registered.")
+            return
+
+        version = getattr(self, 'package_repo_version', None) or 'unknown'
+
+        for repo in self.repos:
+            if os.path.abspath(repo.path) == os.path.abspath(pkg_path):
+                return  # already registered, nothing to announce
+            if repo.meta.get('uid') == pkg_meta['uid']:
+                logger.info(
+                    f"Using {repo.path}, shadowing {PACKAGE_REPO_DIST} {version} at {pkg_path}")
+                return
+
+        repos_file_path = os.path.join(self.repos_path, 'repos.json')
+        persisted = True
+        with self._repos_json_lock():
+            try:
+                with open(repos_file_path, 'r') as f:
+                    repos_list = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                logger.error(f"Could not read {repos_file_path}: {e}")
+                return
+
+            if pkg_path not in repos_list:
+                repos_list.append(pkg_path)
+                persisted = self._rewrite_repos_json(repos_list)
+
+        if persisted:
+            logger.info(
+                f"Registered {PACKAGE_REPO_DIST} {version} from {pkg_path}")
+            self.repos = self.load_repos_and_meta()
+            return
+
+        # The registry is not writable - a shared, admin-managed root. Use the
+        # package for this run anyway rather than claiming it was registered
+        # and then behaving as though no content repo exists, which would send
+        # the caller off to auto-clone one.
+        logger.info(
+            f"Using {PACKAGE_REPO_DIST} {version} from {pkg_path} for this run; it could not be added to {repos_file_path}.")
+        self.repos = self.load_repos_and_meta()
+        if not any(os.path.abspath(r.path) == os.path.abspath(pkg_path)
+                   for r in self.repos):
+            self.repos.append(Repo(path=pkg_path, meta=pkg_meta))
 
     def add(self, i):
         """
@@ -666,19 +1046,44 @@ class Action:
                     return {
                         'return': 1, 'error': f"""Current directory is not inside a registered MLC repo and so using ".:" is not valid"""}
                 target_repo_name = os.path.basename(self.current_repo_path)
-            else:
-                if not any(os.path.basename(repodata.path) ==
-                           target_repo_name for repodata in self.repos):
-                    return {'return': 1, 'error': f"""The target repo {target_repo} is not registered in MLC. Either register in MLC by cloning from Git through command `mlc pull repo` or create repo using `mlc add repo` command and try to rerun the command again"""}
-            target_repo_path = os.path.join(self.repos_path, target_repo_name)
+
+            # Match on alias or uid as well as folder basename. The two are
+            # not the same thing: the packaged repo has alias
+            # mlcommons@mlperf-automations but sits in a folder called
+            # mlc_scripts, so a basename-only lookup rejects the name every
+            # user would reach for.
             target_repo = next(
-                (k for k in self.repos if os.path.basename(
-                    k.path) == target_repo_name), None)
+                (k for k in self.repos
+                 if k.meta.get('alias') == target_repo_name
+                 or k.meta.get('uid') == target_repo_name
+                 or os.path.basename(k.path) == target_repo_name), None)
+            if target_repo is None:
+                return {
+                    'return': 1,
+                    'error': f"""The target repo {target_repo_name} is not registered in MLC. Either register it by cloning from git with `mlc pull repo`, or create it with `mlc add repo`, and rerun the command."""}
+
+            # Use the registered repo's real path. Joining repos_path with
+            # the name assumes every repo sits directly under the repo root,
+            # which is false for the shared local repo (it lives under the
+            # cache root) and for any externally registered folder - it would
+            # create a phantom directory outside every registered repo.
+            target_repo_path = target_repo.path
             target_item_name = target_split[1].strip()
         else:
             target_repo = result.repo
             target_repo_path = result.repo.path
             target_item_name = target_split[0].strip()
+
+        # Applies to both branches. Without a "<repo>:" prefix the destination
+        # defaults to the *source* repo, which for a packaged install is
+        # site-packages - the case that has already produced stray scripts in
+        # working trees.
+        pkg_path = getattr(self, 'package_repo_path', None)
+        if pkg_path and os.path.abspath(
+                target_repo_path) == os.path.abspath(pkg_path):
+            logger.warning(
+                f"{target_repo_path} belongs to the installed {PACKAGE_REPO_DIST}. Anything written there is "
+                f"lost on the next upgrade or uninstall - prefix the destination with `local:` to keep it.")
 
         target_item_path = os.path.join(
             target_repo_path, action_target, target_item_name)
@@ -923,8 +1328,31 @@ class Action:
 
 
 default_parent = None
-if not default_parent:
-    default_parent = Action()
+
+
+def get_default_parent():
+    """The shared Action, built on first use.
+
+    Constructing it has real side effects - it creates the repo and cache
+    roots, may write repos.json, and registers an installed mlc-scripts - so
+    it must not happen merely because something imported mlc. `import mlc`
+    used to build one at module scope, which meant a stray MLC_CACHE in the
+    environment could rewrite a registry without any command being run.
+    """
+    global default_parent
+    if default_parent is None:
+        default_parent = Action()
+    return default_parent
+
+
+def peek_default_parent():
+    """The shared Action if one already exists, else None.
+
+    For error reporting: building an Action there would re-run the very
+    construction that just failed and bury the real traceback under a second
+    one.
+    """
+    return default_parent
 
 
 def access(i):
@@ -932,6 +1360,6 @@ def access(i):
 
     action = i['action']
     target = i.get('target', i.get('automation'))
-    action_class = get_action(target, default_parent)
+    action_class = get_action(target, get_default_parent())
     r = action_class.access(i)
     return r

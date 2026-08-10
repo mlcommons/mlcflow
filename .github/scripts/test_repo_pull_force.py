@@ -13,7 +13,12 @@ class TestRepoPullForce(unittest.TestCase):
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp_dir.cleanup)
         self.old_mlc_repos = os.environ.get("MLC_REPOS")
+        self.old_mlc_cache = os.environ.get("MLC_CACHE")
         os.environ["MLC_REPOS"] = os.path.join(self.tmp_dir.name, "repos")
+        # Pin the cache root too. Without this the test inherits
+        # whatever MLC_CACHE the developer has exported and writes
+        # into their real cache.
+        os.environ["MLC_CACHE"] = os.environ["MLC_REPOS"]
         self.addCleanup(self._restore_env)
 
         self.parent = Action()
@@ -29,6 +34,10 @@ class TestRepoPullForce(unittest.TestCase):
             os.environ.pop("MLC_REPOS", None)
         else:
             os.environ["MLC_REPOS"] = self.old_mlc_repos
+        if self.old_mlc_cache is None:
+            os.environ.pop("MLC_CACHE", None)
+        else:
+            os.environ["MLC_CACHE"] = self.old_mlc_cache
 
     def _is_git_status_porcelain_command(self, cmd):
         return (

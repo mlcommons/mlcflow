@@ -41,11 +41,16 @@ class ScriptActionApptainerTest(unittest.TestCase):
                 result = action.call_script_module_function("run", {})
 
             self.assertEqual(result["return"], 1)
+            # ignore_on_conflict is part of the contract: the auto-pull is not
+            # an explicit `mlc pull repo`, so it must never displace a
+            # registered same-uid repo (a version-pinned mlc-scripts, say)
+            # with whatever dev HEAD happens to be.
             access.assert_called_once_with({
                 "automation": "repo",
                 "action": "pull",
                 "repo": "mlcommons@mlperf-automations",
                 "branch": "dev",
+                "ignore_on_conflict": True,
                 "fast_forward_only": True
             })
 

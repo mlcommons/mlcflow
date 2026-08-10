@@ -178,31 +178,64 @@ def remote_run(self_module, i):
 
     # For repo copying, add a separate copy with MLC/repos target
     if i.get('remote_copy_mlc_repos', False):
-        local_repos_path = os.path.join(
-            os.path.expanduser("~"), "MLC", "repos")
+        # Copy the repos that are actually registered, not whatever happens
+        # to sit under the repo root. Under a packaged install the repo root
+        # holds only repos.json and the index files - the scripts live in
+        # site-packages and the local repo lives under the cache root - so a
+        # directory listing would find nothing to copy.
+        action_object = self_module.action_object
+        registered = {}
+        for repo in getattr(action_object, 'repos', []):
+            # Skip the local repo. It is the cache, not content, and copying
+            # it would register a second repo aliased 'local' on the remote -
+            # which then fights the remote's own local for the cache
+            # destination.
+            if repo.meta.get('alias') == 'local':
+                continue
+            registered[os.path.basename(repo.path.rstrip(os.sep))] = repo.path
+            for key in (repo.meta.get('alias'), repo.meta.get('uid')):
+                if key:
+                    registered.setdefault(key, repo.path)
+
         repos_to_copy = i.get('remote_copy_mlc_repos', [])
         if isinstance(repos_to_copy, bool) or repos_to_copy is True:
-            repos_to_copy = [
-                d for d in os.listdir(local_repos_path)
-                if os.path.isdir(os.path.join(local_repos_path, d))
-            ]
-        repo_files = [
-            os.path.join(local_repos_path, repo)
-            for repo in repos_to_copy
-            if os.path.isdir(os.path.join(local_repos_path, repo))
-        ]
+            repos_to_copy = sorted(set(registered.values()))
+
+        repo_files = []
+        for repo in repos_to_copy:
+            path = registered.get(repo)
+            if path is None:
+                # Also accept an explicit path, or a folder under the root.
+                local_repos_path = getattr(
+                    action_object, 'repos_path',
+                    os.path.join(os.path.expanduser("~"), "MLC", "repos"))
+                candidate = repo if os.path.isabs(repo) else os.path.join(
+                    local_repos_path, repo)
+                path = candidate if os.path.isdir(candidate) else None
+            if path and os.path.isdir(path):
+                repo_files.append(path)
+            else:
+                logger.warning(
+                    f"remote_copy_mlc_repos: no registered repo or directory matches '{repo}'; not copying it.")
+
+        if not repo_files:
+            logger.warning(
+                "remote_copy_mlc_repos was requested but nothing matched, so no repos will be copied. "
+                "The remote will use whatever it resolves on its own.")
         if repo_files:
             remote_inputs['files_to_copy'] = remote_inputs.get(
                 'files_to_copy', []) + repo_files
             remote_mlc_repos_path = i.get("remote_mlc_repos_path", "MLC/repos")
             remote_inputs['copy_directory'] = remote_mlc_repos_path
-            # On the remote, if MLC_REPOS is set and differs, symlink so
-            # mlcflow finds the copied repos
+            # Register each copied repo on the remote instead of symlinking
+            # into $MLC_REPOS. The remote resolves its own repo root from its
+            # own interpreter - a path derived from this machine's
+            # site-packages means nothing over there, and $MLC_REPOS is not
+            # normally exported in the remote shell at all.
             run_cmds.insert(0,
-                            f'if [ -n "$MLC_REPOS" ] && [ "$MLC_REPOS" != "{remote_mlc_repos_path}" ]; then '
-                            f'mkdir -p "{remote_mlc_repos_path}" && '
-                            f'ln -sfn "$(realpath {remote_mlc_repos_path})"/* "$MLC_REPOS/"; '
-                            f'fi')
+                            f'for d in "{remote_mlc_repos_path}"/*/ ; do '
+                            f'[ -d "$d" ] && mlc add repo "$(realpath "${{d%/}}")" >/dev/null 2>&1 || true ; '
+                            f'done')
 
     if files_to_copy_back:
         remote_inputs['files_to_copy_back'] = files_to_copy_back

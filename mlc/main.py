@@ -7,7 +7,7 @@ import shlex
 import unicodedata
 from . import utils
 
-from .action import Action, default_parent
+from .action import Action, get_default_parent, peek_default_parent, RootNotWritableError
 from .repo_action import RepoAction
 from .script_action import ScriptAction
 from .cache_action import CacheAction
@@ -97,10 +97,14 @@ def get_version_info():
 
 def _get_repo_hashes():
     """Get git info for all repos. Returns list of (alias, branch, hash, has_local_changes)."""
-    if default_parent is None:
+    # Only report on an Action that already exists. This runs from the
+    # error path, and constructing one here would re-run the construction
+    # that may have just failed.
+    parent = peek_default_parent()
+    if parent is None:
         return []
     results = []
-    for repo in default_parent.repos:
+    for repo in parent.repos:
         v = utils.get_repo_version(repo.path)
         if v.get("source") == "git":
             results.append((os.path.basename(repo.path), v["branch"],
@@ -316,8 +320,6 @@ def process_console_output(res, target, action, run_args):
                 f"Warning code: {warning['code']}, Discription: {warning['description']}")
 
 
-if default_parent is None:
-    default_parent = Action()
 
 
 log_flag_aliases = {'-v': '--verbose', '-s': '--silent'}
@@ -508,6 +510,16 @@ def check_raw_arguments_for_non_ascii():
 
 
 def main():
+    # A misconfigured root is a configuration problem, not a crash: report it
+    # in one line instead of a traceback from inside Action construction.
+    try:
+        return _main()
+    except RootNotWritableError as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+
+def _main():
     """
     MLCFlow is a CLI tool for managing repos, scripts, and caches.
     This framework is designed to streamline automation workflows for MLPerf benchmarks more efficiently.
@@ -584,7 +596,7 @@ def main():
                 raise Exception(
                     f"Invalid action-target {pre_args.action} - {pre_args.target} combination")
         if not pre_args.action and not pre_args.target:
-            help_text += main.__doc__
+            help_text += _main.__doc__ or ""
         elif pre_args.action and not pre_args.target:
             script_only_actions = {
                 a.replace("-", "_")
@@ -603,7 +615,7 @@ def main():
                 raise Exception(f"""Invalid target {pre_args.action}""")
             else:
                 pre_args.target, pre_args.action = pre_args.action, None
-            actions = get_action(pre_args.target, default_parent)
+            actions = get_action(pre_args.target, get_default_parent())
             help_text += actions.__doc__ or ""
             # iterate through every method
             for method_name, method in inspect.getmembers(
@@ -612,7 +624,7 @@ def main():
                 if method.__doc__ and not method.__doc__.startswith("_"):
                     help_text += method.__doc__
         elif pre_args.action and pre_args.target:
-            actions = get_action(pre_args.target, default_parent)
+            actions = get_action(pre_args.target, get_default_parent())
             action_name = pre_args.action.replace("-", "_")
             try:
                 method = getattr(actions, action_name)
@@ -645,7 +657,7 @@ def main():
     global _current_target
     _current_target = args.target
 
-    action = get_action(args.target, default_parent)
+    action = get_action(args.target, get_default_parent())
 
     if not action or not hasattr(action, args.command):
         logging.error(
@@ -674,3 +686,8 @@ if __name__ == '__main__':
     except Exception as e:
         _report_error(e)
         sys.exit(1)
+
+
+# Keep the public entry point self-documenting; the implementation body
+# carries the docstring that `mlc --help` renders.
+main.__doc__ = _main.__doc__

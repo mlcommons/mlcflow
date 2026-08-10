@@ -482,12 +482,18 @@ class Index:
         logger.info(f"Removing repo from index: {repo_path}")
         changed = False
 
+        def belongs_to_repo(path):
+            # A bare startswith has no separator, so removing
+            # .../mlcommons@mlperf-automations would also strip every entry
+            # belonging to .../mlcommons@mlperf-automations1.
+            return path == repo_path or path.startswith(repo_path + os.sep)
+
         # remove index entries
         for folder_type in self.indices:
             before = len(self.indices[folder_type])
             self.indices[folder_type] = [
                 item for item in self.indices[folder_type]
-                if not item["path"].startswith(repo_path)
+                if not belongs_to_repo(item["path"])
             ]
             if len(self.indices[folder_type]) != before:
                 changed = True
@@ -495,7 +501,7 @@ class Index:
         # remove modified times
         keys_to_delete = [
             k for k in self.modified_times
-            if k.startswith(repo_path)
+            if belongs_to_repo(k)
         ]
 
         for k in keys_to_delete:

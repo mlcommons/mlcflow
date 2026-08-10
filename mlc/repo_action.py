@@ -1,4 +1,4 @@
-from .action import Action
+from .action import Action, PACKAGE_REPO_DIST
 import os
 import subprocess
 import re
@@ -266,7 +266,10 @@ class RepoAction(Action):
             meta = {}
             meta['uid'] = utils.get_new_uid()['uid']
             meta['alias'] = repo_folder_name
-            meta['git'] = True
+            # A registered folder need not be a checkout. Recording git: True
+            # for a plain directory makes every later path believe it is one,
+            # so derive it from what is actually there.
+            meta['git'] = utils.has_git_dir(repo_path)
             utils.save_yaml(meta_file, meta)
         else:
             meta = utils.read_yaml(meta_file)
@@ -578,6 +581,15 @@ class RepoAction(Action):
                 subprocess.run(clone_command, check=True)
 
             else:
+                if not utils.is_git_repo(repo_path):
+                    return {
+                        "return": 1,
+                        "error": (
+                            f"{repo_path} is registered but is not a git checkout, so there is nothing to pull. "
+                            f"Update it the way it was installed, or remove it with `mlc rm repo` and pull a checkout instead."
+                        )
+                    }
+
                 logger.info(
                     f"Repository {repo_name} already exists at {repo_path}. Checking for local changes...")
 
@@ -827,7 +839,7 @@ class RepoAction(Action):
         repo_url = run_args.get('repo', run_args.get('url', 'repo'))
         if not repo_url or repo_url == "repo":
             for repo_object in self.repos:
-                if os.path.exists(os.path.join(repo_object.path, ".git")) and os.access(
+                if utils.is_git_repo(repo_object.path) and os.access(
                         repo_object.path, os.W_OK):
                     repo_folder_name = os.path.basename(repo_object.path)
                     res = self.pull_repo(
@@ -840,6 +852,36 @@ class RepoAction(Action):
                     if res['return'] > 0:
                         return res
         else:
+            # A name that is neither a URL nor owner@repo cannot be cloned.
+            # If it matches a registered non-git repo, say so plainly instead
+            # of letting git fail with "repository does not exist" - this is
+            # how `mlc pull repo <a local folder alias>` presents.
+            #
+            # A clonable name is left alone on purpose: an explicit pull is
+            # meant to win, so it clones into the repo root and the uid rule
+            # then displaces whatever shared that uid, including an installed
+            # mlc-scripts.
+            clonable = bool(
+                utils.is_valid_url(repo_url) or re.match(
+                    r'^[\w-]+@[\w-]+$', repo_url))
+            if not clonable:
+                registered = next(
+                    (r for r in self.repos
+                     if r.meta.get('alias') == repo_url
+                     or r.meta.get('uid') == repo_url
+                     or os.path.basename(r.path) == repo_url),
+                    None)
+                if registered is not None and not utils.is_git_repo(
+                        registered.path):
+                    return {
+                        "return": 1,
+                        "error": (
+                            f"{repo_url} is registered at {registered.path}, which is not a git checkout, "
+                            f"so there is nothing to pull. Update it the way it was installed, or "
+                            f"`mlc rm repo {repo_url}` first if you want a checkout instead."
+                        )
+                    }
+
             branch = run_args.get('branch')
             checkout = run_args.get('checkout')
             tag = run_args.get('tag')
@@ -908,6 +950,13 @@ class RepoAction(Action):
 
         """
         logger.info("Listing all repositories.")
+
+        # The repo root can be a hashed directory that changes with the
+        # active environment, and it cannot be recovered from repos.json -
+        # you have to know it before you can find the file to read. Print it.
+        print(f"\nMLC_REPOS: {self.repos_path}{self._repos_path_origin()}")
+        print(f"MLC_CACHE: {self.cache_path}")
+
         print("\nRepositories:")
         print("-------------")
         for repo_object in self.repos:
@@ -916,6 +965,15 @@ class RepoAction(Action):
         print("-------------")
         logger.info("Repository listing ended")
         return {"return": 0}
+
+    def _repos_path_origin(self):
+        """Explain why the repo root is what it is."""
+        if os.environ.get('MLC_REPOS', '').strip():
+            return "  (set by MLC_REPOS)"
+        if getattr(self, 'package_repo_path', None):
+            version = getattr(self, 'package_repo_version', None) or 'unknown'
+            return f"  (auto: mlc-scripts {version} at {self.package_repo_path})"
+        return "  (default)"
 
     def rm(self, run_args):
         """
@@ -972,6 +1030,16 @@ class RepoAction(Action):
 
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
 
+        # Discovery runs at the start of every command, so removing the
+        # packaged repo only lasts until the next one. Say so rather than
+        # letting it look like the removal silently failed.
+        pkg_path = getattr(self, 'package_repo_path', None)
+        if pkg_path and os.path.abspath(repo_path) == os.path.abspath(pkg_path):
+            logger.warning(
+                f"{repo_path} belongs to the installed {PACKAGE_REPO_DIST} and is re-registered at the start of "
+                f"every command. To stop using it, `pip uninstall {PACKAGE_REPO_DIST}`, or pull a checkout of the "
+                f"same repo - an explicit `mlc pull repo` takes precedence over the packaged copy.")
+
         force_remove = True if run_args.get('f') else False
         index = Action.get_index(self)
         index.remove_repo_from_index(repo_path)
@@ -989,27 +1057,45 @@ def rm_repo(repo_path, repos_file_path, force_remove):
 
     if os.path.isdir(repo_path) and os.path.samefile(
             mlc_repos_path, repo_parent_path):
-        # Check for local changes
-        status_command = [
-            'git',
-            '-C',
-            repo_path,
-            'status',
-            '--porcelain',
-            '--untracked-files=no']
-        local_changes = subprocess.run(
-            status_command, capture_output=True, text=True)
-
-        if local_changes.stdout:
-            logger.warning(
-                "Local changes detected in repository. Changes are listed below:")
-            print(local_changes.stdout)
-            confirm_remove = True if force_remove or (
-                input("Continue to remove repo?").lower()) in [
-                "yes", "y"] else False
+        if not utils.is_git_repo(repo_path):
+            # No checkout, so `git status` cannot vouch for the contents.
+            # Deleting on a guess is the worse failure - require --f.
+            if force_remove:
+                logger.warning(
+                    f"{repo_path} is not a git checkout; removing because force was requested.")
+                confirm_remove = True
+            else:
+                logger.warning(
+                    f"{repo_path} is not a git checkout, so uncommitted work cannot be detected.")
+                confirm_remove = (input(
+                    "Continue to remove repo? ").lower()) in ["yes", "y"]
+                if not confirm_remove:
+                    logger.info(
+                        "Folder kept. Unregistering the repo from repos.json only.")
+                    unregister_repo(repo_path, repos_file_path)
+                    return {'return': 0}
         else:
-            logger.info("No local changes detected. Removing repo...")
-            confirm_remove = True
+            # Check for local changes
+            status_command = [
+                'git',
+                '-C',
+                repo_path,
+                'status',
+                '--porcelain',
+                '--untracked-files=no']
+            local_changes = subprocess.run(
+                status_command, capture_output=True, text=True)
+
+            if local_changes.stdout:
+                logger.warning(
+                    "Local changes detected in repository. Changes are listed below:")
+                print(local_changes.stdout)
+                confirm_remove = True if force_remove or (
+                    input("Continue to remove repo?").lower()) in [
+                    "yes", "y"] else False
+            else:
+                logger.info("No local changes detected. Removing repo...")
+                confirm_remove = True
         if confirm_remove:
             if force_remove:
                 logger.info("Force remove is set.")

@@ -1,13 +1,13 @@
 import yaml
 import os
 from . import utils
-from .action import Action, default_parent
+from .action import Action, get_default_parent
 from .logger import logger
 
 class CfgAction(Action):
     def __init__(self, parent=None):
         if parent is None:
-            parent = default_parent
+            parent = get_default_parent()
         #super().__init__(parent)
         self.parent = parent
         self.__dict__.update(vars(parent))

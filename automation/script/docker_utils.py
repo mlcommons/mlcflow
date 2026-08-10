@@ -199,8 +199,14 @@ def prepare_docker_inputs(input_params, docker_settings,
         script_uid = script_meta['uid']
         script_alias = script_meta.get('alias')
         folder_name = f"""{script_alias}_{script_uid[:5]}"""
-        docker_path = os.path.join(
-            mlc.repos_path, 'local', 'docker', folder_name)
+        # Use the resolved local repo itself. Rebuilding the path from a
+        # root plus the literal 'local' assumes the repo is always a folder
+        # called local directly under that root, which is not guaranteed -
+        # it would leave a stray, unregistered local/ beside the real one.
+        local_repo_path = getattr(
+            mlc, 'local_repo_path', os.path.join(
+                getattr(mlc, 'cache_path', mlc.repos_path), 'local'))
+        docker_path = os.path.join(local_repo_path, 'docker', folder_name)
         # docker_path = os.getcwd()
     docker_filename_suffix = (
         docker_base_image.replace('/', '-').replace(':', '-')

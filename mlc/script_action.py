@@ -196,6 +196,14 @@ Main Script Meta:""")
             item = i.get('item')
         if not item:
             return {'return': 1, 'error': f"""No script item given to add. Please use mlc add script <repo_name>:<script_name> --tags=<script_tags> format to add a script to a given repo"""}
+        # With no "<repo>:" prefix, cp would default the destination to the
+        # repo the *template* came from. Since the template now normally
+        # lives in an installed mlc-scripts, that would write the new script
+        # into site-packages: destroyed by the next upgrade, impossible on a
+        # read-only install. Author into the local repo instead.
+        if ":" not in item:
+            item = f"local:{item}"
+
         ii = {}
         ii['target'] = "script"
         ii['src_tags'] = i.get("template_tags", "template,generic")
@@ -259,11 +267,16 @@ Main Script Meta:""")
                 "No script content repo registered. Automatically pulling mlcommons@mlperf-automations...")
 
             # Use the access method to pull the required repository
+            # ignore_on_conflict: this is not an explicit `mlc pull repo`.
+            # It clones --branch=dev unattended, so it must never displace a
+            # registered copy - otherwise an unrelated failure could shadow a
+            # version-pinned mlc-scripts with dev HEAD, unasked.
             result = self.access({
                 "automation": "repo",
                 "action": "pull",
                 "repo": "mlcommons@mlperf-automations",
                 "branch": "dev",
+                "ignore_on_conflict": True,
                 "fast_forward_only": True
             })
 

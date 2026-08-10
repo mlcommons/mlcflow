@@ -19,14 +19,23 @@ class ActionInvalidMetaSearchTest(unittest.TestCase):
         os.chdir(self.temp_dir.name)
 
         self.previous_mlc_repos = os.environ.get("MLC_REPOS")
+        self.previous_mlc_cache = os.environ.get("MLC_CACHE")
         self.addCleanup(self._restore_env)
         os.environ["MLC_REPOS"] = os.path.join(self.temp_dir.name, "repos")
+        # Pin the cache root too. Without this the test inherits
+        # whatever MLC_CACHE the developer has exported and writes
+        # into their real cache.
+        os.environ["MLC_CACHE"] = os.environ["MLC_REPOS"]
 
     def _restore_env(self):
         if self.previous_mlc_repos is None:
             os.environ.pop("MLC_REPOS", None)
         else:
             os.environ["MLC_REPOS"] = self.previous_mlc_repos
+        if self.previous_mlc_cache is None:
+            os.environ.pop("MLC_CACHE", None)
+        else:
+            os.environ["MLC_CACHE"] = self.previous_mlc_cache
 
     def _new_action(self):
         a = Action()
