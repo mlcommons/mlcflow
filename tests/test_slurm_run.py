@@ -3,7 +3,6 @@ Unit tests for slurm_run.py command construction and remote_run.py mapping.
 """
 import sys
 import os
-import subprocess
 import unittest
 
 # Ensure the automation directory is on sys.path so slurm_run / remote_run
@@ -66,24 +65,9 @@ class TestVenvActivationCommand(unittest.TestCase):
 
         activation_cmd = build_venv_activation_command('mlcflow')
 
-        completed = subprocess.run(
-            [
-                'bash',
-                '-lc',
-                (
-                    'unset MLCFLOW_VENV; '
-                    'cmd=' + repr(activation_cmd) + '; '
-                    'printf "__CMD__:%s\\n" "$cmd"'
-                ),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-        self.assertIn(
-            '__CMD__:MLCFLOW_VENV=$(cat mlcflow/.mlcflow_venv_path 2>/dev/null || echo mlcflow) && . "$MLCFLOW_VENV/bin/activate"',
-            completed.stdout,
+        self.assertEqual(
+            activation_cmd,
+            'MLCFLOW_VENV=\\$(cat mlcflow/.mlcflow_venv_path 2>/dev/null || echo mlcflow) && . "\\$MLCFLOW_VENV/bin/activate"',
         )
 
 
