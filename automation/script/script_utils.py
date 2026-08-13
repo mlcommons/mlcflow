@@ -32,22 +32,22 @@ def get_variation_and_script_tags(tags_string):
 
 
 def build_venv_activation_command(venv_dir):
-    venv_dir = shlex.quote(venv_dir or 'mlcflow')
-    compatible_venv = (
-        '${MLCFLOW_VENV_REQUESTED}'
-        '_$(uname -m)'
-        '_py$(python3 -V 2>&1 | tr -cd 0-9. | cut -d. -f1,2)'
+    requested_venv = venv_dir or 'mlcflow'
+    python_code = (
+        "from pathlib import Path; import platform, shlex, sys; "
+        f"requested={requested_venv!r}; "
+        "candidate=f'{requested}_{platform.machine()}_py"
+        "{sys.version_info[0]}.{sys.version_info[1]}'; "
+        "path=candidate if Path(candidate, 'bin', 'activate').is_file() "
+        "else requested; "
+        "print('. ' + shlex.quote(str(Path(path) / \"bin\" / \"activate\")))"
     )
 
     return (
-        f'MLCFLOW_VENV_REQUESTED={venv_dir}'
-        f' && export MLCFLOW_VENV_REQUESTED'
-        f' && MLCFLOW_VENV="$MLCFLOW_VENV_REQUESTED"'
-        f' && if [ ! -f "$MLCFLOW_VENV/bin/activate" ]; then '
-        f'MLCFLOW_VENV_CANDIDATE="{compatible_venv}"; '
-        f'if [ -f "$MLCFLOW_VENV_CANDIDATE/bin/activate" ]; then '
-        f'MLCFLOW_VENV="$MLCFLOW_VENV_CANDIDATE"; fi; fi'
-        f' && . "$MLCFLOW_VENV/bin/activate"'
+        f'python3 -c {shlex.quote(python_code)}'
+        f' > ./.mlcflow-activate'
+        f' && . ./.mlcflow-activate'
+        f' && rm -f ./.mlcflow-activate'
     )
 
 

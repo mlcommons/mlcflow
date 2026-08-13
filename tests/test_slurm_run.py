@@ -126,15 +126,19 @@ class TestVenvActivationCommand(unittest.TestCase):
         from script.script_utils import build_venv_activation_command
         activation_cmd = build_venv_activation_command('mlcflow')
         escaped_cmd = activation_cmd.replace('"', '\\"')
-        shell_script = f'export MLC_SSH_RUN_COMMANDS="[\'{escaped_cmd}\']"\n'
+        expected = f"['{activation_cmd}']"
+        shell_script = (
+            f'export MLC_SSH_RUN_COMMANDS="[\'{escaped_cmd}\']"\n'
+            'printf "%s" "$MLC_SSH_RUN_COMMANDS"\n'
+        )
         completed = subprocess.run(
-            ['bash', '-n'],
-            input=shell_script,
+            ['bash', '-lc', shell_script],
             capture_output=True,
             text=True,
             check=False,
         )
         self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+        self.assertEqual(completed.stdout, expected)
 
 
 # ---------------------------------------------------------------------------
