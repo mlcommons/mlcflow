@@ -97,32 +97,14 @@ def get_version_info():
 
 def _get_repo_hashes():
     """Get git info for all repos. Returns list of (alias, branch, hash, has_local_changes)."""
-    import subprocess
     if default_parent is None:
         return []
     results = []
     for repo in default_parent.repos:
-        alias = os.path.basename(repo.path)
-        git_dir = os.path.join(repo.path, '.git')
-        if not os.path.isdir(git_dir):
-            continue
-        try:
-            commit = subprocess.check_output(
-                ["git", "-C", repo.path, "rev-parse", "--short", "HEAD"],
-                stderr=subprocess.DEVNULL, text=True
-            ).strip()
-            branch = subprocess.check_output(
-                ["git", "-C", repo.path, "rev-parse", "--abbrev-ref", "HEAD"],
-                stderr=subprocess.DEVNULL, text=True
-            ).strip()
-            # Only tracked file changes (ignore untracked files)
-            dirty = subprocess.check_output(
-                ["git", "-C", repo.path, "status", "--porcelain", "-uno"],
-                stderr=subprocess.DEVNULL, text=True
-            ).strip()
-            results.append((alias, branch, commit, bool(dirty)))
-        except Exception:
-            pass
+        v = utils.get_repo_version(repo.path)
+        if v.get("source") == "git":
+            results.append((os.path.basename(repo.path), v["branch"],
+                            v["commit"][:9], v["dirty"]))
     return results
 
 
@@ -258,6 +240,34 @@ def mlcrd():
     mlc_expand_short("remote-docker")
 
 
+def mlcsr():
+    mlc_expand_short("slurm-run")
+
+
+def mlcse():
+    mlc_expand_short("slurm-experiment")
+
+
+def mlcsd():
+    mlc_expand_short("slurm-docker")
+
+
+def mlcsa():
+    mlc_expand_short("slurm-apptainer")
+
+
+def mlcrs():
+    mlc_expand_short("remote-slurm")
+
+
+def mlcres():
+    mlc_expand_short("remote-slurm-experiment")
+
+
+def mlcrse():
+    mlc_expand_short("remote-slurm-experiment")
+
+
 def mlce():
     mlc_expand_short("experiment")
 
@@ -363,7 +373,14 @@ def build_parser(pre_args):
     for action in ['run', 'pull', 'test', 'add', 'show', 'list',
                    'find', 'search', 'rm', 'cp', 'mv', 'help', 'prune', 'mark-tmp']:
         p = subparsers.add_parser(action, add_help=False)
-        p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
+        p.add_argument(
+            'target',
+            choices=[
+                'repo',
+                'repos',
+                'script',
+                'cache',
+                'experiment'])
         p.add_argument(
             'details',
             nargs='?',
@@ -390,9 +407,12 @@ def build_parser(pre_args):
     reindex_parser.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Script-only
-    for action in ['docker', 'docker-run', 'apptainer',
+    for action in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
                    'experiment', 'remote-run', 'remote-experiment',
-                   'remote-docker', 'doc', 'lint']:
+                   'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                   'slurm-run',
+                   'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
+                   'doc', 'lint']:
         p = subparsers.add_parser(action, add_help=False)
         p.add_argument('target', choices=['script', 'run'])
         p.add_argument(
@@ -432,9 +452,12 @@ def build_run_args(args):
     if args.command in ['pull', 'rm', 'add', 'find'] and args.target == "repo":
         run_args['repo'] = args.details
 
-    if args.command in ['docker', 'docker-run', 'apptainer', 'experiment',
-                        'remote-run', 'remote-experiment',
-                        'remote-docker', 'doc', 'lint'] and args.target == "run":
+    if args.command in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
+                        'experiment', 'remote-run', 'remote-experiment',
+                        'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                        'slurm-run',
+                        'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
+                        'doc', 'lint'] and args.target == "run":
         # run_args['target'] = 'script' #dont modify this as script might have
         # target as in input
         args.target = "script"
@@ -507,7 +530,7 @@ def main():
 
     | Target  | Actions                                                   |
     |---------|-----------------------------------------------------------|
-    | script  | run, find/search, rm, mv, cp, add, test, docker-run, show |
+    | script  | run, find/search, rm, mv, cp, add, test, docker-run, apptainer/apptainer-run, show |
     | cache   | find/search, rm, show, list, prune, mark-tmp              |
     | repo    | pull, search, rm, list, find/search                       |
 
@@ -560,7 +583,7 @@ def main():
         help_text = ""
         if pre_args.target == "run":
             if pre_args.action.startswith(
-                    "docker") or pre_args.action == "apptainer":
+                    "docker") or pre_args.action in ("apptainer", "apptainer-run"):
                 pre_args.target = "script"
             else:
                 logger.error(
@@ -570,13 +593,25 @@ def main():
         if not pre_args.action and not pre_args.target:
             help_text += main.__doc__
         elif pre_args.action and not pre_args.target:
-            if pre_args.action not in ['script', 'cache', 'repo']:
+            script_only_actions = {
+                a.replace("-", "_")
+                for a in [
+                    'docker', 'docker-run', 'apptainer', 'apptainer-run',
+                    'experiment', 'remote-run', 'remote-experiment',
+                    'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                    'slurm-run', 'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
+                    'doc', 'lint',
+                ]
+            }
+            if pre_args.action in script_only_actions:
+                pre_args.target = 'script'
+            elif pre_args.action not in ['script', 'cache', 'repo']:
                 logger.error(f"Invalid target {pre_args.action}")
                 raise Exception(f"""Invalid target {pre_args.action}""")
             else:
                 pre_args.target, pre_args.action = pre_args.action, None
             actions = get_action(pre_args.target, default_parent)
-            help_text += actions.__doc__
+            help_text += actions.__doc__ or ""
             # iterate through every method
             for method_name, method in inspect.getmembers(
                     actions.__class__, inspect.isfunction):
@@ -588,7 +623,7 @@ def main():
             action_name = pre_args.action.replace("-", "_")
             try:
                 method = getattr(actions, action_name)
-                help_text += actions.__doc__
+                help_text += actions.__doc__ or ""
                 if method.__doc__:
                     help_text += method.__doc__
             except AttributeError:

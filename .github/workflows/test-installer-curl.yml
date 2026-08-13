@@ -20,6 +20,71 @@ concurrency:
 
 jobs:
   # ===========================================================================
+  # Test Matrix: Shared-home venv naming across Python versions
+  # ===========================================================================
+  # Validates the new shared-home selection logic that appends
+  # _<arch>_py<major.minor> when default ~/mlcflow is incompatible.
+  test-shared-home-python-matrix:
+    name: Shared-home venv selection (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.10', '3.12']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Force installer python3 to selected interpreter
+        run: |
+          mkdir -p "$RUNNER_TEMP/python-shims"
+          cat > "$RUNNER_TEMP/python-shims/python3" <<'EOF'
+          #!/usr/bin/env bash
+          exec python "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/python-shims/python3"
+          echo "$RUNNER_TEMP/python-shims" >> "$GITHUB_PATH"
+
+      - name: Validate shared-home venv suffix selection
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/docs/install/mlcflow_unix_installer.sh"
+
+          SHARED_HOME="$RUNNER_TEMP/shared-home"
+          mkdir -p "$SHARED_HOME"
+          export HOME="$SHARED_HOME"
+
+          DEFAULT_VENV_DIR="$HOME/mlcflow"
+          VENV_DIR="$DEFAULT_VENV_DIR"
+          PY_MAJOR_MINOR="$(get_python_major_minor_version)"
+          PY_ARCH="$(normalize_architecture)"
+
+          # Simulate an existing incompatible default venv and verify suffix fallback
+          mkdir -p "$DEFAULT_VENV_DIR"
+          resolve_default_venv_dir
+          EXPECTED_SUFFIX="${DEFAULT_VENV_DIR}$(get_venv_suffix)"
+          if [ "$VENV_DIR" != "$EXPECTED_SUFFIX" ]; then
+            echo "Expected fallback venv path: $EXPECTED_SUFFIX"
+            echo "Actual venv path: $VENV_DIR"
+            exit 1
+          fi
+
+          # Create a compatible suffix venv and verify it is reused
+          python3 -m venv "$EXPECTED_SUFFIX"
+          VENV_DIR="$DEFAULT_VENV_DIR"
+          resolve_default_venv_dir
+          if [ "$VENV_DIR" != "$EXPECTED_SUFFIX" ]; then
+            echo "Expected reused suffix venv path: $EXPECTED_SUFFIX"
+            echo "Actual venv path: $VENV_DIR"
+            exit 1
+          fi
+
+  # ===========================================================================
   # Test Matrix: Native GitHub Actions Runners
   # ===========================================================================
   # These tests run on native GitHub Actions runners for Ubuntu and macOS.
@@ -481,6 +546,7 @@ jobs:
     name: Test Summary
     runs-on: ubuntu-latest
     needs: 
+      - test-shared-home-python-matrix
       - test-native-runners
       - test-docker-containers
     if: always()
@@ -497,6 +563,7 @@ jobs:
           echo "  curl -sSL <github-raw-url>/mlcflow_unix_installer.sh | bash"
           echo ""
           echo "✅ Test Coverage:"
+          echo "   - Shared-home venv naming across Python 3.8/3.10/3.12"
           echo "   - Native GitHub runners (Ubuntu, macOS)"
           echo "   - Docker containers (Debian, Rocky, Alma, CentOS)"
           echo "   - Multiple installation modes (basic, custom, verbose, quiet)"

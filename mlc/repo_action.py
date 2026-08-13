@@ -2,6 +2,7 @@ from .action import Action
 import os
 import subprocess
 import re
+import shlex
 import yaml
 import json
 import shutil
@@ -40,10 +41,163 @@ class RepoAction(Action):
 
     """
 
+    # These phrases come from git's current stderr output and may vary by
+    # version or locale, so keep the matching logic narrowly scoped.
+    GIT_MISSING_BRANCH_PHRASE = "did not match any file(s) known to git"
+    GIT_FAST_FORWARD_FAILURE_PHRASE = "not possible to fast-forward"
+
     def __init__(self, parent=None):
         # super().__init__(parent)
         self.parent = parent
         self.__dict__.update(vars(parent))
+
+    def _build_pull_command(self, repo_path, branch=None, clone_depth=None,
+                            fast_forward_only=False):
+        pull_command = ['git', '-C', repo_path, 'pull']
+        if fast_forward_only:
+            pull_command.append('--ff-only')
+        if clone_depth is not None:
+            if self._is_shallow_repo(repo_path):
+                pull_command.extend(['--depth', str(clone_depth)])
+            else:
+                logger.warning(
+                    f"--depth/--shallow ignored for pull on non-shallow repo {repo_path}. "
+                    "Re-clone with --shallow to create a shallow copy."
+                )
+        # Preserve the historical existing-repo behavior of a plain
+        # `git pull` by default. The branch argument is only forwarded to
+        # `git pull` when the internal strict path explicitly opts into
+        # fast-forward-only updates.
+        if branch and fast_forward_only:
+            pull_command.extend(['origin', branch])
+        return pull_command
+
+    def _checkout_pull_branch(self, repo_path, branch):
+        """Ensure *branch* is checked out locally before a strict pull.
+
+        First tries to checkout an existing local branch. If that fails, fetches
+        the branch from origin and creates a new tracking branch. Raises
+        RuntimeError with contextual guidance when the branch cannot be prepared.
+
+        Args:
+            repo_path: Local repository path.
+            branch: Branch name to prepare before pulling.
+
+        Raises:
+            RuntimeError: If the branch cannot be fetched or checked out.
+        """
+        try:
+            subprocess.run(
+                ['git', '-C', repo_path, 'checkout', branch],
+                capture_output=True,
+                text=True,
+                check=True)
+        except subprocess.CalledProcessError as checkout_error:
+            checkout_error_text = self._subprocess_error_message(
+                checkout_error)
+            lowered_checkout_error = checkout_error_text.lower()
+            # Git uses the same exit code for many checkout failures, so we
+            # only fall back to fetch+track when stderr includes both
+            # "pathspec" and Git's usual missing-ref phrase
+            # "did not match any file(s) known to git".
+            missing_local_branch = (
+                "pathspec" in lowered_checkout_error
+                and self.GIT_MISSING_BRANCH_PHRASE in lowered_checkout_error
+            )
+            if not missing_local_branch:
+                raise RuntimeError(
+                    f"Cannot switch to branch '{branch}' in {repo_path}: "
+                    f"{checkout_error_text}"
+                ) from checkout_error
+            try:
+                subprocess.run(
+                    ['git', '-C', repo_path, 'fetch', 'origin', branch],
+                    capture_output=True,
+                    text=True,
+                    check=True)
+            except subprocess.CalledProcessError as fetch_error:
+                raise RuntimeError(
+                    f"Failed to fetch branch '{branch}' in {repo_path}: "
+                    f"{self._subprocess_error_message(fetch_error)}. "
+                    "Ensure the branch exists on origin and that the repository is reachable."
+                ) from fetch_error
+
+            try:
+                subprocess.run(
+                    ['git', '-C', repo_path, 'checkout', '-b',
+                        branch, '--track', f'origin/{branch}'],
+                    capture_output=True,
+                    text=True,
+                    check=True)
+            except subprocess.CalledProcessError as tracking_error:
+                raise RuntimeError(
+                    f"Initial checkout of '{branch}' failed in {repo_path}. "
+                    "After fetching from origin, creating a tracking branch also failed. "
+                    f"Initial error: {checkout_error_text}. "
+                    f"Tracking branch error: {self._subprocess_error_message(tracking_error)}. "
+                    "Check that the branch name is correct and that your local checkout can track origin."
+                ) from tracking_error
+
+    @staticmethod
+    def _format_stash_restore_guidance(repo_path):
+        return (
+            f"Local changes remain in stash. Please run `git -C {repo_path} stash apply` "
+            "after resolving pull issues."
+        )
+
+    def _format_pull_error(self, repo_path, error_message, stash_created=False,
+                           force=False, failure_phase="git pull"):
+        """Format a pull failure message.
+
+        Args:
+            repo_path: Repository path being updated.
+            error_message: Original stderr/stdout-derived git failure text.
+            stash_created: Whether local changes were stashed for a force pull.
+            force: Whether the failure happened on a force-pull path.
+            failure_phase: Phase label such as ``git pull`` or
+                ``branch checkout``.
+
+        Returns:
+            A user-facing error string with optional recovery guidance.
+        """
+        prefix = "Force pull failed" if force else "Pull failed"
+        if failure_phase:
+            prefix = f"{prefix} during {failure_phase}"
+
+        resolution = ""
+        lowered_error = error_message.lower()
+        # Git reports ff-only failures via stderr text instead of a distinct
+        # exit code, so use this case-insensitive substring from the standard
+        # "Not possible to fast-forward, aborting." message to add guidance.
+        if self.GIT_FAST_FORWARD_FAILURE_PHRASE in lowered_error:
+            resolution = (
+                " Check whether the local and remote branches have diverged "
+                "and reconcile them manually before retrying."
+            )
+
+        if stash_created:
+            return (
+                f"{prefix} for {repo_path}. "
+                f"{self._format_stash_restore_guidance(repo_path)} "
+                f"Details: {error_message}{resolution}"
+            )
+
+        return f"{prefix} for {repo_path}: {error_message}{resolution}"
+
+    @staticmethod
+    def _subprocess_error_message(error):
+        """Return stderr, then stdout, then str(error), whichever is populated first."""
+        return (error.stderr or error.stdout or str(error)).strip()
+
+    @staticmethod
+    def _validate_extra_git_args(extra_args):
+        disallowed_pattern = re.compile(r"[\r\n]")
+        for arg in extra_args:
+            if disallowed_pattern.search(arg):
+                return (
+                    "--extra_git_args may not include carriage returns or newlines."
+                )
+        return None
 
     def add(self, run_args):
         """
@@ -324,8 +478,21 @@ class RepoAction(Action):
             return {"return": 0, "value": os.path.basename(
                 url).replace(".git", "")}
 
+    def _is_shallow_repo(self, repo_path):
+        """Return True if the git repository at *repo_path* is a shallow clone."""
+        try:
+            result = subprocess.run(
+                ['git', '-C', repo_path, 'rev-parse', '--is-shallow-repository'],
+                capture_output=True,
+                text=True,
+            )
+            return result.returncode == 0 and result.stdout.strip() == 'true'
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            return False
+
     def pull_repo(self, repo_url, branch=None, checkout=None, tag=None,
-                  pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False):
+                  pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False,
+                  shallow=False, depth=None, extra_git_args=None, fast_forward_only=False):
 
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path  # either the value will be from 'MLC_REPOS'
@@ -360,20 +527,55 @@ class RepoAction(Action):
                 repo_path = os.path.join(repo_base_path, repo_download_name)
 
         try:
+            # Compute depth argument: --shallow implies depth=1; explicit
+            # --depth=N takes precedence
+            clone_depth = None
+            if depth is not None:
+                try:
+                    clone_depth = int(depth)
+                except (TypeError, ValueError):
+                    return {
+                        "return": 1, "error": f"Invalid value for --depth: {depth}. Must be a positive integer."}
+                if clone_depth < 1:
+                    return {
+                        "return": 1, "error": f"Invalid value for --depth: {clone_depth}. Must be a positive integer."}
+            elif shallow:
+                clone_depth = 1
+
+            # Parse extra_git_args into a list
+            extra_args = []
+            if extra_git_args:
+                if isinstance(extra_git_args, list):
+                    if not all(isinstance(arg, str) for arg in extra_git_args):
+                        return {
+                            "return": 1,
+                            "error": "--extra_git_args list entries must all be strings."
+                        }
+                    extra_args = extra_git_args
+                elif isinstance(extra_git_args, str):
+                    extra_args = shlex.split(extra_git_args)
+                else:
+                    return {
+                        "return": 1,
+                        "error": "--extra_git_args must be provided as a string or list of strings."
+                    }
+                extra_git_args_error = self._validate_extra_git_args(
+                    extra_args)
+                if extra_git_args_error:
+                    return {"return": 1, "error": extra_git_args_error}
+
             # If the directory doesn't exist, clone it
             if not os.path.exists(repo_path):
                 logger.info(f"Cloning repository {repo_url} to {repo_path}...")
 
-                # Build clone command without branch if not provided
-                clone_command = ['git', 'clone', repo_url, repo_path]
+                # Build clone command
+                clone_command = ['git', 'clone']
                 if branch:
-                    clone_command = [
-                        'git',
-                        'clone',
-                        '--branch',
-                        branch,
-                        repo_url,
-                        repo_path]
+                    clone_command += ['--branch', branch]
+                if clone_depth is not None:
+                    clone_command += ['--depth', str(clone_depth)]
+                clone_command += extra_args
+                clone_command += [repo_url, repo_path]
 
                 subprocess.run(clone_command, check=True)
 
@@ -435,21 +637,33 @@ class RepoAction(Action):
                     logger.info(
                         "Pulling latest changes...")
                     try:
+                        if fast_forward_only and branch:
+                            self._checkout_pull_branch(repo_path, branch)
                         subprocess.run(
-                            ['git', '-C', repo_path, 'pull'],
+                            self._build_pull_command(
+                                repo_path, branch, clone_depth, fast_forward_only),
                             capture_output=True,
                             text=True,
                             check=True)
-                    except subprocess.CalledProcessError as e:
-                        pull_error = (e.stderr or e.stdout or str(e)).strip()
-                        if stash_created:
-                            return {
-                                "return": 1,
-                                "error": f"Force pull failed during git pull for {repo_path}. Local changes remain in stash. Please run `git -C {repo_path} stash apply` after resolving pull issues. Details: {pull_error}"
-                            }
+                    except RuntimeError as e:
                         return {
                             "return": 1,
-                            "error": f"Force pull failed during git pull for {repo_path}: {pull_error}"
+                            "error": self._format_pull_error(
+                                repo_path,
+                                str(e),
+                                stash_created=stash_created,
+                                force=True,
+                                failure_phase="branch checkout")
+                        }
+                    except subprocess.CalledProcessError as e:
+                        pull_error = self._subprocess_error_message(e)
+                        return {
+                            "return": 1,
+                            "error": self._format_pull_error(
+                                repo_path,
+                                pull_error,
+                                stash_created=stash_created,
+                                force=True)
                         }
                     logger.info("Repository successfully pulled.")
 
@@ -494,8 +708,28 @@ class RepoAction(Action):
                 else:
                     logger.info(
                         "No local changes detected. Pulling latest changes...")
-                    subprocess.run(
-                        ['git', '-C', repo_path, 'pull'], check=True)
+                    try:
+                        if fast_forward_only and branch:
+                            self._checkout_pull_branch(repo_path, branch)
+                        subprocess.run(
+                            self._build_pull_command(
+                                repo_path, branch, clone_depth, fast_forward_only),
+                            capture_output=True,
+                            text=True,
+                            check=True)
+                    except RuntimeError as e:
+                        return {
+                            "return": 1,
+                            "error": self._format_pull_error(
+                                repo_path, str(e), failure_phase="branch checkout")
+                        }
+                    except subprocess.CalledProcessError as e:
+                        pull_error = self._subprocess_error_message(e)
+                        return {
+                            "return": 1,
+                            "error": self._format_pull_error(
+                                repo_path, pull_error)
+                        }
                     logger.info("Repository successfully pulled.")
 
             if tag:
@@ -535,6 +769,8 @@ class RepoAction(Action):
 
             return {"return": 0}
 
+        except RuntimeError as e:
+            return {'return': 1, 'error': str(e)}
         except subprocess.CalledProcessError as e:
             return {'return': 1, 'error': f"Git command failed: {e}"}
         except Exception as e:
@@ -560,10 +796,13 @@ class RepoAction(Action):
 
 
     - `--checkout <commit_sha>`: Checks out a specific commit after cloning (applicable when the repository exists locally).
-    - `--branch <branch_name>`: Checks out a specific branch **while cloning** a new repository.
+    - `--branch <branch_name>`: Checks out a specific branch while cloning a new repository. When strict fast-forward-only pulls are requested for an existing checkout, it also selects the local branch to switch to before pulling `origin/<branch>`.
     - `--tag <release_tag>`: Checks out a particular release tag.
     - `--pat <access_token>` or `--ssh`: Clones a private repository using a personal access token or SSH.
     - `--force`: For existing repositories with local tracked changes, stashes changes before pull and reapplies them after pull.
+    - `--shallow`: Perform a shallow clone with `--depth=1` (fastest for a fresh copy without history). For existing repos, only applied if the repo is already shallow; otherwise ignored with a warning.
+    - `--depth=N`: Perform a shallow clone/pull with the specified history depth (e.g. `--depth=5`). For existing repos, `--depth` is only applied when the repository is already a shallow clone; passing `--depth` to a full-history clone would corrupt it and is therefore ignored with a warning.
+    - `--extra_git_args=<args>`: Pass additional arguments to the `git clone` command (e.g. `--extra_git_args="--filter=blob:none"`). Only applies when cloning a new repository; not used for pull on existing repos. Accepts only trusted input — arguments are passed directly to git without further validation.
 
     Example Output:
 
@@ -594,7 +833,12 @@ class RepoAction(Action):
                         repo_object.path, os.W_OK):
                     repo_folder_name = os.path.basename(repo_object.path)
                     res = self.pull_repo(
-                        repo_folder_name, repo_path=repo_object.path, force=run_args.get('force'))
+                        repo_folder_name, repo_path=repo_object.path, force=run_args.get(
+                            'force'),
+                        shallow=run_args.get('shallow', False),
+                        depth=run_args.get('depth'),
+                        extra_git_args=run_args.get('extra_git_args'),
+                        fast_forward_only=run_args.get('fast_forward_only', False))
                     if res['return'] > 0:
                         return res
         else:
@@ -606,6 +850,10 @@ class RepoAction(Action):
             ssh = run_args.get('ssh')
             force = run_args.get('force')
             ignore_on_conflict = run_args.get('ignore_on_conflict')
+            shallow = run_args.get('shallow', False)
+            depth = run_args.get('depth')
+            extra_git_args = run_args.get('extra_git_args')
+            fast_forward_only = run_args.get('fast_forward_only', False)
 
             if sum(bool(var) for var in [branch, checkout, tag]) > 1:
                 return {
@@ -619,7 +867,11 @@ class RepoAction(Action):
                 pat,
                 ssh,
                 ignore_on_conflict=ignore_on_conflict,
-                force=force)
+                force=force,
+                shallow=shallow,
+                depth=depth,
+                extra_git_args=extra_git_args,
+                fast_forward_only=fast_forward_only)
             if res['return'] > 0:
                 return res
 

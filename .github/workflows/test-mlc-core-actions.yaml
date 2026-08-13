@@ -338,6 +338,49 @@ jobs:
           echo "No cache found to test deletion"
         fi
 
+    - name: Test 28 - experiment actions - list, find, show, rm
+      run: |
+        # Run a script to generate caches for experiment testing
+        mlcr detect,os --quiet
+        
+        # Run an experiment to create an experiment entry
+        mlce detect,os --quiet
+        
+        # List experiments
+        mlc list experiment 2>&1 | tee test28_list.log
+        if ! grep -q "experiment" test28_list.log; then
+          echo "mlc list experiment did not list any experiments"
+        fi
+        
+        # Find experiment by tags
+        mlc find experiment --tags=detect,os -p 2>&1 | tee test28_find.log
+        
+        # Show experiment details
+        mlc show experiment --tags=detect,os 2>&1 | tee test28_show.log
+        
+        # Remove experiment by tags
+        mlc rm experiment --tags=detect,os -f
+        
+        # Verify experiment was removed
+        FIND_AFTER=$(mlc find experiment --tags=detect,os -p 2>/dev/null)
+        if [ -n "$FIND_AFTER" ]; then
+          echo "WARNING: Experiment still found after rm"
+        fi
+
+    - name: Test 29 - cache prune - prune expired caches
+      run: |
+        # Run a script to create a cache entry
+        mlcr detect,os --quiet
+        
+        # Prune should report no expired entries (caches are fresh)
+        mlc prune cache 2>&1 | tee test29_prune.log
+        if ! grep -q "No expired cache entries found" test29_prune.log; then
+          echo "WARNING: Unexpected prune output"
+        fi
+        
+        # Prune with tags filter
+        mlc prune cache --tags=detect,os 2>&1 | tee test29_prune_tags.log
+
   test_mlc_access_core_actions:
 
     runs-on: ${{ matrix.os }}

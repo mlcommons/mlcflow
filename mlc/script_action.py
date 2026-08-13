@@ -26,8 +26,9 @@ class ScriptAction(Action):
     6.  Copy(cp)
     7.  Run
     8.  Docker
-    9.  Test
-    10. Experiment
+    9.  Apptainer
+    10. Test
+    11. Experiment
 
     Scripts in MLCFlow can be identified using different methods:
 
@@ -228,22 +229,42 @@ Main Script Meta:""")
 
         return module
 
+    def _content_repo_registered(self):
+        # automation/ ships bundled with mlcflow, so find_target_folder()
+        # always succeeds regardless of whether any script *content* repo
+        # (mlcommons@mlperf-automations or a fork/custom clone of it) is
+        # registered. "engine missing" is no longer a reliable signal that
+        # content needs pulling. Don't hardcode a specific repo alias here —
+        # forks (e.g. gateoverflow@mlperf-automations) are valid too — check
+        # generically for any repo with actual script content instead, same
+        # as find_target_folder() does for the (now-bundled) automation/
+        # folder, just one level up at <repo>/script/ instead of
+        # <repo>/automation/script/.
+        for repo in self.repos:
+            script_dir = os.path.join(repo.path, 'script')
+            if os.path.isdir(script_dir) and os.listdir(script_dir):
+                return True
+        return False
+
     def call_script_module_function(self, function_name, run_args):
         self.action_type = "script"
         repos_folder = self.repos_path
 
         # Import script submodule
         script_path = self.find_target_folder("script")
-        if not script_path:
+        if not script_path or not self._content_repo_registered():
             logger.warning(
-                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository...")
+                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository..."
+                if not script_path else
+                "No script content repo registered. Automatically pulling mlcommons@mlperf-automations...")
 
             # Use the access method to pull the required repository
             result = self.access({
                 "automation": "repo",
                 "action": "pull",
                 "repo": "mlcommons@mlperf-automations",
-                "branch": "dev"
+                "branch": "dev",
+                "fast_forward_only": True
             })
 
             if result['return'] == 0:
@@ -252,7 +273,7 @@ Main Script Meta:""")
 
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
-                if not script_path:
+                if not script_path or not self._content_repo_registered():
                     return {
                         'return': 1, 'error': f"""Script automation still not found after pulling mlcommons@mlperf-automations --branch=dev."""}
             else:
@@ -279,33 +300,17 @@ Main Script Meta:""")
                     self, module_path)
 
             try:
-                if function_name == "run":
-                    result = automation_instance.run(
-                        run_args)  # Pass args to the run method
-                elif function_name == "docker":
-                    result = automation_instance.docker(
-                        run_args)  # Pass args to the run method
-                elif function_name == "test":
-                    result = automation_instance.test(
-                        run_args)  # Pass args to the run method
-                elif function_name == "experiment":
-                    result = automation_instance.experiment(
-                        run_args)  # Pass args to the experiment method
-                elif function_name == "remote_run":
-                    result = automation_instance.remote_run(
-                        run_args)  # Pass args to the experiment method
-                elif function_name == "help":
-                    result = automation_instance.help(
-                        run_args)  # Pass args to the help method
-                elif function_name == "doc":
-                    result = automation_instance.doc(
-                        run_args)  # Pass args to the doc method
-                elif function_name == "lint":
-                    result = automation_instance.lint(
-                        run_args)  # Pass args to the lint method
-                else:
+                method = getattr(automation_instance, function_name, None)
+                if method is None:
                     return {
-                        'return': 1, 'error': f'Function {function_name} is not supported'}
+                        'return': 1,
+                        'error': (
+                            f"Action '{function_name}' is not supported by the loaded "
+                            f"automation engine at '{module_path}'. "
+                            "You may need a newer version of mlcflow."
+                        )
+                    }
+                result = method(run_args)
             except ScriptExecutionError:
                 raise
             except Exception as exc:
@@ -413,6 +418,33 @@ Main Script Meta:""")
         return self.call_script_module_function("docker", run_args)
 
     docker.__doc__ = docker_run.__doc__
+
+    def apptainer(self, run_args):
+        return self.apptainer_run(run_args)
+
+    def apptainer_run(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Script
+    Action: Apptainer
+    ####################################################################################################################
+
+    The `apptainer` action runs scripts inside an Apptainer containerized environment.
+
+    An MLCFlow script can be executed inside Apptainer using either of the following syntaxes:
+
+    1. Apptainer Run: mlc apptainer run --tags=<script tags> <run flags>
+    2. Apptainer Script: mlc apptainer script --tags=<script tags> <run flags>
+
+    Example Command:
+
+    mlc apptainer script --tags=detect,os -j
+    mlca detect,os -j
+
+        """
+        return self.call_script_module_function("apptainer", run_args)
+
+    apptainer.__doc__ = apptainer_run.__doc__
 
     def remote_run(self, run_args):
         """
@@ -682,6 +714,169 @@ Main Script Meta:""")
         """
         run_args["remote_action"] = "docker"
         return self.call_script_module_function("remote_run", run_args)
+
+    def slurm_run(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-run
+    ################################################################################
+
+    The `slurm-run` action runs an MLC script on a SLURM cluster node via srun.
+
+    Flags Available:
+
+    1. --slurm_partition:
+        SLURM partition to submit to
+    2. --slurm_nodes:
+        Number of nodes (default: 1)
+    3. --slurm_ntasks:
+        Number of tasks (default: 1)
+    4. --slurm_ntasks_per_node:
+        Number of tasks per node
+    5. --slurm_cpus_per_task:
+        Number of CPUs per task
+    6. --slurm_gpus:
+        Total number of GPUs
+    7. --slurm_gpus_per_node:
+        Number of GPUs per node
+    8. --slurm_gpus_per_task:
+        Number of GPUs per task
+    9. --slurm_mem:
+        Total memory (e.g., 16G)
+    10. --slurm_mem_per_cpu:
+        Memory per CPU (e.g., 4G)
+    11. --slurm_mem_per_gpu:
+        Memory per GPU (e.g., 8G)
+    12. --slurm_time:
+        Time limit (e.g., 01:00:00)
+    13. --slurm_job_name:
+        Job name
+    14. --slurm_output:
+        Output file pattern (e.g., slurm-%j.out)
+    15. --slurm_error:
+        Error file pattern (e.g., slurm-%j.err)
+    16. --slurm_account:
+        Account to charge
+    17. --slurm_qos:
+        Quality of service
+    18. --slurm_constraint:
+        Node feature constraint
+    19. --slurm_exclusive:
+        Request exclusive node access (default: False)
+    20. --slurm_export:
+        Environment export mode (default: ALL)
+    21. --slurm_srun_extra_args:
+        Additional arguments to pass directly to srun
+    22. --slurm_python_venv:
+        Python virtual environment name on the node (default: mlcflow)
+    23. --slurm_pull_mlc_repos:
+        Pull MLC repos on the node before running
+    24. --slurm_pre_run_cmds:
+        Commands to run on the node before the main script
+    25. --slurm_post_run_cmds:
+        Commands to run on the node after the main script
+
+    Example Command:
+
+    mlc slurm-run script --tags=detect,os
+    mlcsr detect,os --slurm_partition=gpu --slurm_gpus=1 --slurm_time=01:00:00
+
+        """
+        return self.call_script_module_function("slurm_run", run_args)
+
+    def slurm_docker(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-docker
+    ################################################################################
+
+    The `slurm-docker` action runs an MLC docker script on a SLURM cluster node
+    via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-docker script --tags=detect,os
+    mlcsd detect,os --slurm_partition=gpu --slurm_gpus=1
+
+        """
+        return self.call_script_module_function("slurm_docker", run_args)
+
+    def slurm_apptainer(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-apptainer
+    ################################################################################
+
+    The `slurm-apptainer` action runs an MLC apptainer script on a SLURM cluster
+    node via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-apptainer script --tags=detect,os
+    mlcsa detect,os --slurm_partition=gpu --slurm_gpus=1
+
+        """
+        return self.call_script_module_function("slurm_apptainer", run_args)
+
+    def slurm_experiment(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-experiment
+    ################################################################################
+
+    The `slurm-experiment` action runs an MLC experiment on a SLURM cluster node
+    via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-experiment script --tags=detect,os
+    mlcse detect,os --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function("slurm_experiment", run_args)
+
+    def remote_slurm(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: remote-slurm
+    ################################################################################
+
+    The `remote-slurm` action connects to a remote machine via SSH and runs an
+    MLC slurm-run script there.  Accepts all --remote_* flags from remote-run as
+    well as all --slurm_* flags from slurm-run.
+
+    Example Command:
+
+    mlc remote-slurm script --tags=detect,os --remote_host=mycluster.example.com
+    mlcrs detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function("remote_slurm", run_args)
+
+    def remote_slurm_experiment(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: remote-slurm-experiment
+    ################################################################################
+
+    The `remote-slurm-experiment` action connects to a remote machine via SSH
+    and runs an MLC slurm-experiment script there.  Accepts all --remote_* flags
+    from remote-run as well as all --slurm_* flags from slurm-run.
+
+    Example Command:
+
+    mlc remote-slurm-experiment script --tags=detect,os --remote_host=mycluster.example.com
+    mlcres detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function(
+            "remote_slurm_experiment", run_args)
 
 
 class ScriptExecutionError(Exception):
