@@ -64,6 +64,11 @@ def build_venv_activation_command(venv_dir):
         f'python3 -c "import base64,sys;exec(base64.b64decode(sys.argv[1]).decode())"'
         f' {encoded}'
     )
+    # activation_script is /tmp/.mlcflow-activate-<32 hex chars>; only
+    # [/tmp.-a-f0-9] characters, all shell-safe without quoting.  We
+    # intentionally do NOT use shlex.quote() here: shlex.quote() would add
+    # single-quote delimiters, which customize.py's replace("'", "'\''") +
+    # shlex.quote() double-escaping would then mangle.
     return f'{exec_cmd} > {activation_script} && . {activation_script}'
 
 
