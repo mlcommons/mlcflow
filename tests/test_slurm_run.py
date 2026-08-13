@@ -3,6 +3,9 @@ Unit tests for slurm_run.py command construction and remote_run.py mapping.
 """
 import sys
 import os
+import shlex
+import subprocess
+import tempfile
 import unittest
 
 # Ensure the automation directory is on sys.path so slurm_run / remote_run
@@ -57,6 +60,67 @@ class TestRemoteRunMapping(unittest.TestCase):
 
     def test_run_action_defaults_to_mlcr(self):
         self.assertTrue(self._regenerate('run').startswith('mlcr'))
+
+
+class TestVenvActivationCommand(unittest.TestCase):
+    def _activation_fixture(self, base_dir, venv_dir):
+        requested_path = os.path.join(base_dir, venv_dir)
+        resolved_path = (
+            f"{requested_path}_{os.uname().machine}_py"
+            f"{sys.version_info[0]}.{sys.version_info[1]}"
+        )
+        os.makedirs(os.path.join(resolved_path, 'bin'), exist_ok=True)
+        with open(os.path.join(resolved_path, 'bin', 'activate'), 'w', encoding='utf-8') as f:
+            f.write(f'export ACTIVATED_TO={shlex.quote(resolved_path)}\n')
+        return requested_path, resolved_path
+
+    def _run_activation(self, activation_cmd, cwd, via_eval=False):
+        quoted_cmd = shlex.quote(activation_cmd)
+        command = (
+            f'cmd={quoted_cmd}; eval "$cmd"; printf "%s" "$ACTIVATED_TO"'
+            if via_eval else
+            f'{activation_cmd}; printf "%s" "$ACTIVATED_TO"'
+        )
+        completed = subprocess.run(
+            ['bash', '-lc', command],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+        return completed.stdout
+
+    def test_remote_command_activates_resolved_suffix_venv_through_eval(self):
+        from script.script_utils import build_venv_activation_command
+        with tempfile.TemporaryDirectory() as temp_dir:
+            requested_path, resolved_path = self._activation_fixture(
+                temp_dir, 'mlcflow')
+            activation_cmd = build_venv_activation_command('mlcflow')
+
+            activated_path = self._run_activation(
+                activation_cmd,
+                cwd=temp_dir,
+                via_eval=True,
+            )
+
+        self.assertEqual(activated_path, resolved_path)
+        self.assertNotEqual(activated_path, requested_path)
+
+    def test_slurm_command_activates_resolved_suffix_venv_in_bash_c(self):
+        from script.script_utils import build_venv_activation_command
+        with tempfile.TemporaryDirectory() as temp_dir:
+            requested_path, resolved_path = self._activation_fixture(
+                temp_dir, 'mlcflow')
+            activation_cmd = build_venv_activation_command('mlcflow')
+
+            activated_path = self._run_activation(
+                activation_cmd,
+                cwd=temp_dir,
+            )
+
+        self.assertEqual(activated_path, resolved_path)
+        self.assertNotEqual(activated_path, requested_path)
 
 
 # ---------------------------------------------------------------------------
