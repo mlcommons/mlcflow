@@ -173,7 +173,9 @@ class TestRemoteRunIsolation(unittest.TestCase):
     def test_remote_isolated_sets_tmp_mlc_repos_and_cleanup(self):
         run_cmds = self._capture_remote_run_cmds(remote_isolated=True)
         combined = " ; ".join(run_cmds)
-        self.assertIn('MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1', combined)
+        self.assertIn(
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1',
+            combined)
         self.assertIn(
             '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1', combined)
         self.assertIn('cd "$MLC_ISOLATED_TMP_DIR" || exit 1', combined)
@@ -181,7 +183,8 @@ class TestRemoteRunIsolation(unittest.TestCase):
         self.assertIn(
             'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP', combined)
 
-    def test_remote_isolated_command_survives_remote_escaping_and_cleans_up(self):
+    def test_remote_isolated_command_survives_remote_escaping_and_cleans_up(
+            self):
         marker_file = '/tmp/mlcflow_remote_iso_tmpdir.txt'
         if os.path.exists(marker_file):
             os.remove(marker_file)
@@ -215,7 +218,9 @@ class TestRemoteRunIsolation(unittest.TestCase):
             remote_no_internet=True,
         )
         combined = " ; ".join(run_cmds)
-        self.assertIn('bash "${MLC_ISOLATED_BASE_DIR}/mlc-remote-artifacts/', combined)
+        self.assertIn(
+            'bash "${MLC_ISOLATED_BASE_DIR}/mlc-remote-artifacts/',
+            combined)
 
     def test_remote_isolated_uses_absolute_path_for_remote_copied_repos(self):
         from unittest.mock import patch
@@ -358,7 +363,9 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
 
         self.assertEqual(result['return'], 0)
         bash_c_cmd = captured_args[-1]  # last element after 'bash', '-c'
-        self.assertIn('MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1', bash_c_cmd)
+        self.assertIn(
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1',
+            bash_c_cmd)
         self.assertIn(
             '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1', bash_c_cmd)
         self.assertIn('cd "$MLC_ISOLATED_TMP_DIR" || exit 1', bash_c_cmd)
