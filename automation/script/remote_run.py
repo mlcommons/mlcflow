@@ -38,6 +38,7 @@ def remote_run(self_module, i):
     remote_shell = i.get('remote_shell', '')
     remote_no_internet = is_true(i.get('remote_no_internet', False))
     remote_isolated = is_true(i.get('remote_isolated', False))
+    remote_isolated_base_dir = i.get('remote_isolated_base_dir', '')
 
     prune_result = prune_input(
         {'input': i, 'extra_keys_starts_with': ['remote_']})
@@ -107,9 +108,23 @@ def remote_run(self_module, i):
         remote_copy_directory_for_cmd = f'${{MLC_ISOLATED_BASE_DIR}}/{remote_copy_directory}'
 
     if remote_isolated:
+        run_cmds.append('MLC_ISOLATED_BASE_DIR="$PWD"')
+        if remote_isolated_base_dir:
+            safe_remote_isolated_base_dir = (
+                str(remote_isolated_base_dir)
+                .replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace('$', '\\$')
+                .replace('`', '\\`')
+            )
+            run_cmds.extend([
+                f'MLC_ISOLATED_TMP_BASE_DIR="{safe_remote_isolated_base_dir}"',
+                '[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1',
+                'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
+            ])
+        else:
+            run_cmds.append('MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1')
         run_cmds.extend([
-            'MLC_ISOLATED_BASE_DIR="$PWD"',
-            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1',
             '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1',
             'cd "$MLC_ISOLATED_TMP_DIR" || exit 1',
             'export MLC_REPOS="$PWD/MLC"',

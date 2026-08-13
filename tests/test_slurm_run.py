@@ -183,6 +183,18 @@ class TestRemoteRunIsolation(unittest.TestCase):
         self.assertIn(
             'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP', combined)
 
+    def test_remote_isolated_supports_custom_tmp_base_dir(self):
+        run_cmds = self._capture_remote_run_cmds(
+            remote_isolated=True,
+            remote_isolated_base_dir='/scratch/mlcflow',
+        )
+        combined = " ; ".join(run_cmds)
+        self.assertIn('MLC_ISOLATED_TMP_BASE_DIR="/scratch/mlcflow"', combined)
+        self.assertIn('[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1', combined)
+        self.assertIn(
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
+            combined)
+
     def test_remote_isolated_command_survives_remote_escaping_and_cleans_up(
             self):
         marker_file = '/tmp/mlcflow_remote_iso_tmpdir.txt'
@@ -372,6 +384,48 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
         self.assertIn('export MLC_REPOS="$PWD/MLC"', bash_c_cmd)
         self.assertIn(
             'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP', bash_c_cmd)
+
+    def test_slurm_isolated_supports_custom_tmp_base_dir(self):
+        from unittest.mock import patch, MagicMock
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured_args = []
+
+        def fake_call(args):
+            captured_args.extend(args)
+            return 0
+
+        with patch('script.slurm_run.shutil.which', return_value='/usr/bin/srun'), \
+                patch('script.slurm_run.subprocess.call', side_effect=fake_call):
+            from script.slurm_run import slurm_run
+            result = slurm_run(mock_self, {
+                'tags': 'detect,os',
+                'slurm_isolated': True,
+                'slurm_isolated_base_dir': '/scratch/mlcflow',
+                'env': {},
+            })
+
+        self.assertEqual(result['return'], 0)
+        bash_c_cmd = captured_args[-1]
+        self.assertIn('MLC_ISOLATED_TMP_BASE_DIR="/scratch/mlcflow"', bash_c_cmd)
+        self.assertIn('[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1', bash_c_cmd)
+        self.assertIn(
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
+            bash_c_cmd)
 
 
 if __name__ == '__main__':
