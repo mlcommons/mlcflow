@@ -84,6 +84,68 @@ jobs:
             exit 1
           fi
 
+      - name: Validate broken venv fallback and marker file
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/docs/install/mlcflow_unix_installer.sh"
+
+          TEST_HOME="$RUNNER_TEMP/broken-venv-test"
+          mkdir -p "$TEST_HOME"
+          export HOME="$TEST_HOME"
+
+          DEFAULT_VENV_DIR="$HOME/mlcflow"
+          VENV_DIR="$DEFAULT_VENV_DIR"
+          PY_MAJOR_MINOR="$(get_python_major_minor_version)"
+          PY_ARCH="$(normalize_architecture)"
+
+          # Create a broken default venv (python binary exists but pip is missing)
+          python3 -m venv "$DEFAULT_VENV_DIR"
+          rm -rf "$DEFAULT_VENV_DIR/lib"
+          # Remove pip from the venv to make it fail the pip check
+          rm -f "$DEFAULT_VENV_DIR/bin/pip" "$DEFAULT_VENV_DIR/bin/pip3"
+
+          # is_compatible_venv should reject the broken venv
+          if is_compatible_venv "$DEFAULT_VENV_DIR"; then
+            echo "ERROR: Broken venv should not be detected as compatible"
+            exit 1
+          fi
+          echo "OK: Broken venv correctly rejected"
+
+          # resolve_venv_dir should fall back to the suffixed version
+          resolved="$(resolve_venv_dir "$DEFAULT_VENV_DIR")"
+          EXPECTED_SUFFIX="${DEFAULT_VENV_DIR}$(get_venv_suffix)"
+          if [ "$resolved" != "$EXPECTED_SUFFIX" ]; then
+            echo "Expected fallback to: $EXPECTED_SUFFIX"
+            echo "Got: $resolved"
+            exit 1
+          fi
+          echo "OK: Broken venv falls back to suffixed path"
+
+      - name: Validate venv deactivation at script start
+        run: |
+          set -euo pipefail
+
+          DEACTIVATE_HOME="$RUNNER_TEMP/deactivate-test"
+          mkdir -p "$DEACTIVATE_HOME"
+          python3 -m venv "$DEACTIVATE_HOME/testvenv"
+          source "$DEACTIVATE_HOME/testvenv/bin/activate"
+
+          # VIRTUAL_ENV should be set
+          if [ -z "${VIRTUAL_ENV:-}" ]; then
+            echo "ERROR: VIRTUAL_ENV not set after activation"
+            exit 1
+          fi
+
+          # Source the installer (it deactivates at the top)
+          source "$GITHUB_WORKSPACE/docs/install/mlcflow_unix_installer.sh"
+
+          # After sourcing, VIRTUAL_ENV should be unset
+          if [ -n "${VIRTUAL_ENV:-}" ]; then
+            echo "ERROR: VIRTUAL_ENV still set after sourcing installer"
+            exit 1
+          fi
+          echo "OK: Installer correctly deactivated existing venv"
+
   # ===========================================================================
   # Test Matrix: Native GitHub Actions Runners
   # ===========================================================================

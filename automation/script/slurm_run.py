@@ -55,6 +55,7 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
     slurm_no_internet = is_true(i.get('slurm_no_internet', False))
+    slurm_mlcflow_upgrade = is_true(i.get('slurm_mlcflow_upgrade', False))
 
     # Normalize str → list so a single command string doesn't get iterated
     # char-by-char
@@ -150,7 +151,14 @@ def slurm_run(self_module, i, slurm_action='run'):
     else:
         run_cmds.append(
             f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {quoted_venv}')
-    run_cmds.append(f'. {quoted_venv}/bin/activate')
+    # The installer may resolve to a different venv path (e.g. platform-
+    # versioned). Read the marker file it writes; fall back to the requested name.
+    run_cmds.append(
+        f'MLCFLOW_VENV=$(cat {quoted_venv}/.mlcflow_venv_path 2>/dev/null || echo {quoted_venv})'
+        f' && . "$MLCFLOW_VENV/bin/activate"')
+
+    if slurm_mlcflow_upgrade:
+        run_cmds.append('python3 -m pip install --upgrade mlcflow')
 
     if is_true(slurm_pull_mlc_repos):
         run_cmds.append('mlc pull repo')
