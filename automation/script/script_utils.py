@@ -1,6 +1,5 @@
 import os
 import importlib
-import posixpath
 import subprocess
 import sys
 import ast
@@ -32,15 +31,25 @@ def get_variation_and_script_tags(tags_string):
             'variation_tags': variation_tags}
 
 
-def build_venv_activation_command(venv_dir, escape_substitutions=False):
-    venv_dir = venv_dir or 'mlcflow'
-    marker_path = shlex.quote(posixpath.join(venv_dir, '.mlcflow_venv_path'))
-    quoted_venv_dir = shlex.quote(venv_dir)
-    dollar = '\\$' if escape_substitutions else '$'
+def build_venv_activation_command(venv_dir):
+    venv_dir = shlex.quote(venv_dir or 'mlcflow')
+    compatible_venv = (
+        '$(python3 -c '
+        '\'import os, platform, sys; '
+        'print(os.environ["MLCFLOW_VENV_REQUESTED"]'
+        ' + "_{}_py{}.{}".format('
+        'platform.machine(), sys.version_info[0], sys.version_info[1]))\')'
+    )
 
     return (
-        f'MLCFLOW_VENV="{dollar}(cat {marker_path} 2>/dev/null || echo {quoted_venv_dir})"'
-        f' && . "{dollar}MLCFLOW_VENV/bin/activate"'
+        f'MLCFLOW_VENV_REQUESTED={venv_dir}'
+        f' && export MLCFLOW_VENV_REQUESTED'
+        f' && MLCFLOW_VENV="$MLCFLOW_VENV_REQUESTED"'
+        f' && if [ ! -f "$MLCFLOW_VENV/bin/activate" ]; then '
+        f'MLCFLOW_VENV_CANDIDATE="{compatible_venv}"; '
+        f'if [ -f "$MLCFLOW_VENV_CANDIDATE/bin/activate" ]; then '
+        f'MLCFLOW_VENV="$MLCFLOW_VENV_CANDIDATE"; fi; fi'
+        f' && . "$MLCFLOW_VENV/bin/activate"'
     )
 
 

@@ -155,18 +155,6 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
                 os.path.join(expected_path, "bin", "python")),
             self._compatibility_signature(sys.executable),
         )
-        with open(
-            os.path.join(expected_path, ".mlcflow_venv_path"),
-            "r",
-            encoding="utf-8",
-        ) as marker_file:
-            self.assertEqual(marker_file.read().strip(), expected_path)
-        with open(
-            os.path.join(venv_dir, ".mlcflow_venv_path"),
-            "r",
-            encoding="utf-8",
-        ) as marker_file:
-            self.assertEqual(marker_file.read().strip(), expected_path)
 
     def test_setup_venv_creates_requested_path_from_scratch(self):
         venv_dir = os.path.join(self.temp_dir.name, "mlcflow")
@@ -230,27 +218,6 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
                 os.path.join(expected_path, "bin", "python")),
             self._compatibility_signature(sys.executable),
         )
-
-    def test_installer_main_writes_marker_for_requested_venv(self):
-        venv_dir = os.path.join(self.temp_dir.name, "mlcflow")
-        os.makedirs(venv_dir, exist_ok=True)
-        expected_path = venv_dir + self._expected_suffix()
-        installer_path = self._write_installer_with_stubbed_main_dependencies()
-
-        completed = subprocess.run(
-            ["bash", installer_path, "--yes", "--venv-dir", venv_dir],
-            cwd=self.temp_dir.name,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
-        marker_path = os.path.join(venv_dir, ".mlcflow_venv_path")
-        self.assertTrue(os.path.exists(marker_path))
-        with open(marker_path, "r", encoding="utf-8") as marker_file:
-            self.assertEqual(marker_file.read().strip(), expected_path)
-
 
 if __name__ == "__main__":
     unittest.main()
