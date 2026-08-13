@@ -1,8 +1,12 @@
+import base64
+import json
 import os
 import importlib
 import subprocess
 import sys
 import ast
+import shlex
+import uuid
 from script.cache_utils import *
 
 
@@ -31,32 +35,41 @@ def get_variation_and_script_tags(tags_string):
 
 
 def build_venv_activation_command(venv_dir):
-    # Embed venv_dir inside "..." to handle spaces.  Escape only backslashes
-    # and double-quotes so the result never contains single quotes.
-    # mlperf-automations' customize.py applies both str.replace("'", "'\''")
-    # AND shlex.quote() to run_cmds, so any single quote gets double-escaped
-    # and produces broken bash syntax (unexpected EOF matching '"').  Keeping
-    # this command single-quote-free avoids that trap entirely.
-    safe_venv = (
-        venv_dir or 'mlcflow').replace(
-        '\\',
-        '\\\\').replace(
-            '"',
-        '\\"')
-
-    # Use shell glob to find a compatible arch/py-versioned venv.
-    # The pattern  "${MLCFLOW_VENV}"_*_py*/bin/activate  matches names like
-    # mlcflow_x86_64_py3.12/bin/activate created by the mlcflow installer.
-    return (
-        f'MLCFLOW_VENV_REQUESTED="{safe_venv}"'
-        f' && export MLCFLOW_VENV_REQUESTED'
-        f' && MLCFLOW_VENV=$MLCFLOW_VENV_REQUESTED'
-        f' && if [ ! -f "$MLCFLOW_VENV/bin/activate" ]; then'
-        f' for _mlcf in "${{MLCFLOW_VENV}}"_*_py*/bin/activate; do'
-        f' [ -f "$_mlcf" ] && MLCFLOW_VENV="${{_mlcf%/bin/activate}}" && break;'
-        f' done; fi'
-        f' && . "$MLCFLOW_VENV/bin/activate"'
+    requested_venv = venv_dir or 'mlcflow'
+    activation_script = f'/tmp/.mlcflow-activate-{uuid.uuid4().hex}'
+    python_code = (
+        "from pathlib import Path; import platform, shlex, sys; "
+        f"requested={json.dumps(requested_venv)}; "
+        f"wrapper={json.dumps(activation_script)}; "
+        'candidate=f"{requested}_{platform.machine()}_py'
+        '{sys.version_info[0]}.{sys.version_info[1]}"; '
+        'path=candidate if Path(candidate, "bin", "activate").is_file() '
+        'else requested; '
+        'activate=shlex.quote(str(Path(path) / "bin" / "activate")); '
+        'print(". " + activate); '
+        'print("rm -f " + shlex.quote(wrapper))'
     )
+    # Base64-encode the python code and pass it as sys.argv[1] so that the
+    # generated command contains neither single quotes nor backslash-double-quote
+    # sequences.  The remote-run-commands customize.py escapes single quotes
+    # with replace("'", "'\''") and then wraps the whole joined command string
+    # with shlex.quote().  Any single quote produced by a naive
+    # shlex.quote(python_code) call would be double-escaped by that two-step
+    # process, causing "unexpected EOF while looking for matching `''".
+    # Passing the base64 payload as a positional argument avoids all quoting
+    # issues: base64 uses only [A-Za-z0-9+/=] (shell-safe without any quotes),
+    # and the python3 -c "..." string uses double quotes with no special chars.
+    encoded = base64.b64encode(python_code.encode()).decode()
+    exec_cmd = (
+        f'python3 -c "import base64,sys;exec(base64.b64decode(sys.argv[1]).decode())"'
+        f' {encoded}'
+    )
+    # activation_script is /tmp/.mlcflow-activate-<32 hex chars>; only
+    # [/tmp.-a-f0-9] characters, all shell-safe without quoting.  We
+    # intentionally do NOT use shlex.quote() here: shlex.quote() would add
+    # single-quote delimiters, which customize.py's replace("'", "'\''") +
+    # shlex.quote() double-escaping would then mangle.
+    return f'{exec_cmd} > {activation_script} && . {activation_script}'
 
 
 def select_script_and_cache(
