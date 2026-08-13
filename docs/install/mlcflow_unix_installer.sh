@@ -26,6 +26,7 @@ if [ -n "${VIRTUAL_ENV:-}" ]; then
     # Ensure the venv bin dir is removed from PATH even if deactivate failed
     PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "^${ACTIVE_VENV}/" | paste -sd: -)"
     unset VIRTUAL_ENV
+    unset ACTIVE_VENV
 fi
 
 # ------------------------------------------------------------------------------
