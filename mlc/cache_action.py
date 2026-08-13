@@ -229,36 +229,63 @@ Cache Meta:""")
 
     def prune(self, args):
         """
-    ####################################################################################################################
+    ################################################################################
     Target: Cache
     Action: Prune
-    ####################################################################################################################
+    ################################################################################
 
-    Prune all expired cached items
+    Prune expired cached items. Supports optional filtering by tags.
 
-    Example Command:
+    Syntax:
 
     mlc prune cache
+    mlc prune cache --tags=<tags>
+
+    Example Commands:
+
+    mlc prune cache
+    mlc prune cache --tags=get,dataset
 
         """
         self.action_type = "cache"
-        # to fetch the details of all the caches generated
         run_args = {"fetch_all": True}
+        tags = args.get('tags')
+        if tags:
+            run_args['tags'] = tags
 
-        res = self.search(run_args)
+        # Use parent.search to bypass expiration filtering in self.search,
+        # so we can find the expired entries ourselves
+        run_args['target_name'] = "cache"
+        res = self.parent.search(run_args)
         if res['return'] > 0:
             return res
 
+        expired = []
         for item in res['list']:
             expiration_time = item.meta.get('cache_expiration')
             if expiration_time is not None and expiration_time < time.time():
-                ii = {}
-                ii['f'] = True
-                ii['item'] = item.meta.get('uid')
-                if ii['item']:
-                    self.rm(ii)
+                expired.append(item)
 
-        return {'return': 0}
+        if not expired:
+            logger.info("No expired cache entries found.")
+            return {'return': 0}
+
+        logger.info(f"Found {len(expired)} expired cache entries:")
+        for item in expired:
+            item_tags = ','.join(item.meta.get('tags', []))
+            logger.info(f"  {item.meta.get('uid', '?')} [{item_tags}] -> {item.path}")
+
+        removed = 0
+        for item in expired:
+            uid = item.meta.get('uid')
+            if uid:
+                ii = {'f': True, 'item': uid, 'target_name': 'cache'}
+                r = self.rm(ii)
+                if r.get('return', 0) == 0:
+                    removed += 1
+
+        logger.info(f"Pruned {removed} expired cache entries.")
+        return {'return': 0, 'pruned': removed}
 
     def list(self, args):
         """

@@ -373,7 +373,7 @@ def build_parser(pre_args):
     for action in ['run', 'pull', 'test', 'add', 'show', 'list',
                    'find', 'search', 'rm', 'cp', 'mv', 'help', 'prune', 'mark-tmp']:
         p = subparsers.add_parser(action, add_help=False)
-        p.add_argument('target', choices=['repo', 'repos', 'script', 'cache'])
+        p.add_argument('target', choices=['repo', 'repos', 'script', 'cache', 'experiment'])
         p.add_argument(
             'details',
             nargs='?',
