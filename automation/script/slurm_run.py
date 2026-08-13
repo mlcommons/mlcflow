@@ -50,7 +50,7 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_exclusive = i.get('slurm_exclusive', False)
     slurm_export = i.get('slurm_export', 'ALL')
     slurm_srun_extra_args = i.get('slurm_srun_extra_args', '')
-    slurm_python_venv = i.get('slurm_python_venv', 'mlcflow')
+    slurm_python_venv = i.get('slurm_python_venv') or 'mlcflow'
     slurm_pull_mlc_repos = i.get('slurm_pull_mlc_repos', False)
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
@@ -142,15 +142,15 @@ def slurm_run(self_module, i, slurm_action='run'):
     run_cmds = []
 
     # Bootstrap mlcflow on the node
-    quoted_venv = shlex.quote(slurm_python_venv)
     if slurm_no_internet:
         # Use installer from local mlcflow repo or pre-downloaded copy
         installer_path = _get_local_installer()
-        run_cmds.append(f'bash {shlex.quote(installer_path)} --yes --venv-dir {quoted_venv}')
+        run_cmds.append(
+            f'bash {shlex.quote(installer_path)} --yes --venv-dir {shlex.quote(slurm_python_venv)}')
     else:
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {quoted_venv}')
-    run_cmds.append(f'. {quoted_venv}/bin/activate')
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}')
+    run_cmds.append(build_venv_activation_command(slurm_python_venv))
 
     if is_true(slurm_pull_mlc_repos):
         run_cmds.append('mlc pull repo')

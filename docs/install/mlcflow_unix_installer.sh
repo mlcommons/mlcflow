@@ -543,6 +543,7 @@ pull_repo() {
 # ------------------------------------------------------------------------------
 
 main() {
+    local original_venv_dir="$VENV_DIR"
     detect_os
     check_missing_dependencies
     if [ "${#MISSING_DEPS[@]}" -gt 0 ]; then
@@ -581,6 +582,12 @@ main() {
     fi
 
     install_mlcflow
+
+    echo "$VENV_DIR" > "${VENV_DIR}/.mlcflow_venv_path"
+    if [ "$VENV_DIR" != "$original_venv_dir" ]; then
+        mkdir -p "$original_venv_dir"
+        echo "$VENV_DIR" > "${original_venv_dir}/.mlcflow_venv_path"
+    fi
 
     log_info "Installation completed successfully."
     echo ""

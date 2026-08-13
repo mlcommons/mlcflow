@@ -3,6 +3,7 @@ import importlib
 import subprocess
 import sys
 import ast
+import shlex
 from script.cache_utils import *
 
 
@@ -28,6 +29,17 @@ def get_variation_and_script_tags(tags_string):
                 script_tags.append(t)
     return {'return': 0, 'script_tags': script_tags,
             'variation_tags': variation_tags}
+
+
+def build_venv_activation_command(venv_dir):
+    venv_dir = venv_dir or 'mlcflow'
+    marker_path = shlex.quote(os.path.join(venv_dir, '.mlcflow_venv_path'))
+    quoted_venv_dir = shlex.quote(venv_dir)
+
+    return (
+        f'MLCFLOW_VENV=\\$(cat {marker_path} 2>/dev/null || echo {quoted_venv_dir})'
+        ' && . "\\$MLCFLOW_VENV/bin/activate"'
+    )
 
 
 def select_script_and_cache(
