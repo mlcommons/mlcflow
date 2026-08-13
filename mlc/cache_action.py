@@ -273,7 +273,8 @@ Cache Meta:""")
         logger.info(f"Found {len(expired)} expired cache entries:")
         for item in expired:
             item_tags = ','.join(item.meta.get('tags', []))
-            logger.info(f"  {item.meta.get('uid', '?')} [{item_tags}] -> {item.path}")
+            logger.info(
+                f"  {item.meta.get('uid', '?')} [{item_tags}] -> {item.path}")
 
         removed = 0
         for item in expired:
