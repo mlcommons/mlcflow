@@ -34,7 +34,8 @@ def get_variation_and_script_tags(tags_string):
 
 def build_venv_activation_command(venv_dir):
     requested_venv = venv_dir or 'mlcflow'
-    activation_script = f'./.mlcflow-activate-{uuid.uuid4().hex}'
+    activation_script = f'/tmp/.mlcflow-activate-{uuid.uuid4().hex}'
+    quoted_activation_script = shlex.quote(activation_script)
     python_code = (
         "from pathlib import Path; import platform, shlex, sys; "
         f"requested={requested_venv!r}; "
@@ -46,10 +47,10 @@ def build_venv_activation_command(venv_dir):
     )
 
     return (
-        f'python3 -c {shlex.quote(python_code)}'
-        f' > {shlex.quote(activation_script)}'
-        f' && . {shlex.quote(activation_script)}'
-        f' && rm -f {shlex.quote(activation_script)}'
+        f"trap 'rm -f {quoted_activation_script}' EXIT"
+        f' && python3 -c {shlex.quote(python_code)}'
+        f' > {quoted_activation_script}'
+        f' && . {quoted_activation_script}'
     )
 
 
