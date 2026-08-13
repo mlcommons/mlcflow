@@ -60,14 +60,25 @@ class TestRemoteRunMapping(unittest.TestCase):
 
 
 class TestVenvActivationCommand(unittest.TestCase):
-    def test_command_defers_marker_expansion_until_runtime(self):
+    def test_remote_command_defers_marker_expansion_until_runtime(self):
+        from script.script_utils import build_venv_activation_command
+
+        activation_cmd = build_venv_activation_command(
+            'mlcflow', escape_substitutions=True)
+
+        self.assertEqual(
+            activation_cmd,
+            'MLCFLOW_VENV="\\$(cat mlcflow/.mlcflow_venv_path 2>/dev/null || echo mlcflow)" && . "\\$MLCFLOW_VENV/bin/activate"',
+        )
+
+    def test_slurm_command_uses_runtime_substitutions_directly(self):
         from script.script_utils import build_venv_activation_command
 
         activation_cmd = build_venv_activation_command('mlcflow')
 
         self.assertEqual(
             activation_cmd,
-            'MLCFLOW_VENV="\\$(cat mlcflow/.mlcflow_venv_path 2>/dev/null || echo mlcflow)" && . "\\$MLCFLOW_VENV/bin/activate"',
+            'MLCFLOW_VENV="$(cat mlcflow/.mlcflow_venv_path 2>/dev/null || echo mlcflow)" && . "$MLCFLOW_VENV/bin/activate"',
         )
 
 

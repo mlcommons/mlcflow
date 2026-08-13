@@ -32,14 +32,15 @@ def get_variation_and_script_tags(tags_string):
             'variation_tags': variation_tags}
 
 
-def build_venv_activation_command(venv_dir):
+def build_venv_activation_command(venv_dir, escape_substitutions=False):
     venv_dir = venv_dir or 'mlcflow'
     marker_path = shlex.quote(posixpath.join(venv_dir, '.mlcflow_venv_path'))
     quoted_venv_dir = shlex.quote(venv_dir)
+    dollar = '\\$' if escape_substitutions else '$'
 
     return (
-        f'MLCFLOW_VENV="\\$(cat {marker_path} 2>/dev/null || echo {quoted_venv_dir})"'
-        ' && . "\\$MLCFLOW_VENV/bin/activate"'
+        f'MLCFLOW_VENV="{dollar}(cat {marker_path} 2>/dev/null || echo {quoted_venv_dir})"'
+        f' && . "{dollar}MLCFLOW_VENV/bin/activate"'
     )
 
 

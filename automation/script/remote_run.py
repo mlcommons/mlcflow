@@ -113,7 +113,9 @@ def remote_run(self_module, i):
     else:
         run_cmds.append(
             f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
-    run_cmds.append(build_venv_activation_command(remote_mlc_python_venv))
+    run_cmds.append(
+        build_venv_activation_command(
+            remote_mlc_python_venv, escape_substitutions=True))
     # is_true() rather than a bare truthiness check: this arrives from the CLI
     # as a string, so '--remote_pull_mlc_repos=no' is a non-empty (truthy)
     # str and would otherwise still pull.
