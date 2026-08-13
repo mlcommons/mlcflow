@@ -3,7 +3,6 @@ import importlib
 import subprocess
 import sys
 import ast
-import shlex
 from script.cache_utils import *
 
 
@@ -32,16 +31,19 @@ def get_variation_and_script_tags(tags_string):
 
 
 def build_venv_activation_command(venv_dir):
-    venv_dir = shlex.quote(venv_dir or 'mlcflow')
+    # Embed venv_dir inside "..." to handle spaces.  Escape only backslashes
+    # and double-quotes so the result never contains single quotes.
+    # mlperf-automations' customize.py applies both str.replace("'", "'\''")
+    # AND shlex.quote() to run_cmds, so any single quote gets double-escaped
+    # and produces broken bash syntax (unexpected EOF matching '"').  Keeping
+    # this command single-quote-free avoids that trap entirely.
+    safe_venv = (venv_dir or 'mlcflow').replace('\\', '\\\\').replace('"', '\\"')
 
-    # Use shell glob to find a compatible arch/py-versioned venv without
-    # any single quotes. mlperf-automations' customize.py applies both
-    # str.replace("'", "'\''") AND shlex.quote(), so any single quote in
-    # run_cmds gets double-escaped and produces broken bash syntax.
-    # The glob pattern  "${MLCFLOW_VENV}"_*_py*/bin/activate  matches
-    # installer-created names like  mlcflow_x86_64_py3.12/bin/activate.
+    # Use shell glob to find a compatible arch/py-versioned venv.
+    # The pattern  "${MLCFLOW_VENV}"_*_py*/bin/activate  matches names like
+    # mlcflow_x86_64_py3.12/bin/activate created by the mlcflow installer.
     return (
-        f'MLCFLOW_VENV_REQUESTED={venv_dir}'
+        f'MLCFLOW_VENV_REQUESTED="{safe_venv}"'
         f' && export MLCFLOW_VENV_REQUESTED'
         f' && MLCFLOW_VENV=$MLCFLOW_VENV_REQUESTED'
         f' && if [ ! -f "$MLCFLOW_VENV/bin/activate" ]; then'
