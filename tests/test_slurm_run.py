@@ -190,7 +190,9 @@ class TestRemoteRunIsolation(unittest.TestCase):
         )
         combined = " ; ".join(run_cmds)
         self.assertIn('MLC_ISOLATED_TMP_BASE_DIR="/scratch/mlcflow"', combined)
-        self.assertIn('[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1', combined)
+        self.assertIn(
+            '[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1',
+            combined)
         self.assertIn(
             'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
             combined)
@@ -421,8 +423,12 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
 
         self.assertEqual(result['return'], 0)
         bash_c_cmd = captured_args[-1]
-        self.assertIn('MLC_ISOLATED_TMP_BASE_DIR="/scratch/mlcflow"', bash_c_cmd)
-        self.assertIn('[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1', bash_c_cmd)
+        self.assertIn(
+            'MLC_ISOLATED_TMP_BASE_DIR="/scratch/mlcflow"',
+            bash_c_cmd)
+        self.assertIn(
+            '[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1',
+            bash_c_cmd)
         self.assertIn(
             'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
             bash_c_cmd)
