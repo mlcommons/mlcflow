@@ -303,7 +303,10 @@ def _get_local_installer():
 
     # Check if the installer exists in the local mlcflow package
     local_installer = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        os.path.dirname(
+            os.path.dirname(
+                os.path.dirname(
+                    os.path.abspath(__file__)))),
         'docs', 'install', 'mlcflow_unix_installer.sh')
     if os.path.isfile(local_installer):
         return local_installer
