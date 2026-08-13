@@ -144,10 +144,11 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     if slurm_isolated:
         run_cmds.extend([
-            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)"',
-            'cd "$MLC_ISOLATED_TMP_DIR"',
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1',
+            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1',
+            'cd "$MLC_ISOLATED_TMP_DIR" || exit 1',
             'export MLC_REPOS="$PWD/MLC"',
-            'trap \'rm -rf "$MLC_REPOS" "$MLC_ISOLATED_TMP_DIR"\' EXIT'
+            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP'
         ])
 
     # Bootstrap mlcflow on the node

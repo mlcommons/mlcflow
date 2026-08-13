@@ -98,13 +98,22 @@ def remote_run(self_module, i):
     run_cmds = []
     remote_mlc_python_venv = i.get('remote_python_venv') or 'mlcflow'
     run_cmds_start_index = 0
+    remote_copy_directory = i.get(
+        "remote_copy_directory",
+        "mlc-remote-artifacts")
+
+    remote_copy_directory_for_cmd = remote_copy_directory
+    if remote_isolated and not remote_copy_directory.startswith('/'):
+        remote_copy_directory_for_cmd = f'${{MLC_ISOLATED_BASE_DIR}}/{remote_copy_directory}'
 
     if remote_isolated:
         run_cmds.extend([
-            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)"',
-            'cd "$MLC_ISOLATED_TMP_DIR"',
+            'MLC_ISOLATED_BASE_DIR="$PWD"',
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1',
+            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1',
+            'cd "$MLC_ISOLATED_TMP_DIR" || exit 1',
             'export MLC_REPOS="$PWD/MLC"',
-            'trap \'rm -rf "$MLC_REPOS" "$MLC_ISOLATED_TMP_DIR"\' EXIT'
+            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP'
         ])
         run_cmds_start_index = len(run_cmds)
 
@@ -118,10 +127,10 @@ def remote_run(self_module, i):
         # Download installer locally and copy it to the remote machine
         installer_local_path = _get_local_installer()
         files_to_copy.append(installer_local_path)
-        remote_installer = "mlc-remote-artifacts/" + \
+        remote_installer = remote_copy_directory_for_cmd + "/" + \
             os.path.basename(installer_local_path)
         run_cmds.append(
-            f'bash {remote_installer} --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
+            f'bash "{remote_installer}" --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
     else:
         run_cmds.append(
             f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
@@ -140,7 +149,7 @@ def remote_run(self_module, i):
             # the files_to_copy list contains the path to files in host
             files_to_copy.append(env[key])
             # Use forward slashes for remote path (Unix/Linux servers)
-            remote_env[key] = "mlc-remote-artifacts/" + \
+            remote_env[key] = remote_copy_directory_for_cmd + "/" + \
                 os.path.basename(
                 env[key])  # if host path is /home/user/file.txt, remote path will be mlc-remote-artifacts/file.txt
 
@@ -184,9 +193,6 @@ def remote_run(self_module, i):
             remote_inputs[key] = i[f"remote_{key}"]
 
     if files_to_copy:
-        remote_copy_directory = i.get(
-            "remote_copy_directory",
-            "mlc-remote-artifacts")
         remote_inputs['files_to_copy'] = files_to_copy
         remote_inputs['copy_directory'] = remote_copy_directory
 
@@ -209,13 +215,16 @@ def remote_run(self_module, i):
             remote_inputs['files_to_copy'] = remote_inputs.get(
                 'files_to_copy', []) + repo_files
             remote_mlc_repos_path = i.get("remote_mlc_repos_path", "MLC/repos")
+            remote_mlc_repos_path_for_cmd = remote_mlc_repos_path
+            if remote_isolated and not remote_mlc_repos_path.startswith('/'):
+                remote_mlc_repos_path_for_cmd = f'${{MLC_ISOLATED_BASE_DIR}}/{remote_mlc_repos_path}'
             remote_inputs['copy_directory'] = remote_mlc_repos_path
             # On the remote, if MLC_REPOS is set and differs, symlink so
             # mlcflow finds the copied repos
             run_cmds.insert(run_cmds_start_index,
-                            f'if [ -n "$MLC_REPOS" ] && [ "$MLC_REPOS" != "{remote_mlc_repos_path}" ]; then '
-                            f'mkdir -p "{remote_mlc_repos_path}" && '
-                            f'ln -sfn "$(realpath {remote_mlc_repos_path})"/* "$MLC_REPOS/"; '
+                            f'if [ -n "$MLC_REPOS" ] && [ "$MLC_REPOS" != "{remote_mlc_repos_path_for_cmd}" ]; then '
+                            f'mkdir -p "{remote_mlc_repos_path_for_cmd}" && '
+                            f'ln -sfn "$(realpath \\"{remote_mlc_repos_path_for_cmd}\\")"/* "$MLC_REPOS/"; '
                             f'fi')
 
     if files_to_copy_back:

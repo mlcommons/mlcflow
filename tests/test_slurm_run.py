@@ -124,7 +124,7 @@ class TestVenvActivationCommand(unittest.TestCase):
 
 
 class TestRemoteRunIsolation(unittest.TestCase):
-    def test_remote_isolated_sets_tmp_mlc_repos_and_cleanup(self):
+    def _capture_remote_run_cmds(self, **run_args):
         from unittest.mock import patch, MagicMock
         from script.remote_run import remote_run
 
@@ -153,19 +153,80 @@ class TestRemoteRunIsolation(unittest.TestCase):
         mock_self.action_object.access.side_effect = fake_access
 
         with patch('script.remote_run.call_remote_run_prepare',
-                   return_value={'return': 0, 'files_to_copy': [], 'remote_env': {}}):
-            result = remote_run(mock_self, {'tags': 'detect,os',
-                                            'remote_isolated': True, 'mlc_run_cmd': 'mlcr detect,os', 'env': {}})
+                   return_value={'return': 0, 'files_to_copy': [], 'remote_env': {}}), \
+                patch('script.remote_run.regenerate_script_cmd',
+                      return_value={'return': 0, 'run_cmd_string': 'true'}), \
+                patch('script.remote_run._get_local_installer', return_value='/bin/true'), \
+                patch('script.remote_run.build_venv_activation_command',
+                      return_value='true'):
+            args = {
+                'tags': 'detect,os',
+                'mlc_run_cmd': 'mlcr detect,os',
+                'env': {},
+                **run_args
+            }
+            result = remote_run(mock_self, args)
 
         self.assertEqual(result['return'], 0)
+        return captured_remote_input['run_cmds']
 
-        run_cmds = captured_remote_input['run_cmds']
+    def test_remote_isolated_sets_tmp_mlc_repos_and_cleanup(self):
+        run_cmds = self._capture_remote_run_cmds(remote_isolated=True)
         combined = " ; ".join(run_cmds)
-        self.assertIn('MLC_ISOLATED_TMP_DIR="$(mktemp -d)"', combined)
-        self.assertIn('cd "$MLC_ISOLATED_TMP_DIR"', combined)
+        self.assertIn('MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1', combined)
+        self.assertIn(
+            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1', combined)
+        self.assertIn('cd "$MLC_ISOLATED_TMP_DIR" || exit 1', combined)
         self.assertIn('export MLC_REPOS="$PWD/MLC"', combined)
         self.assertIn(
-            'trap \'rm -rf "$MLC_REPOS" "$MLC_ISOLATED_TMP_DIR"\' EXIT', combined)
+            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP', combined)
+
+    def test_remote_isolated_command_survives_remote_escaping_and_cleans_up(self):
+        marker_file = '/tmp/mlcflow_remote_iso_tmpdir.txt'
+        if os.path.exists(marker_file):
+            os.remove(marker_file)
+        run_cmds = self._capture_remote_run_cmds(
+            remote_isolated=True,
+            remote_no_internet=True,
+            remote_pre_run_cmds=[
+                f'printf "%s" "$MLC_ISOLATED_TMP_DIR" > {marker_file}'],
+        )
+        cmd_string = " ; ".join(run_cmds)
+        # Match remote-run-commands escaping pipeline behavior.
+        cmd_string = cmd_string.replace("'", "'\\''")
+        safe_cmd_string = shlex.quote(cmd_string)
+        completed = subprocess.run(
+            ['bash', '-lc', f'cmd={safe_cmd_string}; eval "$cmd"'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+        with open(marker_file, 'r', encoding='utf-8') as f:
+            isolated_tmp_dir = f.read().strip()
+        self.assertTrue(isolated_tmp_dir)
+        self.assertFalse(os.path.exists(isolated_tmp_dir))
+        os.remove(marker_file)
+
+    def test_remote_isolated_uses_absolute_remote_artifact_paths(self):
+        run_cmds = self._capture_remote_run_cmds(
+            remote_isolated=True,
+            remote_no_internet=True,
+        )
+        combined = " ; ".join(run_cmds)
+        self.assertIn('bash "${MLC_ISOLATED_BASE_DIR}/mlc-remote-artifacts/', combined)
+
+    def test_remote_isolated_uses_absolute_path_for_remote_copied_repos(self):
+        from unittest.mock import patch
+        with patch('script.remote_run.os.listdir', return_value=['demo-repo']), \
+                patch('script.remote_run.os.path.isdir', return_value=True):
+            run_cmds = self._capture_remote_run_cmds(
+                remote_isolated=True,
+                remote_copy_mlc_repos=['demo-repo'],
+            )
+        combined = " ; ".join(run_cmds)
+        self.assertIn('${MLC_ISOLATED_BASE_DIR}/MLC/repos', combined)
 
 
 # ---------------------------------------------------------------------------
@@ -297,11 +358,13 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
 
         self.assertEqual(result['return'], 0)
         bash_c_cmd = captured_args[-1]  # last element after 'bash', '-c'
-        self.assertIn('MLC_ISOLATED_TMP_DIR="$(mktemp -d)"', bash_c_cmd)
-        self.assertIn('cd "$MLC_ISOLATED_TMP_DIR"', bash_c_cmd)
+        self.assertIn('MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1', bash_c_cmd)
+        self.assertIn(
+            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1', bash_c_cmd)
+        self.assertIn('cd "$MLC_ISOLATED_TMP_DIR" || exit 1', bash_c_cmd)
         self.assertIn('export MLC_REPOS="$PWD/MLC"', bash_c_cmd)
         self.assertIn(
-            'trap \'rm -rf "$MLC_REPOS" "$MLC_ISOLATED_TMP_DIR"\' EXIT', bash_c_cmd)
+            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP', bash_c_cmd)
 
 
 if __name__ == '__main__':
