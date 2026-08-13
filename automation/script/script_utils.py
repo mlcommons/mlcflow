@@ -38,7 +38,7 @@ def build_venv_activation_command(venv_dir):
     quoted_venv_dir = shlex.quote(venv_dir)
 
     return (
-        f'MLCFLOW_VENV=\\$(cat {marker_path} 2>/dev/null || echo {quoted_venv_dir})'
+        f'MLCFLOW_VENV="\\$(cat {marker_path} 2>/dev/null || echo {quoted_venv_dir})"'
         ' && . "\\$MLCFLOW_VENV/bin/activate"'
     )
 

@@ -67,7 +67,7 @@ class TestVenvActivationCommand(unittest.TestCase):
 
         self.assertEqual(
             activation_cmd,
-            'MLCFLOW_VENV=\\$(cat mlcflow/.mlcflow_venv_path 2>/dev/null || echo mlcflow) && . "\\$MLCFLOW_VENV/bin/activate"',
+            'MLCFLOW_VENV="\\$(cat mlcflow/.mlcflow_venv_path 2>/dev/null || echo mlcflow)" && . "\\$MLCFLOW_VENV/bin/activate"',
         )
 
 
