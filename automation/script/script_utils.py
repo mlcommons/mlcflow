@@ -37,7 +37,12 @@ def build_venv_activation_command(venv_dir):
     # AND shlex.quote() to run_cmds, so any single quote gets double-escaped
     # and produces broken bash syntax (unexpected EOF matching '"').  Keeping
     # this command single-quote-free avoids that trap entirely.
-    safe_venv = (venv_dir or 'mlcflow').replace('\\', '\\\\').replace('"', '\\"')
+    safe_venv = (
+        venv_dir or 'mlcflow').replace(
+        '\\',
+        '\\\\').replace(
+            '"',
+        '\\"')
 
     # Use shell glob to find a compatible arch/py-versioned venv.
     # The pattern  "${MLCFLOW_VENV}"_*_py*/bin/activate  matches names like
