@@ -139,6 +139,11 @@ def remote_run(self_module, i):
 
     i_copy = copy.deepcopy(i)
     i_copy['run_cmd'] = run_input
+    # Avoid passing through the full original command line when rebuilding the
+    # nested remote command. It can contain shell-quoted arguments (for example
+    # quoted SSH key paths) that lead to invalid nested quoting in the SSH
+    # wrapper.
+    i_copy['run_cmd'].pop('mlc_run_cmd', None)
 
     r = regenerate_script_cmd(i_copy)
     if r['return'] > 0:
