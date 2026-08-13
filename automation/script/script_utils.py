@@ -1,3 +1,4 @@
+import json
 import os
 import importlib
 import subprocess
@@ -36,17 +37,24 @@ def build_venv_activation_command(venv_dir):
     requested_venv = venv_dir or 'mlcflow'
     activation_script = f'/tmp/.mlcflow-activate-{uuid.uuid4().hex}'
     quoted_activation_script = shlex.quote(activation_script)
+    # Use json.dumps() to embed values as double-quoted Python string literals.
+    # json.dumps() properly escapes backslashes and double quotes, so the
+    # generated python_code contains no single quotes.  That lets shlex.quote()
+    # wrap the whole string in simple single quotes without any '"'"' escapes —
+    # those escapes break when the remote-run-commands SSH layer wraps the full
+    # command in its own single-quote delimiters (causing "unexpected EOF while
+    # looking for matching `''").
     python_code = (
         "from pathlib import Path; import platform, shlex, sys; "
-        f"requested={requested_venv!r}; "
-        f"wrapper={activation_script!r}; "
-        "candidate=f'{requested}_{platform.machine()}_py"
-        "{sys.version_info[0]}.{sys.version_info[1]}'; "
-        "path=candidate if Path(candidate, 'bin', 'activate').is_file() "
-        "else requested; "
-        "activate=shlex.quote(str(Path(path) / \"bin\" / \"activate\")); "
-        "print('. ' + activate); "
-        "print('rm -f ' + shlex.quote(wrapper))"
+        f"requested={json.dumps(requested_venv)}; "
+        f"wrapper={json.dumps(activation_script)}; "
+        'candidate=f"{requested}_{platform.machine()}_py'
+        '{sys.version_info[0]}.{sys.version_info[1]}"; '
+        'path=candidate if Path(candidate, "bin", "activate").is_file() '
+        'else requested; '
+        'activate=shlex.quote(str(Path(path) / "bin" / "activate")); '
+        'print(". " + activate); '
+        'print("rm -f " + shlex.quote(wrapper))'
     )
 
     return (
