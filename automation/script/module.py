@@ -5424,9 +5424,16 @@ def convert_env_to_script(env, os_info, start_script=None):
         env_quote = os_info.get('env_quote', '"')
         # Replace placeholders in the platform-specific environment command
         # and escapes any quote in the env value
+        value_str = str(env_value)
+        if env_quote == '"' and not k.startswith('+'):
+            # On Unix with double-quoted exports, also escape $ and backticks
+            # to prevent shell expansion when the env file is sourced.
+            # Skip for '+' keys (e.g. +PATH) where ${VAR} expansion is intentional.
+            value_str = value_str.replace('$', '\\$').replace('`', '\\`')
+        value_str = value_str.replace(env_quote, f'\\{env_quote}')
         env_command = os_info['set_env'].replace(
             '${key}', key).replace(
-            '${value}', str(env_value).replace(env_quote, f"""\\{env_quote}"""))
+            '${value}', value_str)
         script.append(env_command)
 
     return script
