@@ -5,7 +5,11 @@ import unittest
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INSTALLER_PATH = os.path.join(REPO_ROOT, "docs", "install", "mlcflow_unix_installer.sh")
+INSTALLER_PATH = os.path.join(
+    REPO_ROOT,
+    "docs",
+    "install",
+    "mlcflow_unix_installer.sh")
 
 
 class InstallerVenvDeactivationTest(unittest.TestCase):
