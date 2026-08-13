@@ -3,8 +3,6 @@ import importlib
 import subprocess
 import sys
 import ast
-import shlex
-import uuid
 from script.cache_utils import *
 
 
@@ -34,25 +32,23 @@ def get_variation_and_script_tags(tags_string):
 
 def build_venv_activation_command(venv_dir):
     requested_venv = venv_dir or 'mlcflow'
-    activation_script = f'/tmp/.mlcflow-activate-{uuid.uuid4().hex}'
-    quoted_activation_script = shlex.quote(activation_script)
-    python_code = (
-        "from pathlib import Path; import platform, shlex, sys; "
-        f"requested={requested_venv!r}; "
-        f"wrapper={activation_script!r}; "
-        "candidate=f'{requested}_{platform.machine()}_py"
-        "{sys.version_info[0]}.{sys.version_info[1]}'; "
-        "path=candidate if Path(candidate, 'bin', 'activate').is_file() "
-        "else requested; "
-        "activate=shlex.quote(str(Path(path) / \"bin\" / \"activate\")); "
-        "print('. ' + activate); "
-        "print('rm -f ' + shlex.quote(wrapper))"
+    escaped_requested_venv = (
+        requested_venv
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+        .replace("`", "\\`")
     )
 
     return (
-        f'python3 -c {shlex.quote(python_code)}'
-        f' > {quoted_activation_script}'
-        f' && . {quoted_activation_script}'
+        f'requested_venv="{escaped_requested_venv}"; '
+        'activate_path="\\$requested_venv/bin/activate"; '
+        'if [ ! -f "\\$activate_path" ]; then '
+        'for p in "\\${requested_venv}_"*_py*/bin/activate; do '
+        'if [ -f "\\$p" ]; then activate_path="\\$p"; break; fi; '
+        'done; '
+        'fi; '
+        '. "\\$activate_path"'
     )
 
 
