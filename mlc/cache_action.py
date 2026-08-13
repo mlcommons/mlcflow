@@ -24,8 +24,8 @@ class CacheAction(Action):
 
     def __init__(self, parent=None):
         # super().__init__(parent)
-        self.parent = parent
         self.__dict__.update(vars(parent))
+        self.parent = parent
 
     def search(self, i):
         """
@@ -138,28 +138,52 @@ class CacheAction(Action):
         for item in res['list']:
             meta_yaml_path = os.path.join(item.path, "meta.yaml")
             meta_json_path = os.path.join(item.path, "meta.json")
-            lock_file = item.path + ".lock"
+            lock_file = os.path.join(item.path, ".lock")
+            tag_added = False
 
-            with FileLock(lock_file, timeout=60):
-                tags = item.meta.get("tags", [])
-                if 'tmp' in tags:
-                    continue
+            try:
+                with FileLock(lock_file, timeout=60):
+                    # Re-read meta from disk inside the lock to avoid stale reads
+                    # from the earlier self.search() call.
+                    if os.path.exists(meta_yaml_path):
+                        current_meta = utils.read_yaml(meta_yaml_path) or {}
+                        use_yaml = True
+                    elif os.path.exists(meta_json_path):
+                        current_meta = utils.read_json(meta_json_path) or {}
+                        use_yaml = False
+                    else:
+                        logger.warning(
+                            f"No meta file found for {item.path}, skipping")
+                        continue
 
-                tags.append('tmp')
-                item.meta["tags"] = tags
+                    tags = current_meta.get("tags", [])
+                    if 'tmp' in tags:
+                        continue
 
-                if os.path.exists(meta_yaml_path):
-                    save_result = utils.save_yaml(
-                        meta_yaml_path, meta=item.meta)
-                else:
-                    save_result = utils.save_json(
-                        meta_json_path, meta=item.meta)
+                    tags.append('tmp')
+                    current_meta["tags"] = tags
 
-                if save_result['return'] > 0:
-                    return save_result
+                    if use_yaml:
+                        save_result = utils.save_yaml(
+                            meta_yaml_path, meta=current_meta)
+                    else:
+                        save_result = utils.save_json(
+                            meta_json_path, meta=current_meta)
 
-            self.get_index().update(item.meta, "cache", item.path, item.repo)
-            updated_count += 1
+                    if save_result['return'] > 0:
+                        return save_result
+
+                    item.meta = current_meta
+                    tag_added = True
+            except Timeout:
+                return {
+                    'return': 1,
+                    'error': f"Could not acquire lock for {item.path} within 60 seconds"
+                }
+
+            if tag_added:
+                self.get_index().update(item.meta, "cache", item.path, item.repo)
+                updated_count += 1
 
         logger.info(f"Marked {updated_count} cache item(s) as tmp")
 

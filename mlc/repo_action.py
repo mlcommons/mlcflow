@@ -1020,7 +1020,11 @@ def rm_repo(repo_path, repos_file_path, force_remove):
         if confirm_remove:
             if force_remove:
                 logger.info("Force remove is set.")
-            shutil.rmtree(repo_path)
+            try:
+                shutil.rmtree(repo_path)
+            except FileNotFoundError:
+                logger.warning(
+                    f"{repo_path} was already removed by another process.")
             logger.info(
                 f"Repo {repo_name} residing in path {repo_path} has been successfully removed")
             logger.info(

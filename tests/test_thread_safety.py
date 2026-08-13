@@ -64,7 +64,7 @@ class ConcurrentRmCacheTest(unittest.TestCase):
 
 
 class ConcurrentMarkTmpTest(unittest.TestCase):
-    """Concurrent mark-tmp calls on the same item must not duplicate the tag."""
+    """mark_tmp must re-read meta inside the lock to avoid lost updates."""
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -94,12 +94,7 @@ class ConcurrentMarkTmpTest(unittest.TestCase):
         def mark_tmp():
             try:
                 action = Action()
-                action.parent = None
-                # CacheAction.__init__ does self.__dict__.update(vars(parent)),
-                # which would overwrite self.parent with parent.parent (None).
-                # Reassign explicitly so mark_tmp's self.search works via parent.
                 cache = CacheAction(action)
-                cache.parent = action
                 cache.mark_tmp({"tags": "get,shared"})
             except Exception as exc:
                 errors.append(exc)
@@ -118,6 +113,41 @@ class ConcurrentMarkTmpTest(unittest.TestCase):
         self.assertIn("tmp", meta["tags"])
         self.assertEqual(meta["tags"].count("tmp"), 1,
                          "Expected exactly one 'tmp' tag after concurrent mark-tmp calls")
+
+    def test_mark_tmp_does_not_clobber_concurrent_tag_writes(self):
+        """mark_tmp must re-read meta from disk inside the lock so that a tag written
+        by another process between search() and lock acquisition is not silently lost."""
+        import unittest.mock as mock
+
+        meta_json = os.path.join(self.cache_path, "meta.json")
+        original_search = CacheAction.search
+
+        def patched_search(self_inner, i):
+            result = original_search(self_inner, i)
+            # Simulate a concurrent write that adds 'extra-tag' to the meta file
+            # after search() has already populated item.meta but before the lock.
+            if os.path.exists(meta_json):
+                with open(meta_json) as fh:
+                    on_disk = json.load(fh)
+                if 'extra-tag' not in on_disk.get('tags', []):
+                    on_disk['tags'] = on_disk.get('tags', []) + ['extra-tag']
+                    with open(meta_json, 'w') as fh:
+                        json.dump(on_disk, fh)
+            return result
+
+        with mock.patch.object(CacheAction, 'search', patched_search):
+            action = Action()
+            cache = CacheAction(action)
+            cache.mark_tmp({"tags": "get,shared"})
+
+        with open(meta_json) as f:
+            meta = json.load(f)
+
+        self.assertIn('tmp', meta['tags'])
+        self.assertIn(
+            'extra-tag', meta['tags'],
+            "extra-tag was lost: mark_tmp used stale meta instead of re-reading inside lock"
+        )
 
 
 class ConcurrentReposJsonTest(unittest.TestCase):
