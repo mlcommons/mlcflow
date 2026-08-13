@@ -4,6 +4,7 @@ import subprocess
 import sys
 import ast
 import shlex
+import uuid
 from script.cache_utils import *
 
 
@@ -33,6 +34,7 @@ def get_variation_and_script_tags(tags_string):
 
 def build_venv_activation_command(venv_dir):
     requested_venv = venv_dir or 'mlcflow'
+    activation_script = f'./.mlcflow-activate-{uuid.uuid4().hex}'
     python_code = (
         "from pathlib import Path; import platform, shlex, sys; "
         f"requested={requested_venv!r}; "
@@ -45,9 +47,9 @@ def build_venv_activation_command(venv_dir):
 
     return (
         f'python3 -c {shlex.quote(python_code)}'
-        f' > ./.mlcflow-activate'
-        f' && . ./.mlcflow-activate'
-        f' && rm -f ./.mlcflow-activate'
+        f' > {shlex.quote(activation_script)}'
+        f' && . {shlex.quote(activation_script)}'
+        f' && rm -f {shlex.quote(activation_script)}'
     )
 
 
