@@ -1,5 +1,6 @@
 import os
 import importlib
+import posixpath
 import subprocess
 import sys
 import ast
@@ -33,7 +34,7 @@ def get_variation_and_script_tags(tags_string):
 
 def build_venv_activation_command(venv_dir):
     venv_dir = venv_dir or 'mlcflow'
-    marker_path = shlex.quote(os.path.join(venv_dir, '.mlcflow_venv_path'))
+    marker_path = shlex.quote(posixpath.join(venv_dir, '.mlcflow_venv_path'))
     quoted_venv_dir = shlex.quote(venv_dir)
 
     return (

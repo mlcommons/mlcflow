@@ -1,5 +1,6 @@
 from collections import defaultdict
 import os
+import shlex
 import mlc.utils as utils
 from mlc import utils
 from utils import *
@@ -107,10 +108,11 @@ def remote_run(self_module, i):
         installer_local_path = _get_local_installer()
         files_to_copy.append(installer_local_path)
         remote_installer = "mlc-remote-artifacts/" + os.path.basename(installer_local_path)
-        run_cmds.append(f'bash {remote_installer} --yes --venv-dir {remote_mlc_python_venv}')
+        run_cmds.append(
+            f'bash {remote_installer} --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
     else:
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {remote_mlc_python_venv}')
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
     run_cmds.append(build_venv_activation_command(remote_mlc_python_venv))
     # is_true() rather than a bare truthiness check: this arrives from the CLI
     # as a string, so '--remote_pull_mlc_repos=no' is a non-empty (truthy)
