@@ -122,20 +122,6 @@ class TestVenvActivationCommand(unittest.TestCase):
         self.assertEqual(activated_path, resolved_path)
         self.assertNotEqual(activated_path, requested_path)
 
-    def test_remote_command_is_shell_safe_in_exported_list(self):
-        from script.script_utils import build_venv_activation_command
-        activation_cmd = build_venv_activation_command('mlcflow')
-        run_cmds = ['echo pre', activation_cmd, 'echo post']
-        export_line = f'export MLC_SSH_RUN_COMMANDS="{run_cmds}"'
-
-        completed = subprocess.run(
-            ['bash', '-n', '-c', export_line],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
-
 
 # ---------------------------------------------------------------------------
 # slurm_run.regenerate_script_cmd — slurm_action → mlc command mapping

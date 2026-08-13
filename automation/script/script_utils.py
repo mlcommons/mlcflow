@@ -33,13 +33,23 @@ def get_variation_and_script_tags(tags_string):
 
 def build_venv_activation_command(venv_dir):
     venv_dir = shlex.quote(venv_dir or 'mlcflow')
+    compatible_venv = (
+        '$(python3 -c '
+        '\'import os, platform, sys; '
+        'print(os.environ["MLCFLOW_VENV_REQUESTED"]'
+        ' + "_{}_py{}.{}".format('
+        'platform.machine(), sys.version_info[0], sys.version_info[1]))\')'
+    )
 
     return (
         f'MLCFLOW_VENV_REQUESTED={venv_dir}'
         f' && export MLCFLOW_VENV_REQUESTED'
-        f' && if [ -f {venv_dir}/bin/activate ]; then '
-        f'. {venv_dir}/bin/activate; '
-        f'else . {venv_dir}_*_py*/bin/activate; fi'
+        f' && MLCFLOW_VENV="$MLCFLOW_VENV_REQUESTED"'
+        f' && if [ ! -f "$MLCFLOW_VENV/bin/activate" ]; then '
+        f'MLCFLOW_VENV_CANDIDATE="{compatible_venv}"; '
+        f'if [ -f "$MLCFLOW_VENV_CANDIDATE/bin/activate" ]; then '
+        f'MLCFLOW_VENV="$MLCFLOW_VENV_CANDIDATE"; fi; fi'
+        f' && . "$MLCFLOW_VENV/bin/activate"'
     )
 
 

@@ -24,7 +24,7 @@ case ":$PATH:" in
 esac
 """
             result = subprocess.run(
-                ["bash", "-lc", script],
+                ["bash", "-c", script],
                 capture_output=True,
                 text=True,
                 check=False,
