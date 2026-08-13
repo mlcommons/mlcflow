@@ -122,6 +122,24 @@ class TestVenvActivationCommand(unittest.TestCase):
         self.assertEqual(activated_path, resolved_path)
         self.assertNotEqual(activated_path, requested_path)
 
+    def test_activation_command_parses_inside_double_quoted_export(self):
+        from script.script_utils import build_venv_activation_command
+        activation_cmd = build_venv_activation_command('mlcflow')
+        escaped_cmd = activation_cmd.replace('"', '\\"')
+        expected = f"['{activation_cmd}']"
+        shell_script = (
+            f'export MLC_SSH_RUN_COMMANDS="[\'{escaped_cmd}\']"\n'
+            'printf "%s" "$MLC_SSH_RUN_COMMANDS"\n'
+        )
+        completed = subprocess.run(
+            ['bash', '-lc', shell_script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+        self.assertEqual(completed.stdout, expected)
+
 
 class TestRemoteRunIsolation(unittest.TestCase):
     def _capture_remote_run_cmds(self, **run_args):
