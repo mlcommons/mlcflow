@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import importlib
@@ -36,14 +37,6 @@ def get_variation_and_script_tags(tags_string):
 def build_venv_activation_command(venv_dir):
     requested_venv = venv_dir or 'mlcflow'
     activation_script = f'/tmp/.mlcflow-activate-{uuid.uuid4().hex}'
-    quoted_activation_script = shlex.quote(activation_script)
-    # Use json.dumps() to embed values as double-quoted Python string literals.
-    # json.dumps() properly escapes backslashes and double quotes, so the
-    # generated python_code contains no single quotes.  That lets shlex.quote()
-    # wrap the whole string in simple single quotes without any '"'"' escapes —
-    # those escapes break when the remote-run-commands SSH layer wraps the full
-    # command in its own single-quote delimiters (causing "unexpected EOF while
-    # looking for matching `''").
     python_code = (
         "from pathlib import Path; import platform, shlex, sys; "
         f"requested={json.dumps(requested_venv)}; "
@@ -56,12 +49,22 @@ def build_venv_activation_command(venv_dir):
         'print(". " + activate); '
         'print("rm -f " + shlex.quote(wrapper))'
     )
-
-    return (
-        f'python3 -c {shlex.quote(python_code)}'
-        f' > {quoted_activation_script}'
-        f' && . {quoted_activation_script}'
+    # Base64-encode the python code and pass it as sys.argv[1] so that the
+    # generated command contains neither single quotes nor backslash-double-quote
+    # sequences.  The remote-run-commands customize.py escapes single quotes
+    # with replace("'", "'\''") and then wraps the whole joined command string
+    # with shlex.quote().  Any single quote produced by a naive
+    # shlex.quote(python_code) call would be double-escaped by that two-step
+    # process, causing "unexpected EOF while looking for matching `''".
+    # Passing the base64 payload as a positional argument avoids all quoting
+    # issues: base64 uses only [A-Za-z0-9+/=] (shell-safe without any quotes),
+    # and the python3 -c "..." string uses double quotes with no special chars.
+    encoded = base64.b64encode(python_code.encode()).decode()
+    exec_cmd = (
+        f'python3 -c "import base64,sys;exec(base64.b64decode(sys.argv[1]).decode())"'
+        f' {encoded}'
     )
+    return f'{exec_cmd} > {activation_script} && . {activation_script}'
 
 
 def select_script_and_cache(
