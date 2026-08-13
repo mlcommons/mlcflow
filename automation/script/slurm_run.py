@@ -50,7 +50,7 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_exclusive = i.get('slurm_exclusive', False)
     slurm_export = i.get('slurm_export', 'ALL')
     slurm_srun_extra_args = i.get('slurm_srun_extra_args', '')
-    slurm_python_venv = i.get('slurm_python_venv', 'mlcflow')
+    slurm_python_venv = i.get('slurm_python_venv') or 'mlcflow'
     slurm_pull_mlc_repos = i.get('slurm_pull_mlc_repos', False)
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
@@ -143,19 +143,17 @@ def slurm_run(self_module, i, slurm_action='run'):
     run_cmds = []
 
     # Bootstrap mlcflow on the node
-    quoted_venv = shlex.quote(slurm_python_venv)
     if slurm_no_internet:
         # Use installer from local mlcflow repo or pre-downloaded copy
         installer_path = _get_local_installer()
-        run_cmds.append(f'bash {shlex.quote(installer_path)} --yes --venv-dir {quoted_venv}')
+        run_cmds.append(
+            f'bash {shlex.quote(installer_path)} --yes --venv-dir {shlex.quote(slurm_python_venv)}')
     else:
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {quoted_venv}')
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}')
     # The installer may resolve to a different venv path (e.g. platform-
     # versioned). Read the marker file it writes; fall back to the requested name.
-    run_cmds.append(
-        f'MLCFLOW_VENV=$(cat {quoted_venv}/.mlcflow_venv_path 2>/dev/null || echo {quoted_venv})'
-        f' && . "$MLCFLOW_VENV/bin/activate"')
+    run_cmds.append(build_venv_activation_command(slurm_python_venv))
 
     if slurm_mlcflow_upgrade:
         run_cmds.append('python3 -m pip install --upgrade mlcflow')
@@ -311,7 +309,10 @@ def _get_local_installer():
 
     # Check if the installer exists in the local mlcflow package
     local_installer = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        os.path.dirname(
+            os.path.dirname(
+                os.path.dirname(
+                    os.path.abspath(__file__)))),
         'docs', 'install', 'mlcflow_unix_installer.sh')
     if os.path.isfile(local_installer):
         return local_installer
