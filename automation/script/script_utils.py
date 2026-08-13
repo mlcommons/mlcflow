@@ -33,9 +33,9 @@ def get_variation_and_script_tags(tags_string):
 
 
 def build_venv_activation_command(venv_dir):
+    import base64
     requested_venv = venv_dir or 'mlcflow'
     activation_script = f'/tmp/.mlcflow-activate-{uuid.uuid4().hex}'
-    quoted_activation_script = shlex.quote(activation_script)
     python_code = (
         "from pathlib import Path; import platform, shlex, sys; "
         f"requested={requested_venv!r}; "
@@ -44,15 +44,16 @@ def build_venv_activation_command(venv_dir):
         "{sys.version_info[0]}.{sys.version_info[1]}'; "
         "path=candidate if Path(candidate, 'bin', 'activate').is_file() "
         "else requested; "
-        "activate=shlex.quote(str(Path(path) / \"bin\" / \"activate\")); "
+        "activate=shlex.quote(str(Path(path) / 'bin' / 'activate')); "
         "print('. ' + activate); "
         "print('rm -f ' + shlex.quote(wrapper))"
     )
+    encoded = base64.b64encode(python_code.encode()).decode()
 
     return (
-        f'python3 -c {shlex.quote(python_code)}'
-        f' > {quoted_activation_script}'
-        f' && . {quoted_activation_script}'
+        f'echo {encoded} | base64 -d | python3'
+        f' > {activation_script}'
+        f' && . {activation_script}'
     )
 
 
