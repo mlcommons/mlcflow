@@ -219,5 +219,6 @@ printf '__RESULT__:%s:%s\\n' "$VENV_DIR" "${{VIRTUAL_ENV:-}}"
             self._compatibility_signature(sys.executable),
         )
 
+
 if __name__ == "__main__":
     unittest.main()
