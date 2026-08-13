@@ -39,16 +39,18 @@ def build_venv_activation_command(venv_dir):
     python_code = (
         "from pathlib import Path; import platform, shlex, sys; "
         f"requested={requested_venv!r}; "
+        f"wrapper={activation_script!r}; "
         "candidate=f'{requested}_{platform.machine()}_py"
         "{sys.version_info[0]}.{sys.version_info[1]}'; "
         "path=candidate if Path(candidate, 'bin', 'activate').is_file() "
         "else requested; "
-        "print('. ' + shlex.quote(str(Path(path) / \"bin\" / \"activate\")))"
+        "activate=shlex.quote(str(Path(path) / \"bin\" / \"activate\")); "
+        "print('. ' + activate); "
+        "print('rm -f ' + shlex.quote(wrapper))"
     )
 
     return (
-        f"trap 'rm -f {quoted_activation_script}' EXIT"
-        f' && python3 -c {shlex.quote(python_code)}'
+        f'python3 -c {shlex.quote(python_code)}'
         f' > {quoted_activation_script}'
         f' && . {quoted_activation_script}'
     )
