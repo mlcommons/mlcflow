@@ -55,6 +55,7 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
     slurm_no_internet = is_true(i.get('slurm_no_internet', False))
+    slurm_isolated = is_true(i.get('slurm_isolated', False))
 
     # Normalize str → list so a single command string doesn't get iterated
     # char-by-char
@@ -140,6 +141,14 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     # Build the commands to run inside srun
     run_cmds = []
+
+    if slurm_isolated:
+        run_cmds.extend([
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)"',
+            'cd "$MLC_ISOLATED_TMP_DIR"',
+            'export MLC_REPOS="$PWD/MLC"',
+            'trap \'rm -rf "$MLC_REPOS" "$MLC_ISOLATED_TMP_DIR"\' EXIT'
+        ])
 
     # Bootstrap mlcflow on the node
     if slurm_no_internet:

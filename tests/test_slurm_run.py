@@ -123,6 +123,51 @@ class TestVenvActivationCommand(unittest.TestCase):
         self.assertNotEqual(activated_path, requested_path)
 
 
+class TestRemoteRunIsolation(unittest.TestCase):
+    def test_remote_isolated_sets_tmp_mlc_repos_and_cleanup(self):
+        from unittest.mock import patch, MagicMock
+        from script.remote_run import remote_run
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {'remote_run': {}}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured_remote_input = {}
+
+        def fake_access(input_dict):
+            captured_remote_input.update(input_dict)
+            return {'return': 0}
+
+        mock_self.action_object = MagicMock()
+        mock_self.action_object.access.side_effect = fake_access
+
+        with patch('script.remote_run.call_remote_run_prepare',
+                   return_value={'return': 0, 'files_to_copy': [], 'remote_env': {}}):
+            result = remote_run(mock_self, {'tags': 'detect,os',
+                                            'remote_isolated': True, 'mlc_run_cmd': 'mlcr detect,os', 'env': {}})
+
+        self.assertEqual(result['return'], 0)
+
+        run_cmds = captured_remote_input['run_cmds']
+        combined = " ; ".join(run_cmds)
+        self.assertIn('MLC_ISOLATED_TMP_DIR="$(mktemp -d)"', combined)
+        self.assertIn('cd "$MLC_ISOLATED_TMP_DIR"', combined)
+        self.assertIn('export MLC_REPOS="$PWD/MLC"', combined)
+        self.assertIn(
+            'trap \'rm -rf "$MLC_REPOS" "$MLC_ISOLATED_TMP_DIR"\' EXIT', combined)
+
+
 # ---------------------------------------------------------------------------
 # slurm_run.regenerate_script_cmd — slurm_action → mlc command mapping
 # ---------------------------------------------------------------------------
@@ -216,6 +261,47 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
         bash_c_cmd = captured_args[-1]  # last element after 'bash', '-c'
         self.assertIn('module load cuda', bash_c_cmd,
                       "Pre-run command string was expanded char-by-char instead of as a whole")
+
+    def test_slurm_isolated_sets_tmp_mlc_repos_and_cleanup(self):
+        from unittest.mock import patch, MagicMock
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured_args = []
+
+        def fake_call(args):
+            captured_args.extend(args)
+            return 0
+
+        with patch('script.slurm_run.shutil.which', return_value='/usr/bin/srun'), \
+                patch('script.slurm_run.subprocess.call', side_effect=fake_call):
+            from script.slurm_run import slurm_run
+            result = slurm_run(mock_self, {
+                'tags': 'detect,os',
+                'slurm_isolated': True,
+                'env': {},
+            })
+
+        self.assertEqual(result['return'], 0)
+        bash_c_cmd = captured_args[-1]  # last element after 'bash', '-c'
+        self.assertIn('MLC_ISOLATED_TMP_DIR="$(mktemp -d)"', bash_c_cmd)
+        self.assertIn('cd "$MLC_ISOLATED_TMP_DIR"', bash_c_cmd)
+        self.assertIn('export MLC_REPOS="$PWD/MLC"', bash_c_cmd)
+        self.assertIn(
+            'trap \'rm -rf "$MLC_REPOS" "$MLC_ISOLATED_TMP_DIR"\' EXIT', bash_c_cmd)
 
 
 if __name__ == '__main__':

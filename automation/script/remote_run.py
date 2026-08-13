@@ -37,6 +37,7 @@ def remote_run(self_module, i):
     remote_action = i.get('remote_action', 'run')
     remote_shell = i.get('remote_shell', '')
     remote_no_internet = is_true(i.get('remote_no_internet', False))
+    remote_isolated = is_true(i.get('remote_isolated', False))
 
     prune_result = prune_input(
         {'input': i, 'extra_keys_starts_with': ['remote_']})
@@ -96,6 +97,16 @@ def remote_run(self_module, i):
 
     run_cmds = []
     remote_mlc_python_venv = i.get('remote_python_venv') or 'mlcflow'
+    run_cmds_start_index = 0
+
+    if remote_isolated:
+        run_cmds.extend([
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)"',
+            'cd "$MLC_ISOLATED_TMP_DIR"',
+            'export MLC_REPOS="$PWD/MLC"',
+            'trap \'rm -rf "$MLC_REPOS" "$MLC_ISOLATED_TMP_DIR"\' EXIT'
+        ])
+        run_cmds_start_index = len(run_cmds)
 
     # Determine if the local system is Windows to adjust command formatting
     is_windows = platform.system() == 'Windows'
@@ -201,7 +212,7 @@ def remote_run(self_module, i):
             remote_inputs['copy_directory'] = remote_mlc_repos_path
             # On the remote, if MLC_REPOS is set and differs, symlink so
             # mlcflow finds the copied repos
-            run_cmds.insert(0,
+            run_cmds.insert(run_cmds_start_index,
                             f'if [ -n "$MLC_REPOS" ] && [ "$MLC_REPOS" != "{remote_mlc_repos_path}" ]; then '
                             f'mkdir -p "{remote_mlc_repos_path}" && '
                             f'ln -sfn "$(realpath {remote_mlc_repos_path})"/* "$MLC_REPOS/"; '
