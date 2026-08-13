@@ -17,13 +17,14 @@ set -euo pipefail
 # The installer will activate the correct venv later.
 # ------------------------------------------------------------------------------
 if [ -n "${VIRTUAL_ENV:-}" ]; then
+    ACTIVE_VENV="$VIRTUAL_ENV"
     # 'deactivate' may not be available (e.g. venv is broken), so fall back
     # to manually stripping the venv from PATH.
     if command -v deactivate >/dev/null 2>&1; then
         deactivate 2>/dev/null || true
     fi
     # Ensure the venv bin dir is removed from PATH even if deactivate failed
-    PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "^${VIRTUAL_ENV}/" | paste -sd: -)"
+    PATH="$(echo "$PATH" | tr ':' '\n' | grep -v "^${ACTIVE_VENV}/" | paste -sd: -)"
     unset VIRTUAL_ENV
 fi
 
