@@ -149,9 +149,11 @@ class CacheAction(Action):
                 item.meta["tags"] = tags
 
                 if os.path.exists(meta_yaml_path):
-                    save_result = utils.save_yaml(meta_yaml_path, meta=item.meta)
+                    save_result = utils.save_yaml(
+                        meta_yaml_path, meta=item.meta)
                 else:
-                    save_result = utils.save_json(meta_json_path, meta=item.meta)
+                    save_result = utils.save_json(
+                        meta_json_path, meta=item.meta)
 
                 if save_result['return'] > 0:
                     return save_result
