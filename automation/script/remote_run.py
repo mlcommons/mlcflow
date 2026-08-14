@@ -239,7 +239,8 @@ def remote_run(self_module, i):
                 'files_to_copy', []) + repo_files
             remote_mlc_repos_path = i.get("remote_mlc_repos_path", "MLC/repos")
             remote_mlc_repos_path_for_cmd = remote_mlc_repos_path
-            if remote_isolated and _remote_tmp_dir and not remote_mlc_repos_path.startswith('/'):
+            if remote_isolated and _remote_tmp_dir and not remote_mlc_repos_path.startswith(
+                    '/'):
                 remote_mlc_repos_path_for_cmd = f'{_remote_tmp_dir}/{remote_mlc_repos_path}'
             remote_inputs['copy_directory'] = remote_mlc_repos_path
             # On the remote, if MLC_REPOS is set and differs, symlink so
