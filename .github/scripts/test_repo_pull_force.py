@@ -24,6 +24,15 @@ class TestRepoPullForce(unittest.TestCase):
         with open(os.path.join(self.repo_path, "meta.yaml"), "w", encoding="utf-8") as f:
             f.write("uid: 1234567890abcdef\nalias: test@repo\ngit: true\n")
 
+        # All tests in this class operate on an existing repo; patch
+        # _git_repo_state so the directory is treated as a valid checkout
+        # rather than triggering the clone-from-scratch path.
+        patcher = patch.object(
+            RepoAction, "_git_repo_state",
+            return_value=RepoAction.GIT_STATE_VALID)
+        self.mock_git_repo_state = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _restore_env(self):
         if self.old_mlc_repos is None:
             os.environ.pop("MLC_REPOS", None)
