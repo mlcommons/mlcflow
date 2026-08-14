@@ -146,10 +146,20 @@ class CacheAction(Action):
                     # Re-read meta from disk inside the lock to avoid stale reads
                     # from the earlier self.search() call.
                     if os.path.exists(meta_yaml_path):
-                        current_meta = utils.read_yaml(meta_yaml_path) or {}
+                        current_meta = utils.read_yaml(meta_yaml_path)
+                        if not current_meta:
+                            return {
+                                'return': 1,
+                                'error': f"Could not read meta for {item.path}"
+                            }
                         use_yaml = True
                     elif os.path.exists(meta_json_path):
-                        current_meta = utils.read_json(meta_json_path) or {}
+                        current_meta = utils.read_json(meta_json_path)
+                        if not current_meta:
+                            return {
+                                'return': 1,
+                                'error': f"Could not read meta for {item.path}"
+                            }
                         use_yaml = False
                     else:
                         logger.warning(

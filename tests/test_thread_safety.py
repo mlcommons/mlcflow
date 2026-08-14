@@ -41,8 +41,16 @@ class ConcurrentRmCacheTest(unittest.TestCase):
             os.environ["MLC_REPOS"] = self.previous_mlc_repos
 
     def test_concurrent_rm_cache_does_not_raise(self):
-        """Two threads deleting the same cache item must not raise an exception."""
+        """Two threads deleting the same cache item must not raise an exception,
+        and the item must be gone from the filesystem and index afterwards."""
         errors = []
+        # Record the path of the item before deletion
+        action_pre = Action()
+        action_pre.parent = None
+        res_pre = action_pre.search({"target_name": "cache", "tags": "get,dataset,a"})
+        self.assertEqual(res_pre["return"], 0)
+        self.assertGreater(len(res_pre["list"]), 0, "Item must exist before test")
+        item_path = res_pre["list"][0].path
 
         def rm_cache(tags):
             try:
@@ -61,6 +69,19 @@ class ConcurrentRmCacheTest(unittest.TestCase):
         t2.join()
 
         self.assertEqual(errors, [], f"Unexpected exceptions: {errors}")
+        self.assertFalse(
+            os.path.exists(item_path),
+            f"Item directory still exists after concurrent rm: {item_path}"
+        )
+        # Index must also not list the item anymore
+        action_post = Action()
+        action_post.parent = None
+        res_post = action_post.search({"target_name": "cache", "tags": "get,dataset,a"})
+        self.assertEqual(res_post["return"], 0)
+        self.assertEqual(
+            len(res_post["list"]), 0,
+            f"Item still in index after concurrent rm: {res_post['list']}"
+        )
 
 
 class ConcurrentMarkTmpTest(unittest.TestCase):
