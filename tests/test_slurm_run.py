@@ -242,7 +242,7 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
 class TestMlcflowUpgradeFlag(unittest.TestCase):
     """Tests for --remote_mlcflow_upgrade and --slurm_mlcflow_upgrade flags."""
 
-    def _make_slurm_mock(self):
+    def _make_mock(self):
         from unittest.mock import MagicMock
         mock_self = MagicMock()
         mock_self._select_script.return_value = {
@@ -269,7 +269,7 @@ class TestMlcflowUpgradeFlag(unittest.TestCase):
             captured.extend(args)
             return 0
 
-        mock_self = self._make_slurm_mock()
+        mock_self = self._make_mock()
         with patch('script.slurm_run.shutil.which', return_value='/usr/bin/srun'), \
                 patch('script.slurm_run.subprocess.call', side_effect=fake_call):
             result = slurm_run(mock_self, {
@@ -308,7 +308,7 @@ class TestMlcflowUpgradeFlag(unittest.TestCase):
 
     def test_remote_upgrade_incompatible_with_no_internet(self):
         from script.remote_run import remote_run
-        mock_self = self._make_slurm_mock()
+        mock_self = self._make_mock()
         result = remote_run(mock_self, {
             'tags': 'detect,os',
             'remote_mlcflow_upgrade': True,
@@ -322,7 +322,7 @@ class TestMlcflowUpgradeFlag(unittest.TestCase):
         from unittest.mock import patch, MagicMock
         from script.remote_run import remote_run
 
-        mock_self = self._make_slurm_mock()
+        mock_self = self._make_mock()
         mock_self.action_object = MagicMock()
         captured_run_cmds = []
 

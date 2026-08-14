@@ -110,7 +110,8 @@ def remote_run(self_module, i):
     # Even if we're running from Windows locally, the remote commands execute
     # on the remote server
     if remote_no_internet:
-        # Download installer locally and copy it to the remote machine
+        # --remote_no_internet selects the local-installer path; network-requiring
+        # operations like --remote_mlcflow_upgrade are already blocked by the guard above.
         installer_local_path = _get_local_installer()
         files_to_copy.append(installer_local_path)
         remote_installer = "mlc-remote-artifacts/" + \
