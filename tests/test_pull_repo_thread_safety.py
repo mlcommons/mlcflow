@@ -6,6 +6,7 @@ import threading
 import unittest
 import yaml
 from unittest.mock import patch, MagicMock
+from filelock import FileLock
 
 from mlc.repo_action import unregister_repo, RepoAction
 from mlc.action import Action
@@ -193,10 +194,11 @@ class RegisterRepoThreadSafetyTest(_RepoActionTestBase):
                 return completed(cmd)
 
             if 'rev-parse' in cmd:
-                # _is_valid_git_repo's probe: healthy only once .git exists.
+                # _git_repo_state's probe. --show-toplevel echoes the repo
+                # root, which the caller compares against repo_path.
                 target = cmd[cmd.index('-C') + 1]
                 if os.path.isdir(os.path.join(target, '.git')):
-                    return completed(cmd, stdout="0" * 40 + "\n")
+                    return completed(cmd, stdout=target + "\n")
                 return completed(
                     cmd, returncode=128,
                     stderr="fatal: not a git repository\n")
@@ -237,8 +239,8 @@ class RegisterRepoThreadSafetyTest(_RepoActionTestBase):
 
         self.assertEqual(
             len(clone_call_count), 1,
-            msg=f"git clone was called {
-                len(clone_call_count)} times; expected exactly 1"
+            msg=(f"git clone was called {len(clone_call_count)} times; "
+                 "expected exactly 1")
         )
         self.assertTrue(
             os.path.isdir(repo_path),
@@ -278,11 +280,16 @@ class PullRepoPartialCloneTest(_RepoActionTestBase):
                 return subprocess.CompletedProcess(cmd, 0, "", "")
             if 'rev-parse' in cmd:
                 target = cmd[cmd.index('-C') + 1]
-                # Only a directory carrying our HEAD marker is "healthy".
+                # Only a directory carrying our HEAD marker is "healthy";
+                # anything else is definitively not a repository, so the
+                # caller is allowed to remove it.
                 if os.path.exists(os.path.join(target, '.git', 'HEAD_OK')):
                     return subprocess.CompletedProcess(
-                        cmd, 0, "0" * 40 + "\n", "")
-                return subprocess.CompletedProcess(cmd, 128, "", "fatal\n")
+                        cmd, 0, target + "\n", "")
+                return subprocess.CompletedProcess(
+                    cmd, 128, "",
+                    "fatal: not a git repository (or any of the parent "
+                    "directories): .git\n")
             return subprocess.CompletedProcess(cmd, 0, "", "")
 
         return fake
@@ -318,6 +325,48 @@ class PullRepoPartialCloneTest(_RepoActionTestBase):
         self.assertFalse(
             os.path.exists(poison_marker),
             msg="leftovers from the interrupted clone were not removed")
+
+    def test_repo_path_is_absent_while_the_clone_is_running(self):
+        """The clone must land somewhere else and be renamed into place.
+
+        Asserting only on the aftermath is not enough: cloning straight into
+        repo_path with rollback on failure leaves the same end state, but a
+        process killed mid-clone (no rollback runs) still poisons the path.
+        The invariant that actually matters is that repo_path does not exist
+        *while* the clone is in flight.
+        """
+        repo_url = "https://github.com/example/test-repo.git"
+        repo_path = os.path.join(self.repos_path, "example@test-repo")
+        observed_during_clone = {}
+
+        clone_calls = []
+        base_fake = self._fake_git(clone_calls)
+
+        def fake(cmd, *args, **kwargs):
+            if (isinstance(cmd, (list, tuple)) and cmd
+                    and cmd[0] == 'git' and 'clone' in cmd):
+                observed_during_clone['destination'] = cmd[-1]
+                observed_during_clone['repo_path_exists'] = os.path.lexists(
+                    repo_path)
+            result = base_fake(cmd, *args, **kwargs)
+            if isinstance(cmd, (list, tuple)) and cmd and 'clone' in cmd:
+                open(os.path.join(cmd[-1], '.git', 'HEAD_OK'), 'w').close()
+            return result
+
+        ra = self._make_repo_action()
+        with patch('mlc.repo_action.subprocess.run', side_effect=fake):
+            result = ra.pull_repo(repo_url)
+
+        self.assertEqual(result.get('return'), 0, msg=str(result))
+        self.assertNotEqual(
+            observed_during_clone.get('destination'), repo_path,
+            msg="clone wrote directly into repo_path instead of a temp path")
+        self.assertFalse(
+            observed_during_clone.get('repo_path_exists', True),
+            msg="repo_path existed while the clone was still running; an "
+                "abrupt kill would leave a half-repo behind")
+        self.assertTrue(os.path.isdir(repo_path),
+                        msg="clone was never renamed into place")
 
     def test_failed_clone_leaves_no_partial_directory(self):
         """A clone that dies must leave repo_path absent, not half-populated."""
@@ -388,6 +437,188 @@ class ReposJsonAtomicWriteTest(_RepoActionTestBase):
             self.assertEqual(json.load(f), original)
         self.assertFalse(os.path.exists(self.repos_file + ".tmp"),
                          msg="temp file left behind after a failed write")
+
+
+class GitRepoStateTest(unittest.TestCase):
+    """_git_repo_state must never answer "junk" when it simply cannot tell --
+    callers delete on that answer."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+    def _git(self, *args, cwd=None):
+        return subprocess.run(['git'] + list(args), cwd=cwd,
+                              capture_output=True, text=True, check=True)
+
+    def test_real_git_classification(self):
+        """Exercised against real git rather than a fake, since the whole
+        point is matching git's actual behaviour."""
+        from mlc.repo_action import RepoAction
+
+        base = self.temp_dir.name
+
+        valid = os.path.join(base, 'valid')
+        os.makedirs(valid)
+        self._git('init', '-q', cwd=valid)
+        self._git('commit', '-q', '--allow-empty', '-m', 'x', cwd=valid)
+
+        # A freshly cloned *empty* repo has an unborn HEAD but is perfectly
+        # usable -- `rev-parse HEAD` would wrongly reject it.
+        empty = os.path.join(base, 'empty')
+        os.makedirs(empty)
+        self._git('init', '-q', cwd=empty)
+
+        half = os.path.join(base, 'half', '.git')
+        os.makedirs(half)
+
+        plain = os.path.join(base, 'plain')
+        os.makedirs(plain)
+
+        # git -C searches upwards, so this answers for `valid` unless the
+        # reported top level is compared against the path asked about.
+        nested = os.path.join(valid, 'nested')
+        os.makedirs(nested)
+
+        dangling = os.path.join(base, 'dangling')
+        os.symlink(os.path.join(base, 'nowhere'), dangling)
+
+        a_file = os.path.join(base, 'a-file')
+        with open(a_file, 'w') as f:
+            f.write('x')
+
+        cases = [
+            (valid, RepoAction.GIT_STATE_VALID),
+            (empty, RepoAction.GIT_STATE_VALID),
+            (os.path.dirname(half), RepoAction.GIT_STATE_INVALID),
+            (plain, RepoAction.GIT_STATE_INVALID),
+            (nested, RepoAction.GIT_STATE_INVALID),
+            (dangling, RepoAction.GIT_STATE_INVALID),
+            (a_file, RepoAction.GIT_STATE_INVALID),
+        ]
+        for path, expected in cases:
+            with self.subTest(path=os.path.basename(path)):
+                self.assertEqual(RepoAction._git_repo_state(path), expected)
+
+    def test_unrunnable_git_is_unknown_not_invalid(self):
+        """If git cannot be executed we must not conclude "this is junk"."""
+        from mlc.repo_action import RepoAction
+
+        path = os.path.join(self.temp_dir.name, 'repo')
+        os.makedirs(path)
+        with patch('mlc.repo_action.subprocess.run',
+                   side_effect=OSError(2, 'No such file or directory: git')):
+            self.assertEqual(RepoAction._git_repo_state(path),
+                             RepoAction.GIT_STATE_UNKNOWN)
+
+    def test_refused_git_is_unknown_not_invalid(self):
+        """git refusing (e.g. dubious ownership on a shared MLC_REPOS) exits
+        non-zero but is not a statement that the path is not a repo."""
+        from mlc.repo_action import RepoAction
+
+        path = os.path.join(self.temp_dir.name, 'repo')
+        os.makedirs(path)
+        refusal = subprocess.CompletedProcess(
+            [], 128, "",
+            "fatal: detected dubious ownership in repository at '/x'\n")
+        with patch('mlc.repo_action.subprocess.run', return_value=refusal):
+            self.assertEqual(RepoAction._git_repo_state(path),
+                             RepoAction.GIT_STATE_UNKNOWN)
+
+
+class PullRepoDestructiveGuardTest(_RepoActionTestBase):
+    """pull_repo must not delete a checkout it could not classify."""
+
+    def test_unknown_state_preserves_the_checkout(self):
+        repo_path = os.path.join(self.repos_path, "example@test-repo")
+        os.makedirs(repo_path)
+        precious = os.path.join(repo_path, "UNCOMMITTED_WORK.txt")
+        with open(precious, 'w') as f:
+            f.write("do not lose me")
+
+        ra = self._make_repo_action()
+        with patch('mlc.repo_action.subprocess.run',
+                   side_effect=OSError(2, "No such file or directory: 'git'")):
+            result = ra.pull_repo("https://github.com/example/test-repo.git")
+
+        self.assertNotEqual(result.get('return'), 0,
+                            msg="an unclassifiable checkout must be an error")
+        self.assertTrue(
+            os.path.exists(precious),
+            msg="pull_repo deleted a checkout it could not classify")
+
+
+class PullRepoTimeoutSemanticsTest(_RepoActionTestBase):
+    """Timing out must not be reported as success when work was skipped."""
+
+    def _hold_lock_and_pull(self, registered=False, **pull_kwargs):
+        repo_path = os.path.join(self.repos_path, "example@test-repo")
+        # A valid-looking checkout is already in place.
+        os.makedirs(os.path.join(repo_path, '.git'), exist_ok=True)
+
+        if registered:
+            # Register it so the "nothing left to do" shortcut is gated only
+            # by whether a specific revision was requested.
+            with open(self.repos_file) as f:
+                entries = json.load(f)
+            with open(self.repos_file, 'w') as f:
+                json.dump(entries + [repo_path], f, indent=2)
+
+        def fake_run(cmd, *a, **kw):
+            if (isinstance(cmd, (list, tuple)) and cmd
+                    and cmd[0] == 'git' and 'rev-parse' in cmd):
+                target = cmd[cmd.index('-C') + 1]
+                return subprocess.CompletedProcess(cmd, 0, target + "\n", "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        os.environ["MLC_REPO_LOCK_TIMEOUT"] = "1"
+        self.addCleanup(os.environ.pop, "MLC_REPO_LOCK_TIMEOUT", None)
+
+        ra = self._make_repo_action()
+        holder = FileLock(repo_path + ".lock", timeout=30)
+        holder.acquire()
+        try:
+            with patch('mlc.repo_action.subprocess.run', side_effect=fake_run):
+                return ra.pull_repo(
+                    "https://github.com/example/test-repo.git", **pull_kwargs)
+        finally:
+            holder.release()
+
+    def test_timeout_with_requested_tag_is_an_error(self):
+        """The repo is present AND registered, so only the revision request
+        stands between this and a false success. _is_valid_git_repo says "a
+        checkout exists", not "it is at the tag you asked for" -- reporting
+        success here would silently run the wrong revision."""
+        result = self._hold_lock_and_pull(registered=True, tag="v2")
+        self.assertNotEqual(
+            result.get('return'), 0,
+            msg="timing out while a specific tag was requested must not "
+                "report success")
+
+    def test_timeout_with_requested_branch_is_an_error(self):
+        result = self._hold_lock_and_pull(
+            registered=True, branch="some-branch")
+        self.assertNotEqual(result.get('return'), 0)
+
+    def test_timeout_with_requested_checkout_is_an_error(self):
+        result = self._hold_lock_and_pull(registered=True, checkout="abc1234")
+        self.assertNotEqual(result.get('return'), 0)
+
+    def test_timeout_on_unregistered_repo_is_an_error(self):
+        """Even with no revision requested, the repo still has to be
+        registered in repos.json for there to be nothing left to do."""
+        result = self._hold_lock_and_pull(registered=False)
+        self.assertNotEqual(
+            result.get('return'), 0,
+            msg="repo was never registered, so this was not a no-op")
+
+    def test_timeout_on_registered_repo_with_no_revision_is_a_noop(self):
+        """The one case where reporting success is legitimate."""
+        result = self._hold_lock_and_pull(registered=True)
+        self.assertEqual(
+            result.get('return'), 0,
+            msg="another process left a valid registered checkout and no "
+                "revision was requested; there was genuinely nothing to do")
 
 
 class RepoLockTimeoutTest(unittest.TestCase):
