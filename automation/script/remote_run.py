@@ -117,22 +117,51 @@ def remote_run(self_module, i):
     # expansion.
     _remote_tmp_dir = ''
     if remote_isolated:
+        if remote_no_internet:
+            return {
+                'return': 1,
+                'error': '--remote_isolated is incompatible with --remote_no_internet: '
+                         'each isolated run re-installs mlcflow into a fresh venv, '
+                         'which requires network access on the target host.'
+            }
         _uid = uuid.uuid4().hex[:16]
         if remote_isolated_base_dir:
+            # Escape shell metacharacters in the base dir to prevent injection
+            _safe_base = (
+                str(remote_isolated_base_dir)
+                .replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace('$', '\\$')
+                .replace('`', '\\`')
+            )
             _base = str(remote_isolated_base_dir).rstrip('/')
             _remote_tmp_dir = f'{_base}/mlcflow-isolated-{_uid}'
         else:
+            _safe_base = ''
             _remote_tmp_dir = f'/tmp/mlcflow-isolated-{_uid}'
         if not remote_copy_directory.startswith('/'):
             remote_copy_directory_for_cmd = f'{_remote_tmp_dir}/{remote_copy_directory}'
-        run_cmds.extend([
+        # Build the preamble commands.  The trap body uses quoted variable
+        # references to handle paths with spaces; the MLC_REPOS and
+        # MLC_ISOLATED_TMP_DIR variables are set to the literal path before
+        # the trap, so the expansion is safe.
+        preamble = [
             f'MLC_ISOLATED_TMP_DIR="{_remote_tmp_dir}"',
+        ]
+        if remote_isolated_base_dir:
+            # Require that the base directory already exists (consistent with
+            # slurm_isolated_base_dir behaviour) so a typo is a hard error
+            # rather than creating an unexpected directory tree.
+            preamble.append(f'[ -d "{_safe_base}" ] || {{ echo "remote_isolated_base_dir does not exist: {_safe_base}" >&2; exit 1; }}')
+        preamble.extend([
             f'mkdir -p "{_remote_tmp_dir}" || exit 1',
+            f'chmod 700 "{_remote_tmp_dir}"',
             f'[ -d "{_remote_tmp_dir}" ] || exit 1',
             f'cd "{_remote_tmp_dir}" || exit 1',
             f'export MLC_REPOS="{_remote_tmp_dir}/MLC"',
-            f'trap "rm -rf {_remote_tmp_dir}/MLC {_remote_tmp_dir}" EXIT INT TERM HUP'
+            f'trap "rm -rf \\"{_remote_tmp_dir}/MLC\\" \\"{_remote_tmp_dir}\\"" EXIT INT TERM HUP',
         ])
+        run_cmds.extend(preamble)
         run_cmds_start_index = len(run_cmds)
 
     # Determine if the local system is Windows to adjust command formatting
@@ -217,7 +246,10 @@ def remote_run(self_module, i):
 
     if files_to_copy:
         remote_inputs['files_to_copy'] = files_to_copy
-        remote_inputs['copy_directory'] = remote_copy_directory
+        # In isolated mode the SCP target must match the absolute path the
+        # commands reference; in normal mode use the (possibly relative)
+        # copy_directory as before.
+        remote_inputs['copy_directory'] = remote_copy_directory_for_cmd
 
     # For repo copying, add a separate copy with MLC/repos target
     if i.get('remote_copy_mlc_repos', False):
@@ -242,13 +274,13 @@ def remote_run(self_module, i):
             if remote_isolated and _remote_tmp_dir and not remote_mlc_repos_path.startswith(
                     '/'):
                 remote_mlc_repos_path_for_cmd = f'{_remote_tmp_dir}/{remote_mlc_repos_path}'
-            remote_inputs['copy_directory'] = remote_mlc_repos_path
+            remote_inputs['copy_directory'] = remote_mlc_repos_path_for_cmd
             # On the remote, if MLC_REPOS is set and differs, symlink so
             # mlcflow finds the copied repos
             run_cmds.insert(run_cmds_start_index,
                             f'if [ -n "$MLC_REPOS" ] && [ "$MLC_REPOS" != "{remote_mlc_repos_path_for_cmd}" ]; then '
                             f'mkdir -p "{remote_mlc_repos_path_for_cmd}" && '
-                            f'ln -sfn "$(realpath \\"{remote_mlc_repos_path_for_cmd}\\")"/* "$MLC_REPOS/"; '
+                            f'ln -sfn "$(realpath {remote_mlc_repos_path_for_cmd})"/* "$MLC_REPOS/"; '
                             f'fi')
 
     if files_to_copy_back:
