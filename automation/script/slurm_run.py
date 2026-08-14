@@ -152,7 +152,8 @@ def slurm_run(self_module, i, slurm_action='run'):
         run_cmds.append(
             f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}')
     # The installer may resolve to a different venv path (e.g. platform-
-    # versioned). Read the marker file it writes; fall back to the requested name.
+    # versioned). Read the marker file it writes; fall back to the requested
+    # name.
     run_cmds.append(build_venv_activation_command(slurm_python_venv))
 
     if slurm_mlcflow_upgrade:

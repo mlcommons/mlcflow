@@ -116,7 +116,8 @@ def remote_run(self_module, i):
         run_cmds.append(
             f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
     # The installer may resolve to a different venv path (e.g. platform-
-    # versioned). Read the marker file it writes; fall back to the requested name.
+    # versioned). Read the marker file it writes; fall back to the requested
+    # name.
     run_cmds.append(build_venv_activation_command(remote_mlc_python_venv))
     if remote_mlcflow_upgrade:
         run_cmds.append('python3 -m pip install --upgrade mlcflow')
