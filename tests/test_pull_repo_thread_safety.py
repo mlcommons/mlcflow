@@ -1,5 +1,7 @@
 import json
 import os
+import shutil
+import stat
 import subprocess
 import tempfile
 import threading
@@ -487,8 +489,15 @@ class GitRepoStateTest(unittest.TestCase):
         with open(a_file, 'w') as f:
             f.write('x')
 
+        # A repo relocated to another volume and symlinked back is a normal
+        # setup; classifying the link as junk would unlink it and strand the
+        # real checkout together with any local work in it.
+        linked = os.path.join(base, 'linked')
+        os.symlink(valid, linked)
+
         cases = [
             (valid, RepoAction.GIT_STATE_VALID),
+            (linked, RepoAction.GIT_STATE_VALID),
             (empty, RepoAction.GIT_STATE_VALID),
             (os.path.dirname(half), RepoAction.GIT_STATE_INVALID),
             (plain, RepoAction.GIT_STATE_INVALID),
@@ -571,8 +580,17 @@ class PullRepoTimeoutSemanticsTest(_RepoActionTestBase):
                 return subprocess.CompletedProcess(cmd, 0, target + "\n", "")
             return subprocess.CompletedProcess(cmd, 0, "", "")
 
+        previous_timeout = os.environ.get("MLC_REPO_LOCK_TIMEOUT")
+
+        def _restore_timeout():
+            # Restore, do not delete: popping would clobber an ambient value.
+            if previous_timeout is None:
+                os.environ.pop("MLC_REPO_LOCK_TIMEOUT", None)
+            else:
+                os.environ["MLC_REPO_LOCK_TIMEOUT"] = previous_timeout
+
+        self.addCleanup(_restore_timeout)
         os.environ["MLC_REPO_LOCK_TIMEOUT"] = "1"
-        self.addCleanup(os.environ.pop, "MLC_REPO_LOCK_TIMEOUT", None)
 
         ra = self._make_repo_action()
         holder = FileLock(repo_path + ".lock", timeout=30)
@@ -619,6 +637,170 @@ class PullRepoTimeoutSemanticsTest(_RepoActionTestBase):
             result.get('return'), 0,
             msg="another process left a valid registered checkout and no "
                 "revision was requested; there was genuinely nothing to do")
+
+
+class RepoLockMechanicsTest(unittest.TestCase):
+    """Reentrancy, cycle-guarding and key normalisation of the repo lock."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+    def test_same_thread_reentry_does_not_self_deadlock(self):
+        """register_repo recurses into pull_repo for deps while the parent's
+        repo lock is held. filelock is only reentrant per instance, so without
+        the thread-local set the nested acquire blocks for the whole timeout."""
+        from mlc.repo_action import _repo_lock
+
+        lock_file = os.path.join(self.temp_dir.name, "r.lock")
+        with _repo_lock(lock_file, 2):
+            # A fresh FileLock on the same path would block here.
+            with _repo_lock(lock_file, 2):
+                pass
+
+    def test_lock_is_released_after_an_exception(self):
+        from mlc.repo_action import _repo_lock
+
+        lock_file = os.path.join(self.temp_dir.name, "r.lock")
+        with self.assertRaises(ValueError):
+            with _repo_lock(lock_file, 2):
+                raise ValueError("boom")
+        # Must be acquirable again, and bookkeeping must be clean.
+        with _repo_lock(lock_file, 2):
+            pass
+
+    def test_lock_key_is_normalised(self):
+        """Two spellings of one repo must map to one lock file, or two
+        processes take different locks for the same directory."""
+        from mlc.repo_action import _repo_lock_path
+
+        base = self.temp_dir.name
+        self.assertEqual(
+            _repo_lock_path(os.path.join(base, "r")),
+            _repo_lock_path(os.path.join(base, ".", "r")))
+        self.assertEqual(
+            _repo_lock_path(os.path.join(base, "sub", "..", "r")),
+            _repo_lock_path(os.path.join(base, "r")))
+
+    def test_dependency_cycle_does_not_recurse(self):
+        """A -> B -> A must not re-enter the pull; the per-repo lock cannot
+        stop that on its own because same-thread reentry is a deliberate
+        no-op, which would turn the old deadlock into unbounded recursion."""
+        from mlc.repo_action import _repo_pull_lock
+
+        lock_file = os.path.join(self.temp_dir.name, "r.lock")
+        depth = []
+
+        def pull(remaining):
+            with _repo_pull_lock(lock_file, 5) as proceed:
+                if not proceed:
+                    return
+                depth.append(1)
+                if remaining:
+                    pull(remaining - 1)
+
+        pull(10)
+        self.assertEqual(
+            len(depth), 1,
+            msg="the cycle guard let the pull re-enter itself")
+
+
+class RmRepoLockingTest(_RepoActionTestBase):
+    """`mlc rm repo` must not delete a tree a concurrent pull is building,
+    but pruning of vanished entries must never block or fail."""
+
+    def test_rm_repo_itself_is_unlocked_and_infallible(self):
+        """load_repos_and_meta() returns rm_repo's result straight to callers
+        that expect a list of Repos, so rm_repo must not acquire a lock (it
+        would block behind an unrelated repo) nor return {'return': 1}."""
+        from mlc.repo_action import rm_repo
+
+        vanished = os.path.join(self.repos_path, "gone@repo")
+        holder = FileLock(vanished + ".lock", timeout=30)
+        holder.acquire()
+        try:
+            result = rm_repo(vanished, self.repos_file, True)
+        finally:
+            holder.release()
+
+        self.assertEqual(
+            result.get("return"), 0,
+            msg="rm_repo must stay infallible; load_repos_and_meta returns "
+                "its result where a list is expected")
+
+    def test_pruning_a_vanished_entry_still_returns_a_list(self):
+        """The end-to-end shape of the above: Action.load_repos_and_meta must
+        hand back Repo objects, not an error dict."""
+        with open(self.repos_file) as f:
+            entries = json.load(f)
+        vanished = os.path.join(self.repos_path, "gone@repo")
+        with open(self.repos_file, 'w') as f:
+            json.dump(entries + [vanished], f, indent=2)
+
+        holder = FileLock(vanished + ".lock", timeout=30)
+        holder.acquire()
+        try:
+            action = Action()
+            action.parent = None
+            repos = action.load_repos_and_meta()
+        finally:
+            holder.release()
+
+        self.assertIsInstance(
+            repos, list,
+            msg=f"expected a list of Repos, got {type(repos).__name__}: "
+            f"{repos!r}")
+        for repo in repos:
+            self.assertTrue(hasattr(repo, 'path'),
+                            msg=f"not a Repo object: {repo!r}")
+
+    def test_rm_repo_action_takes_the_per_repo_lock(self):
+        """The user-facing path must serialise against a concurrent pull."""
+        repo_dir, meta = self._make_fake_repo_dir("locked@repo")
+        repo_path = os.path.join(self.repos_path, "locked@repo")
+        shutil.copytree(repo_dir, repo_path)
+
+        ra = self._make_repo_action()
+        ra.register_repo(repo_path, meta)
+
+        os.environ["MLC_REPO_LOCK_TIMEOUT"] = "1"
+        self.addCleanup(os.environ.pop, "MLC_REPO_LOCK_TIMEOUT", None)
+
+        from mlc.repo_action import _repo_lock_path
+        holder = FileLock(_repo_lock_path(repo_path), timeout=30)
+        holder.acquire()
+        try:
+            result = self._make_repo_action().rm(
+                {'repo': repo_path, 'f': True})
+        finally:
+            holder.release()
+
+        self.assertNotEqual(
+            result.get('return'), 0,
+            msg="rm should have failed to take the lock held by a 'pull'")
+        self.assertTrue(
+            os.path.isdir(repo_path),
+            msg="rm deleted the tree while another process held the lock")
+
+
+class AtomicWriteMetadataTest(_RepoActionTestBase):
+    def test_file_mode_is_preserved_across_the_replace(self):
+        """os.replace installs a new inode, so without copymode a
+        group-writable repos.json on a shared MLC_REPOS silently becomes 0600
+        (mkstemp's default) owned by whoever wrote last."""
+        from mlc.repo_action import _atomic_write_json
+
+        os.chmod(self.repos_file, 0o664)
+        before = stat.S_IMODE(os.stat(self.repos_file).st_mode)
+
+        with open(self.repos_file) as f:
+            entries = json.load(f)
+        _atomic_write_json(self.repos_file, entries + ["/tmp/mode-probe"])
+
+        after = stat.S_IMODE(os.stat(self.repos_file).st_mode)
+        self.assertEqual(
+            oct(after), oct(before),
+            msg="file mode was not preserved across the atomic replace")
 
 
 class RepoLockTimeoutTest(unittest.TestCase):

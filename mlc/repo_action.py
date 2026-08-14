@@ -48,6 +48,52 @@ class RepoLockPermissionError(Exception):
     """Raised only when the per-repo lock file itself cannot be created."""
 
 
+def _repo_lock_path(repo_path):
+    """Lock-file path for a repo, normalised so aliases share one lock.
+
+    The lock file is both the cross-process mutual-exclusion token and the
+    within-thread reentrancy key, so two spellings of the same repo
+    ("<root>/r" vs "<root>/./r", or a symlinked MLC_REPOS) must map to one
+    name -- otherwise two processes take different locks for the same
+    directory and the exclusion silently does nothing. Only the parent is
+    resolved, so the lock still sits beside repo_path when repo_path is
+    itself a symlink.
+    """
+    parent = os.path.dirname(os.path.abspath(repo_path))
+    return os.path.join(
+        os.path.realpath(parent), os.path.basename(repo_path)) + ".lock"
+
+
+# Repos whose pull is already in progress on this thread. register_repo()
+# recurses into pull_repo() for each dependency, so a dependency cycle
+# (A -> B -> A) would otherwise recurse until the stack blows, running a git
+# pull and a repos.json rewrite at every level. The per-repo lock cannot stop
+# this on its own: same-thread reentrancy makes the nested acquire a no-op by
+# design, which is exactly what turns the old deadlock into a recursion storm.
+_pulling_repos = threading.local()
+
+
+@contextlib.contextmanager
+def _repo_pull_lock(repo_lock_file, timeout):
+    """Hold the per-repo lock, yielding False if this repo is already being
+    pulled further up the same call stack (dependency cycle)."""
+    active = getattr(_pulling_repos, "paths", None)
+    if active is None:
+        active = set()
+        _pulling_repos.paths = active
+
+    if repo_lock_file in active:
+        yield False
+        return
+
+    with _repo_lock(repo_lock_file, timeout):
+        active.add(repo_lock_file)
+        try:
+            yield True
+        finally:
+            active.discard(repo_lock_file)
+
+
 @contextlib.contextmanager
 def _repo_lock(repo_lock_file, timeout):
     """Acquire a per-repo lock, tolerating same-thread re-entry."""
@@ -347,11 +393,18 @@ class RepoAction(Action):
         dubious ownership" on a shared MLC_REPOS), must never be read as
         "this is junk, remove it".
         """
-        if os.path.islink(repo_path) or not os.path.isdir(repo_path):
-            # A symlink, a plain file, or nothing at all: not a checkout, and
-            # not something to hand to git.
-            return (cls.GIT_STATE_INVALID if os.path.lexists(repo_path)
-                    else cls.GIT_STATE_INVALID)
+        if not os.path.lexists(repo_path):
+            return cls.GIT_STATE_INVALID          # nothing there at all
+        if os.path.islink(repo_path) and not os.path.exists(repo_path):
+            return cls.GIT_STATE_INVALID          # dangling symlink
+        if not os.path.isdir(repo_path):
+            return cls.GIT_STATE_INVALID          # a plain file
+        # NOTE: a *live* symlink to a real checkout must fall through to git.
+        # Relocating a repo onto a bigger volume and symlinking it back is a
+        # normal thing to do; short-circuiting on islink here would classify
+        # it as junk and unlink it, stranding the real checkout and any local
+        # work in it. os.path.samefile() below follows symlinks, so the
+        # top-level comparison resolves such a link correctly.
         try:
             result = subprocess.run(
                 ['git', '-C', repo_path, 'rev-parse', '--show-toplevel'],
@@ -806,8 +859,14 @@ class RepoAction(Action):
             # block and takes that second lock. Any new code path that needs
             # both must acquire them in this same order, or the two will
             # deadlock until their timeouts expire.
-            repo_lock_file = repo_path + ".lock"
-            with _repo_lock(repo_lock_file, repo_lock_timeout):
+            repo_lock_file = _repo_lock_path(repo_path)
+            with _repo_pull_lock(repo_lock_file,
+                                 repo_lock_timeout) as proceed:
+                if not proceed:
+                    logger.debug(
+                        f"{repo_path} is already being pulled further up this "
+                        "call stack (dependency cycle); skipping.")
+                    return {'return': 0}
                 # A directory left behind by an interrupted clone is not a
                 # usable repo: it has a .git with an origin but no HEAD, and
                 # every later pull fails against it. Such a directory is
@@ -1321,7 +1380,36 @@ class RepoAction(Action):
         index = Action.get_index(self)
         index.remove_repo_from_index(repo_path)
 
-        return rm_repo(repo_path, repos_file_path, force_remove)
+        # Same per-repo lock pull_repo uses: without it, `mlc rm repo X`
+        # racing a concurrent `mlc pull repo X` deletes the tree while the
+        # pull is mid-clone or mid-rename, since the pull's lock only excluded
+        # other pullers. See rm_repo's docstring for why it is here and not
+        # there.
+        #
+        # LOCK ORDERING: per-repo lock first, then repos.json.lock (taken by
+        # unregister_repo). Same order as pull_repo.
+        try:
+            with _repo_lock(_repo_lock_path(repo_path),
+                            _get_repo_lock_timeout()):
+                return rm_repo(repo_path, repos_file_path, force_remove)
+        except Timeout:
+            return {
+                'return': 1,
+                'error': (
+                    f"Could not acquire lock for {repo_path} before removing "
+                    "it. Another mlc process may be cloning or pulling this "
+                    "repo."
+                )
+            }
+        except RepoLockPermissionError as e:
+            return {
+                'return': 1,
+                'error': (
+                    f"Permission denied creating the lock file for "
+                    f"{repo_path}: {e}. This requires write access to the "
+                    "repos directory."
+                )
+            }
 
 
 def _repos_lock_file(repos_file_path):
@@ -1332,36 +1420,18 @@ def _repos_lock_file(repos_file_path):
 def rm_repo(repo_path, repos_file_path, force_remove):
     """Remove a repo directory and unregister it.
 
-    Takes the same per-repo lock pull_repo uses. Without it, `mlc rm repo X`
-    running against a concurrent `mlc pull repo X` would delete the tree while
-    the pull is mid-clone or mid-rename -- the pull's lock only excluded other
-    pullers.
+    Deliberately NOT locked, and must stay infallible.
+    Action.load_repos_and_meta() calls this to prune entries whose directory
+    has vanished and returns whatever this returns straight to its caller --
+    where a *list* of Repo objects is expected (mlc/action.py). Making this
+    fallible turns a lock timeout into `self.repos` being an error dict, which
+    breaks every mlc command. Locking here would also block pruning behind an
+    unrelated repo's lock and, since filelock creates the lock file's parent,
+    recreate directories that have deliberately gone away.
 
-    LOCK ORDERING: per-repo lock first, then repos.json.lock (taken by
-    unregister_repo below). Same order as pull_repo.
+    The user-facing `mlc rm repo` path takes the per-repo lock in
+    RepoAction.rm(), which is where the delete-during-clone hazard lives.
     """
-    try:
-        with _repo_lock(repo_path + ".lock", _get_repo_lock_timeout()):
-            return _rm_repo_locked(repo_path, repos_file_path, force_remove)
-    except Timeout:
-        return {
-            'return': 1,
-            'error': (
-                f"Could not acquire lock for {repo_path} before removing it. "
-                "Another mlc process may be cloning or pulling this repo."
-            )
-        }
-    except RepoLockPermissionError as e:
-        return {
-            'return': 1,
-            'error': (
-                f"Permission denied creating the lock file for {repo_path}: "
-                f"{e}. This requires write access to the repos directory."
-            )
-        }
-
-
-def _rm_repo_locked(repo_path, repos_file_path, force_remove):
     repo_name = os.path.basename(repo_path)
     mlc_repos_path = os.path.abspath(os.path.dirname(repos_file_path))
     repo_parent_path = os.path.abspath(os.path.dirname(repo_path))
