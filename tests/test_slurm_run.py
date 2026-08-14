@@ -218,11 +218,12 @@ class TestRemoteRunIsolation(unittest.TestCase):
         self.assertRegex(
             combined,
             r'export MLC_REPOS="/tmp/mlcflow-isolated-[0-9a-f]+/MLC"')
-        # Trap body must quote the path; only the isolated dir needs removing
-        # (MLC_REPOS is a subdir of it).
+        # The trap body uses the literal path (no inner quoting needed — the
+        # path only contains safe characters).  Inner backslash-escaped quotes
+        # caused convert_env_to_script to corrupt MLC_SSH_CMD in the env file.
         self.assertRegex(
             combined,
-            r'trap "rm -rf \\"/tmp/mlcflow-isolated-[0-9a-f]+\\"" EXIT INT TERM HUP')
+            r'trap "rm -rf /tmp/mlcflow-isolated-[0-9a-f]+" EXIT INT TERM HUP')
 
     def test_remote_isolated_supports_custom_tmp_base_dir(self):
         run_cmds = self._capture_remote_run_cmds(

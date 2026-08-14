@@ -162,7 +162,7 @@ def remote_run(self_module, i):
             f'chmod 700 "{_remote_tmp_dir}"',
             f'[ -d "{_remote_tmp_dir}" ] || exit 1',
             f'export MLC_REPOS="{_remote_tmp_dir}/MLC"',
-            f'trap "rm -rf \\"{_remote_tmp_dir}\\"" EXIT INT TERM HUP',
+            f'trap "rm -rf {_remote_tmp_dir}" EXIT INT TERM HUP',
         ])
         run_cmds.extend(preamble)
         run_cmds_start_index = len(run_cmds)
