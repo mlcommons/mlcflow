@@ -259,10 +259,13 @@ class Action:
 
         repo_json_path = os.path.join(self.repos_path, "repos.json")
         if not os.path.exists(repo_json_path):
-            with open(repo_json_path, 'w') as f:
-                json.dump([str(mlc_local_repo_path_expanded)], f, indent=2)
-                logger.info(
-                    f"Created repos.json in {os.path.dirname(self.repos_path)} and initialised with local cache folder path: {mlc_local_repo_path}")
+            try:
+                with open(repo_json_path, 'x') as f:
+                    json.dump([str(mlc_local_repo_path_expanded)], f, indent=2)
+                    logger.info(
+                        f"Created repos.json in {os.path.dirname(self.repos_path)} and initialised with local cache folder path: {mlc_local_repo_path}")
+            except FileExistsError:
+                pass
 
         self.local_cache_path = os.path.join(mlc_local_repo_path, "cache")
         if not os.path.exists(self.local_cache_path):
@@ -451,18 +454,19 @@ class Action:
             item_meta = result.meta
 
             if os.path.exists(item_path):
-                if force_remove == True:
-                    shutil.rmtree(item_path)
-                else:
+                if force_remove != True:
                     user_choice = input(
                         f"Confirm to delete {target_name} item: {item_path}? (yes/no): ").strip().lower()
                     if user_choice not in ['yes', 'y']:
                         continue
-                    else:
-                        shutil.rmtree(item_path)
 
-                logger.info(
-                    f"{target_name} item: {item_path} has been successfully removed")
+                try:
+                    shutil.rmtree(item_path)
+                    logger.info(
+                        f"{target_name} item: {item_path} has been successfully removed")
+                except FileNotFoundError:
+                    logger.warning(
+                        f"{item_path} was already removed by another process.")
 
             self.get_index().rm(item_meta, target_name, item_path)
 

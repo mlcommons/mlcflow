@@ -5420,6 +5420,13 @@ def convert_env_to_script(env, os_info, start_script=None):
                 env_separator.join(env_value)}{env_separator}{
                 os_info['env_var'].replace(
                     'env_var', key)}"""
+        elif isinstance(env_value, list):
+            # Join list elements with the platform separator so the variable
+            # is present in the generated script.  Using str(list) would embed
+            # Python repr (single-quoted items) into a shell double-quoted
+            # assignment, producing broken syntax on Unix.
+            env_separator = os_info.get('env_separator', ':')
+            env_value = env_separator.join(str(v) for v in env_value)
 
         env_quote = os_info.get('env_quote', '"')
         # Replace placeholders in the platform-specific environment command
