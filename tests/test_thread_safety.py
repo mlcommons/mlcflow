@@ -68,6 +68,11 @@ class ConcurrentRmCacheTest(unittest.TestCase):
         item_path = res_pre["list"][0].path
 
         real_rmtree = shutil.rmtree
+        # 2 parties: one per racing thread, so neither proceeds until both have
+        # cleared the existence check. The timeout is a safety net rather than
+        # part of the choreography -- if a thread never arrives, wait() raises
+        # BrokenBarrierError, which rm_cache records in `errors` and the
+        # assertion below reports, instead of hanging CI until it is killed.
         both_threads_past_exists_check = threading.Barrier(2, timeout=30)
         deletion_order = threading.Lock()
 
