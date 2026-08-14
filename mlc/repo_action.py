@@ -328,10 +328,8 @@ class RepoAction(Action):
         # Get the path to the repos.json file in $HOME/MLC
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
 
-        # Lock file sits next to repos.json; left on disk but harmless.
-        repos_lock_file = repos_file_path + ".lock"
         try:
-            with FileLock(repos_lock_file, timeout=60):
+            with FileLock(_repos_lock_file(repos_file_path), timeout=60):
                 with open(repos_file_path, 'r') as f:
                     repos_list = json.load(f)
 
@@ -346,7 +344,7 @@ class RepoAction(Action):
             return {
                 'return': 1,
                 'error': (
-                    f"Could not acquire lock for repos.json after 60 seconds. "
+                    "Could not acquire lock for repos.json after 60 seconds. "
                     "Another mlc process may be modifying repos.json. "
                     "Try again once the other operation completes."
                 )
@@ -1011,6 +1009,11 @@ class RepoAction(Action):
         return rm_repo(repo_path, repos_file_path, force_remove)
 
 
+def _repos_lock_file(repos_file_path):
+    """Return the lock file path for a repos.json file."""
+    return repos_file_path + ".lock"
+
+
 def rm_repo(repo_path, repos_file_path, force_remove):
     logger.info(
         "rm command has been called for repo. This would delete the repo folder and unregister the repo from repos.json")
@@ -1045,9 +1048,13 @@ def rm_repo(repo_path, repos_file_path, force_remove):
         if confirm_remove:
             if force_remove:
                 logger.info("Force remove is set.")
-            shutil.rmtree(repo_path)
-            logger.info(
-                f"Repo {repo_name} residing in path {repo_path} has been successfully removed")
+            try:
+                shutil.rmtree(repo_path)
+                logger.info(
+                    f"Repo {repo_name} residing in path {repo_path} has been successfully removed")
+            except FileNotFoundError:
+                logger.warning(
+                    f"{repo_path} was already removed by another process.")
             logger.info(
                 "Checking whether the repo was registered in repos.json")
             unregister_repo(repo_path, repos_file_path)
@@ -1065,10 +1072,8 @@ def rm_repo(repo_path, repos_file_path, force_remove):
 def unregister_repo(repo_path, repos_file_path):
     logger.info(f"Unregistering the repo in path {repo_path}")
 
-    # Lock file sits next to repos.json; left on disk but harmless.
-    repos_lock_file = repos_file_path + ".lock"
     try:
-        with FileLock(repos_lock_file, timeout=60):
+        with FileLock(_repos_lock_file(repos_file_path), timeout=60):
             with open(repos_file_path, 'r') as f:
                 repos_list = json.load(f)
 
@@ -1084,7 +1089,7 @@ def unregister_repo(repo_path, repos_file_path):
         return {
             'return': 1,
             'error': (
-                f"Could not acquire lock for repos.json after 60 seconds. "
+                "Could not acquire lock for repos.json after 60 seconds. "
                 "Another mlc process may be modifying repos.json. "
                 "Try again once the other operation completes."
             )
