@@ -682,6 +682,18 @@ class RepoLockMechanicsTest(unittest.TestCase):
             _repo_lock_path(os.path.join(base, "sub", "..", "r")),
             _repo_lock_path(os.path.join(base, "r")))
 
+        # A trailing slash reaches here from the CLI (rm() uses
+        # run_args['repo'] verbatim). basename() of a raw "…/r/" is "", which
+        # would both split one repo across two locks and collide unrelated
+        # repos onto a single ".lock".
+        self.assertEqual(
+            _repo_lock_path(os.path.join(base, "r") + os.sep),
+            _repo_lock_path(os.path.join(base, "r")))
+        self.assertNotEqual(
+            _repo_lock_path(os.path.join(base, "repoA") + os.sep),
+            _repo_lock_path(os.path.join(base, "repoB") + os.sep),
+            msg="unrelated repos must not share a lock file")
+
     def test_dependency_cycle_does_not_recurse(self):
         """A -> B -> A must not re-enter the pull; the per-repo lock cannot
         stop that on its own because same-thread reentry is a deliberate
@@ -728,6 +740,30 @@ class RmRepoLockingTest(_RepoActionTestBase):
             msg="rm_repo must stay infallible; load_repos_and_meta returns "
                 "its result where a list is expected")
 
+    def test_rm_repo_absorbs_a_repos_json_lock_timeout(self):
+        """The fallibility that broke every mlc command could also come back
+        via unregister_repo's own repos.json timeout, not just via a repo
+        lock. rm_repo must swallow that too."""
+        from mlc.repo_action import rm_repo, _repos_lock_file
+
+        vanished = os.path.join(self.repos_path, "gone@repo")
+        jam = FileLock(_repos_lock_file(self.repos_file), timeout=30)
+        jam.acquire()
+        try:
+            with patch('mlc.repo_action.FileLock') as fake_lock:
+                # Make unregister_repo's acquire fail immediately rather than
+                # waiting out its hard-coded 60s.
+                fake_lock.side_effect = lambda *a, **kw: FileLock(
+                    a[0], timeout=0.1)
+                result = rm_repo(vanished, self.repos_file, True)
+        finally:
+            jam.release()
+
+        self.assertEqual(
+            result.get("return"), 0,
+            msg="rm_repo must absorb unregister_repo's Timeout; "
+                "load_repos_and_meta returns this where a list is expected")
+
     def test_pruning_a_vanished_entry_still_returns_a_list(self):
         """The end-to-end shape of the above: Action.load_repos_and_meta must
         hand back Repo objects, not an error dict."""
@@ -763,15 +799,34 @@ class RmRepoLockingTest(_RepoActionTestBase):
         ra = self._make_repo_action()
         ra.register_repo(repo_path, meta)
 
+        previous_timeout = os.environ.get("MLC_REPO_LOCK_TIMEOUT")
+
+        def _restore_timeout():
+            # Restore, do not delete: popping would clobber an ambient value.
+            if previous_timeout is None:
+                os.environ.pop("MLC_REPO_LOCK_TIMEOUT", None)
+            else:
+                os.environ["MLC_REPO_LOCK_TIMEOUT"] = previous_timeout
+
+        self.addCleanup(_restore_timeout)
         os.environ["MLC_REPO_LOCK_TIMEOUT"] = "1"
-        self.addCleanup(os.environ.pop, "MLC_REPO_LOCK_TIMEOUT", None)
 
         from mlc.repo_action import _repo_lock_path
+        from mlc.index import Index
+
+        deindexed = []
+        real_remove = Index.remove_repo_from_index
+
+        def spy(self_index, path):
+            deindexed.append(path)
+            return real_remove(self_index, path)
+
         holder = FileLock(_repo_lock_path(repo_path), timeout=30)
         holder.acquire()
         try:
-            result = self._make_repo_action().rm(
-                {'repo': repo_path, 'f': True})
+            with patch.object(Index, 'remove_repo_from_index', spy):
+                result = self._make_repo_action().rm(
+                    {'repo': repo_path, 'f': True})
         finally:
             holder.release()
 
@@ -781,6 +836,14 @@ class RmRepoLockingTest(_RepoActionTestBase):
         self.assertTrue(
             os.path.isdir(repo_path),
             msg="rm deleted the tree while another process held the lock")
+        # De-indexing must happen *under* the lock. Doing it beforehand
+        # leaves a window in which a concurrent pull re-indexes the repo we
+        # then delete, so rm reports success while the index still points
+        # into a removed directory. Since this rm never got the lock, it must
+        # not have touched the index at all.
+        self.assertEqual(
+            deindexed, [],
+            msg="rm de-indexed the repo before acquiring the lock")
 
 
 class AtomicWriteMetadataTest(_RepoActionTestBase):

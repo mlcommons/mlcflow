@@ -59,9 +59,15 @@ def _repo_lock_path(repo_path):
     resolved, so the lock still sits beside repo_path when repo_path is
     itself a symlink.
     """
-    parent = os.path.dirname(os.path.abspath(repo_path))
+    # basename() must be taken from the *normalised* path: os.path.abspath
+    # strips a trailing slash but basename("/base/repoA/") is "", which would
+    # both split one repo across two locks ("repoA" vs "repoA/") and collide
+    # unrelated repos onto a single ".lock". Trailing slashes reach here from
+    # the CLI -- rm() uses run_args['repo'] verbatim.
+    absolute = os.path.abspath(repo_path)
     return os.path.join(
-        os.path.realpath(parent), os.path.basename(repo_path)) + ".lock"
+        os.path.realpath(os.path.dirname(absolute)),
+        os.path.basename(absolute)) + ".lock"
 
 
 # Repos whose pull is already in progress on this thread. register_repo()
@@ -1378,7 +1384,6 @@ class RepoAction(Action):
 
         force_remove = True if run_args.get('f') else False
         index = Action.get_index(self)
-        index.remove_repo_from_index(repo_path)
 
         # Same per-repo lock pull_repo uses: without it, `mlc rm repo X`
         # racing a concurrent `mlc pull repo X` deletes the tree while the
@@ -1391,6 +1396,13 @@ class RepoAction(Action):
         try:
             with _repo_lock(_repo_lock_path(repo_path),
                             _get_repo_lock_timeout()):
+                # De-index inside the lock. Doing it before acquiring leaves a
+                # window in which a concurrent pull re-indexes the repo we are
+                # about to delete, so rm would report success while the index
+                # still points into a removed directory. Ordering is safe:
+                # pull_repo already takes repo lock -> index lock, via
+                # register_repo -> index.add_repo.
+                index.remove_repo_from_index(repo_path)
                 return rm_repo(repo_path, repos_file_path, force_remove)
         except Timeout:
             return {
