@@ -317,6 +317,51 @@ class TestMlcflowUpgradeFlag(unittest.TestCase):
         self.assertGreater(result['return'], 0)
         self.assertIn('no_internet', result.get('error', '').lower())
 
+    def _run_remote(self, upgrade=False):
+        """Call remote_run with mocks; return (result, captured_run_cmds)."""
+        from unittest.mock import patch, MagicMock
+        from script.remote_run import remote_run
+
+        mock_self = self._make_slurm_mock()
+        mock_self.action_object = MagicMock()
+        captured_run_cmds = []
+
+        def fake_access(inp):
+            captured_run_cmds.extend(inp.get('run_cmds', []))
+            return {'return': 0}
+
+        mock_self.action_object.access.side_effect = fake_access
+
+        with patch('script.remote_run.regenerate_script_cmd',
+                   return_value={'return': 0, 'run_cmd_string': 'mlcr detect,os'}):
+            result = remote_run(mock_self, {
+                'tags': 'detect,os',
+                'mlc_run_cmd': 'mlcr detect,os',
+                'env': {},
+                'remote_mlcflow_upgrade': upgrade,
+            })
+        return result, captured_run_cmds
+
+    def test_remote_upgrade_flag_adds_upgrade_to_installer_cmd(self):
+        result, run_cmds = self._run_remote(upgrade=True)
+        installer_cmd = next((c for c in run_cmds if 'mlcflow_unix_installer' in c), '')
+        self.assertIn('--upgrade', installer_cmd,
+                      "--upgrade should be passed to installer when remote_mlcflow_upgrade=True")
+
+    def test_remote_upgrade_flag_absent_by_default(self):
+        result, run_cmds = self._run_remote(upgrade=False)
+        installer_cmd = next((c for c in run_cmds if 'mlcflow_unix_installer' in c), '')
+        self.assertNotIn('--upgrade', installer_cmd,
+                         "--upgrade should not appear when remote_mlcflow_upgrade=False")
+
+    def test_remote_upgrade_not_standalone_pip(self):
+        """The upgrade should go through the installer, not a standalone pip call."""
+        result, run_cmds = self._run_remote(upgrade=True)
+        self.assertFalse(
+            any('pip install --upgrade mlcflow' in c for c in run_cmds),
+            "Upgrade must go through the installer, not a standalone pip invocation"
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
