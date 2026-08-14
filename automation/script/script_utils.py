@@ -45,7 +45,10 @@ def build_venv_activation_command(venv_dir):
         '{sys.version_info[0]}.{sys.version_info[1]}"; '
         'path=candidate if Path(candidate, "bin", "activate").is_file() '
         'else requested; '
-        'activate=shlex.quote(str(Path(path) / "bin" / "activate")); '
+        'ap=Path(path) / "bin" / "activate"; '
+        'activate=shlex.quote(str(ap)); '
+        'print("[ -f " + activate + " ] || { echo No compatible mlcflow venv found.'
+        ' Tried: " + str(ap) + " >&2; exit 1; }"); '
         'print(". " + activate); '
         'print("rm -f " + shlex.quote(wrapper))'
     )
