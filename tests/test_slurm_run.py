@@ -199,7 +199,7 @@ class TestRemoteRunIsolation(unittest.TestCase):
         self.assertIn('cd "$MLC_ISOLATED_TMP_DIR" || exit 1', combined)
         self.assertIn('export MLC_REPOS="$PWD/MLC"', combined)
         self.assertIn(
-            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP', combined)
+            'trap "rm -rf $MLC_REPOS $MLC_ISOLATED_TMP_DIR" EXIT INT TERM HUP', combined)
 
     def test_remote_isolated_supports_custom_tmp_base_dir(self):
         run_cmds = self._capture_remote_run_cmds(

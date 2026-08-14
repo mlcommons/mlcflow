@@ -128,7 +128,7 @@ def remote_run(self_module, i):
             '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1',
             'cd "$MLC_ISOLATED_TMP_DIR" || exit 1',
             'export MLC_REPOS="$PWD/MLC"',
-            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP'
+            'trap "rm -rf $MLC_REPOS $MLC_ISOLATED_TMP_DIR" EXIT INT TERM HUP'
         ])
         run_cmds_start_index = len(run_cmds)
 
