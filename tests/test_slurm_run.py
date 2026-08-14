@@ -212,16 +212,17 @@ class TestRemoteRunIsolation(unittest.TestCase):
         self.assertRegex(
             combined,
             r'\[ -d "/tmp/mlcflow-isolated-[0-9a-f]+" \] \|\| exit 1')
-        self.assertRegex(
-            combined,
-            r'cd "/tmp/mlcflow-isolated-[0-9a-f]+" \|\| exit 1')
+        # No cd: artifact paths stay relative so rsync can write to them before
+        # the isolated dir is created by the command payload.
+        self.assertNotIn('cd "/tmp/mlcflow-isolated-', combined)
         self.assertRegex(
             combined,
             r'export MLC_REPOS="/tmp/mlcflow-isolated-[0-9a-f]+/MLC"')
-        # Trap body must quote each path so spaces in the path do not break rm.
+        # Trap body must quote the path; only the isolated dir needs removing
+        # (MLC_REPOS is a subdir of it).
         self.assertRegex(
             combined,
-            r'trap "rm -rf \\"/tmp/mlcflow-isolated-[0-9a-f]+/MLC\\" \\"/tmp/mlcflow-isolated-[0-9a-f]+\\"" EXIT INT TERM HUP')
+            r'trap "rm -rf \\"/tmp/mlcflow-isolated-[0-9a-f]+\\"" EXIT INT TERM HUP')
 
     def test_remote_isolated_supports_custom_tmp_base_dir(self):
         run_cmds = self._capture_remote_run_cmds(
@@ -285,8 +286,15 @@ class TestRemoteRunIsolation(unittest.TestCase):
             if os.path.exists(marker_file):
                 os.remove(marker_file)
 
-    def test_remote_isolated_copy_directory_matches_command_path(self):
-        """copy_directory (SCP target) must equal the absolute path the commands reference."""
+    def test_remote_isolated_copy_directory_stays_relative_for_rsync(self):
+        """copy_directory (rsync target) must stay relative so rsync can write to it.
+
+        Files are rsynced before the remote command payload runs — which is the
+        payload that creates the isolated dir via mkdir.  If copy_directory were
+        set to the absolute isolated path, rsync would fail because the target
+        does not yet exist.  Artifact paths must remain relative (home-relative);
+        only MLC_REPOS is redirected to the isolated dir.
+        """
         from unittest.mock import patch, MagicMock
         from script.remote_run import remote_run
 
@@ -331,17 +339,18 @@ class TestRemoteRunIsolation(unittest.TestCase):
 
         self.assertEqual(result['return'], 0)
         copy_dir = captured_remote_input.get('copy_directory', '')
-        # copy_directory must be an absolute isolated path, not the relative default
-        self.assertTrue(copy_dir.startswith('/'), f"copy_directory should be absolute, got: {copy_dir!r}")
-        # The absolute temp dir must be part of the copy_directory path
+        # copy_directory must stay relative (home-dir-relative) so rsync can
+        # write to it before the isolated dir is created by the command payload.
+        self.assertFalse(copy_dir.startswith('/'),
+                         f"copy_directory should be relative (for rsync), got: {copy_dir!r}")
+        # The isolated tmp dir must still appear in run_cmds (for MLC_REPOS)
         run_cmds = captured_remote_input.get('run_cmds', [])
         combined = " ; ".join(run_cmds)
-        tmp_dir_match = __import__('re').search(r'/tmp/mlcflow-isolated-[0-9a-f]+', combined)
-        self.assertIsNotNone(tmp_dir_match, "Isolated tmp dir not found in run_cmds")
-        self.assertTrue(copy_dir.startswith(tmp_dir_match.group(0)),
-                        f"copy_directory {copy_dir!r} should be under isolated tmp dir")
+        self.assertRegex(combined, r'/tmp/mlcflow-isolated-[0-9a-f]+',
+                         "Isolated tmp dir not found in run_cmds")
 
-    def test_remote_isolated_uses_absolute_path_for_remote_copied_repos(self):
+    def test_remote_isolated_repos_copy_directory_stays_relative_for_rsync(self):
+        """copy_directory for repo copies must stay relative so rsync can write to it."""
         from unittest.mock import patch
         with patch('script.remote_run.os.listdir', return_value=['demo-repo']), \
                 patch('script.remote_run.os.path.isdir', return_value=True):
@@ -350,17 +359,17 @@ class TestRemoteRunIsolation(unittest.TestCase):
                 remote_copy_mlc_repos=['demo-repo'],
             )
         self.assertEqual(result['return'], 0)
-        run_cmds = captured.get('run_cmds', [])
         copy_dir = captured.get('copy_directory', '')
+        # copy_directory (the rsync target) must stay relative — the isolated dir
+        # does not exist yet when rsync runs.
+        self.assertFalse(copy_dir.startswith('/'),
+                         f"copy_directory should be relative (for rsync), got: {copy_dir!r}")
+        # The run_cmds should contain a symlink step that links the relative
+        # repos path into MLC_REPOS so mlcflow finds them.
+        run_cmds = captured.get('run_cmds', [])
         combined = " ; ".join(run_cmds)
-        # copy_directory (the SCP target) must be the same absolute path the
-        # remote commands reference — previously copy_directory was relative
-        # while the commands used the absolute isolated path.
-        self.assertTrue(copy_dir.startswith('/'), f"copy_directory should be absolute, got: {copy_dir!r}")
-        self.assertRegex(
-            combined,
-            r'/tmp/mlcflow-isolated-[0-9a-f]+/MLC/repos')
-        self.assertIn(copy_dir, combined)
+        self.assertIn('MLC/repos', combined)
+        self.assertIn('$MLC_REPOS', combined)
 
 
 # ---------------------------------------------------------------------------

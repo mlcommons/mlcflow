@@ -126,25 +126,27 @@ def remote_run(self_module, i):
             }
         _uid = uuid.uuid4().hex[:16]
         if remote_isolated_base_dir:
-            # Escape shell metacharacters in the base dir to prevent injection
+            # Escape shell metacharacters so the value is safe to embed inside
+            # double-quoted shell strings (same escaping as slurm_run.py).
             _safe_base = (
                 str(remote_isolated_base_dir)
                 .replace('\\', '\\\\')
                 .replace('"', '\\"')
                 .replace('$', '\\$')
                 .replace('`', '\\`')
+                .rstrip('/')
             )
-            _base = str(remote_isolated_base_dir).rstrip('/')
-            _remote_tmp_dir = f'{_base}/mlcflow-isolated-{_uid}'
+            _remote_tmp_dir = f'{_safe_base}/mlcflow-isolated-{_uid}'
         else:
             _safe_base = ''
             _remote_tmp_dir = f'/tmp/mlcflow-isolated-{_uid}'
-        if not remote_copy_directory.startswith('/'):
-            remote_copy_directory_for_cmd = f'{_remote_tmp_dir}/{remote_copy_directory}'
-        # Build the preamble commands.  The trap body uses quoted variable
-        # references to handle paths with spaces; the MLC_REPOS and
-        # MLC_ISOLATED_TMP_DIR variables are set to the literal path before
-        # the trap, so the expansion is safe.
+        # Do NOT change remote_copy_directory_for_cmd here.  Files are rsynced
+        # to the relative (home-dir-relative) copy_directory BEFORE the remote
+        # command payload runs — which is the payload that creates the isolated
+        # dir via mkdir.  Pointing copy_directory at the isolated path would
+        # mean rsync tries to write to a directory that does not yet exist.
+        # Artifact paths stay relative/unchanged; only MLC_REPOS is redirected
+        # to the isolated temp dir so that MLC state is contained and cleaned up.
         preamble = [
             f'MLC_ISOLATED_TMP_DIR="{_remote_tmp_dir}"',
         ]
@@ -157,9 +159,8 @@ def remote_run(self_module, i):
             f'mkdir -p "{_remote_tmp_dir}" || exit 1',
             f'chmod 700 "{_remote_tmp_dir}"',
             f'[ -d "{_remote_tmp_dir}" ] || exit 1',
-            f'cd "{_remote_tmp_dir}" || exit 1',
             f'export MLC_REPOS="{_remote_tmp_dir}/MLC"',
-            f'trap "rm -rf \\"{_remote_tmp_dir}/MLC\\" \\"{_remote_tmp_dir}\\"" EXIT INT TERM HUP',
+            f'trap "rm -rf \\"{_remote_tmp_dir}\\"" EXIT INT TERM HUP',
         ])
         run_cmds.extend(preamble)
         run_cmds_start_index = len(run_cmds)
@@ -270,10 +271,11 @@ def remote_run(self_module, i):
             remote_inputs['files_to_copy'] = remote_inputs.get(
                 'files_to_copy', []) + repo_files
             remote_mlc_repos_path = i.get("remote_mlc_repos_path", "MLC/repos")
+            # In isolated mode the repos are still rsynced to the relative path
+            # (home-dir-relative), the same as non-isolated.  The isolated dir
+            # is not created until the command payload runs, so pointing
+            # copy_directory at a path inside it would fail at rsync time.
             remote_mlc_repos_path_for_cmd = remote_mlc_repos_path
-            if remote_isolated and _remote_tmp_dir and not remote_mlc_repos_path.startswith(
-                    '/'):
-                remote_mlc_repos_path_for_cmd = f'{_remote_tmp_dir}/{remote_mlc_repos_path}'
             remote_inputs['copy_directory'] = remote_mlc_repos_path_for_cmd
             # On the remote, if MLC_REPOS is set and differs, symlink so
             # mlcflow finds the copied repos
