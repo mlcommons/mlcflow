@@ -481,7 +481,7 @@ Main Script Meta:""")
     11. --remote_client_refresh:
         Refresh the SSH client connection
     12. --remote_mlcflow_upgrade:
-        Upgrade mlcflow on the remote machine before running (honours MLCFLOW_PIP_SPEC)
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
     13. --remote_no_internet:
         Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
 
@@ -667,7 +667,7 @@ Main Script Meta:""")
     11. --remote_client_refresh:
         Refresh the SSH client connection
     12. --remote_mlcflow_upgrade:
-        Upgrade mlcflow on the remote machine before running (honours MLCFLOW_PIP_SPEC)
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
     13. --remote_no_internet:
         Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
 
@@ -714,7 +714,7 @@ Main Script Meta:""")
     11. --remote_client_refresh:
         Refresh the SSH client connection
     12. --remote_mlcflow_upgrade:
-        Upgrade mlcflow on the remote machine before running (honours MLCFLOW_PIP_SPEC)
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
     13. --remote_no_internet:
         Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
 
@@ -789,7 +789,7 @@ Main Script Meta:""")
     25. --slurm_post_run_cmds:
         Commands to run on the node after the main script
     26. --slurm_mlcflow_upgrade:
-        Upgrade mlcflow on the SLURM node before running (honours MLCFLOW_PIP_SPEC)
+        Upgrade mlcflow on the SLURM node before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
     27. --slurm_no_internet:
         Use a locally available installer on the SLURM node (incompatible with --slurm_mlcflow_upgrade)
 
