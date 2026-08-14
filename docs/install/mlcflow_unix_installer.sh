@@ -545,7 +545,6 @@ pull_repo() {
 # ------------------------------------------------------------------------------
 
 main() {
-    ORIGINAL_VENV_DIR="$VENV_DIR"
     detect_os
     check_missing_dependencies
     if [ "${#MISSING_DEPS[@]}" -gt 0 ]; then
@@ -566,7 +565,6 @@ main() {
         VENV_DIR="$target_venv"
         # shellcheck disable=SC1090
         source "$VENV_DIR/bin/activate"
-        echo "$VENV_DIR" > "${VENV_DIR}/.mlcflow_venv_path"
     else
         # We need pip and venv to create a new environment
         if ! have_pip_module; then
@@ -585,17 +583,6 @@ main() {
     fi
 
     install_mlcflow
-
-    # Write the resolved venv path so callers (remote_run, slurm_run) can
-    # activate the correct environment even when the installer chose a
-    # platform/python-versioned alternative.
-    echo "$VENV_DIR" > "${VENV_DIR}/.mlcflow_venv_path"
-    # Also write to the originally-requested dir so callers that only know
-    # the requested name can discover the resolved path.
-    if [ "$VENV_DIR" != "$ORIGINAL_VENV_DIR" ]; then
-        mkdir -p "$ORIGINAL_VENV_DIR"
-        echo "$VENV_DIR" > "${ORIGINAL_VENV_DIR}/.mlcflow_venv_path"
-    fi
 
     log_info "Installation completed successfully."
     echo ""

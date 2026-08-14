@@ -38,6 +38,11 @@ def remote_run(self_module, i):
     remote_shell = i.get('remote_shell', '')
     remote_no_internet = is_true(i.get('remote_no_internet', False))
     remote_mlcflow_upgrade = is_true(i.get('remote_mlcflow_upgrade', False))
+    if remote_mlcflow_upgrade and remote_no_internet:
+        return {
+            'return': 1,
+            'error': '--remote_mlcflow_upgrade cannot be combined with --remote_no_internet: the remote node has no network access to upgrade mlcflow.'
+        }
 
     prune_result = prune_input(
         {'input': i, 'extra_keys_starts_with': ['remote_']})
@@ -113,14 +118,10 @@ def remote_run(self_module, i):
         run_cmds.append(
             f'bash {remote_installer} --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
     else:
+        upgrade_flag = ' --upgrade' if remote_mlcflow_upgrade else ''
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
-    # The installer may resolve to a different venv path (e.g. platform-
-    # versioned). Read the marker file it writes; fall back to the requested
-    # name.
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}{upgrade_flag}')
     run_cmds.append(build_venv_activation_command(remote_mlc_python_venv))
-    if remote_mlcflow_upgrade:
-        run_cmds.append('python3 -m pip install --upgrade mlcflow')
     # is_true() rather than a bare truthiness check: this arrives from the CLI
     # as a string, so '--remote_pull_mlc_repos=no' is a non-empty (truthy)
     # str and would otherwise still pull.

@@ -56,6 +56,11 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
     slurm_no_internet = is_true(i.get('slurm_no_internet', False))
     slurm_mlcflow_upgrade = is_true(i.get('slurm_mlcflow_upgrade', False))
+    if slurm_mlcflow_upgrade and slurm_no_internet:
+        return {
+            'return': 1,
+            'error': '--slurm_mlcflow_upgrade cannot be combined with --slurm_no_internet: the SLURM node has no network access to upgrade mlcflow.'
+        }
 
     # Normalize str → list so a single command string doesn't get iterated
     # char-by-char
@@ -149,15 +154,10 @@ def slurm_run(self_module, i, slurm_action='run'):
         run_cmds.append(
             f'bash {shlex.quote(installer_path)} --yes --venv-dir {shlex.quote(slurm_python_venv)}')
     else:
+        upgrade_flag = ' --upgrade' if slurm_mlcflow_upgrade else ''
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}')
-    # The installer may resolve to a different venv path (e.g. platform-
-    # versioned). Read the marker file it writes; fall back to the requested
-    # name.
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}{upgrade_flag}')
     run_cmds.append(build_venv_activation_command(slurm_python_venv))
-
-    if slurm_mlcflow_upgrade:
-        run_cmds.append('python3 -m pip install --upgrade mlcflow')
 
     if is_true(slurm_pull_mlc_repos):
         run_cmds.append('mlc pull repo')

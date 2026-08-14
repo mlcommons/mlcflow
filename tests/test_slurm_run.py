@@ -236,5 +236,87 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
                       "Pre-run command string was expanded char-by-char instead of as a whole")
 
 
+# ---------------------------------------------------------------------------
+# mlcflow upgrade flag tests
+# ---------------------------------------------------------------------------
+class TestMlcflowUpgradeFlag(unittest.TestCase):
+    """Tests for --remote_mlcflow_upgrade and --slurm_mlcflow_upgrade flags."""
+
+    def _make_slurm_mock(self):
+        from unittest.mock import MagicMock
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+        return mock_self
+
+    def _run_slurm(self, upgrade=False, no_internet=False):
+        from unittest.mock import patch
+        from script.slurm_run import slurm_run
+        captured = []
+
+        def fake_call(args):
+            captured.extend(args)
+            return 0
+
+        mock_self = self._make_slurm_mock()
+        with patch('script.slurm_run.shutil.which', return_value='/usr/bin/srun'), \
+                patch('script.slurm_run.subprocess.call', side_effect=fake_call):
+            result = slurm_run(mock_self, {
+                'tags': 'detect,os',
+                'env': {},
+                'slurm_mlcflow_upgrade': upgrade,
+                'slurm_no_internet': no_internet,
+            })
+        return result, captured
+
+    def test_slurm_upgrade_flag_adds_upgrade_to_installer_cmd(self):
+        result, captured = self._run_slurm(upgrade=True)
+        bash_c_cmd = captured[-1]
+        self.assertIn('--upgrade', bash_c_cmd,
+                      "--upgrade should be passed to installer when slurm_mlcflow_upgrade=True")
+
+    def test_slurm_upgrade_flag_absent_by_default(self):
+        result, captured = self._run_slurm(upgrade=False)
+        bash_c_cmd = captured[-1]
+        # The activation/venv path may include 'activate' but --upgrade should not appear
+        # in the installer curl command when the flag is off.
+        self.assertNotIn('--upgrade', bash_c_cmd,
+                         "--upgrade should not appear when slurm_mlcflow_upgrade=False")
+
+    def test_slurm_upgrade_not_standalone_pip(self):
+        """The upgrade should go through the installer, not a standalone pip call."""
+        result, captured = self._run_slurm(upgrade=True)
+        bash_c_cmd = captured[-1]
+        self.assertNotIn('pip install --upgrade mlcflow', bash_c_cmd,
+                         "Upgrade must go through the installer, not a standalone pip invocation")
+
+    def test_slurm_upgrade_incompatible_with_no_internet(self):
+        result, _ = self._run_slurm(upgrade=True, no_internet=True)
+        self.assertGreater(result['return'], 0)
+        self.assertIn('no_internet', result.get('error', '').lower())
+
+    def test_remote_upgrade_incompatible_with_no_internet(self):
+        from script.remote_run import remote_run
+        mock_self = self._make_slurm_mock()
+        result = remote_run(mock_self, {
+            'tags': 'detect,os',
+            'remote_mlcflow_upgrade': True,
+            'remote_no_internet': True,
+        })
+        self.assertGreater(result['return'], 0)
+        self.assertIn('no_internet', result.get('error', '').lower())
+
+
 if __name__ == '__main__':
     unittest.main()
