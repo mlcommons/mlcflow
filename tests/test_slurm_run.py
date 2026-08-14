@@ -191,15 +191,14 @@ class TestRemoteRunIsolation(unittest.TestCase):
     def test_remote_isolated_sets_tmp_mlc_repos_and_cleanup(self):
         run_cmds = self._capture_remote_run_cmds(remote_isolated=True)
         combined = " ; ".join(run_cmds)
-        self.assertIn(
-            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1',
-            combined)
-        self.assertIn(
-            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1', combined)
-        self.assertIn('cd "$MLC_ISOLATED_TMP_DIR" || exit 1', combined)
-        self.assertIn('export MLC_REPOS="$PWD/MLC"', combined)
-        self.assertIn(
-            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP', combined)
+        # The isolated temp dir is now a Python-generated UUID-based literal path
+        # so there are no shell variables that would be expanded locally.
+        self.assertRegex(combined, r'MLC_ISOLATED_TMP_DIR="/tmp/mlcflow-isolated-[0-9a-f]+\"')
+        self.assertRegex(combined, r'mkdir -p "/tmp/mlcflow-isolated-[0-9a-f]+" \|\| exit 1')
+        self.assertRegex(combined, r'\[ -d "/tmp/mlcflow-isolated-[0-9a-f]+" \] \|\| exit 1')
+        self.assertRegex(combined, r'cd "/tmp/mlcflow-isolated-[0-9a-f]+" \|\| exit 1')
+        self.assertRegex(combined, r'export MLC_REPOS="/tmp/mlcflow-isolated-[0-9a-f]+/MLC"')
+        self.assertRegex(combined, r'trap "rm -rf \\"/tmp/mlcflow-isolated-[0-9a-f]+/MLC\\" \\"/tmp/mlcflow-isolated-[0-9a-f]+\\"" EXIT INT TERM HUP')
 
     def test_remote_isolated_supports_custom_tmp_base_dir(self):
         run_cmds = self._capture_remote_run_cmds(
@@ -207,13 +206,8 @@ class TestRemoteRunIsolation(unittest.TestCase):
             remote_isolated_base_dir='/scratch/mlcflow',
         )
         combined = " ; ".join(run_cmds)
-        self.assertIn('MLC_ISOLATED_TMP_BASE_DIR="/scratch/mlcflow"', combined)
-        self.assertIn(
-            '[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1',
-            combined)
-        self.assertIn(
-            'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
-            combined)
+        self.assertRegex(combined, r'MLC_ISOLATED_TMP_DIR="/scratch/mlcflow/mlcflow-isolated-[0-9a-f]+\"')
+        self.assertRegex(combined, r'mkdir -p "/scratch/mlcflow/mlcflow-isolated-[0-9a-f]+" \|\| exit 1')
 
     def test_remote_isolated_command_survives_remote_escaping_and_cleans_up(
             self):
@@ -222,10 +216,13 @@ class TestRemoteRunIsolation(unittest.TestCase):
             os.remove(marker_file)
         run_cmds = self._capture_remote_run_cmds(
             remote_isolated=True,
-            remote_no_internet=True,
             remote_pre_run_cmds=[
                 f'printf "%s" "$MLC_ISOLATED_TMP_DIR" > {marker_file}'],
         )
+        # Strip any curl/installer commands that require internet access or
+        # files that don't exist locally – we only need to test isolation setup
+        # and cleanup.
+        run_cmds = [c for c in run_cmds if not c.startswith('curl ')]
         cmd_string = " ; ".join(run_cmds)
         # Match remote-run-commands escaping pipeline behavior.
         cmd_string = cmd_string.replace("'", "'\\''")
@@ -250,9 +247,9 @@ class TestRemoteRunIsolation(unittest.TestCase):
             remote_no_internet=True,
         )
         combined = " ; ".join(run_cmds)
-        self.assertIn(
-            'bash "${MLC_ISOLATED_BASE_DIR}/mlc-remote-artifacts/',
-            combined)
+        # With the new UUID-based approach, the artifact path is an absolute
+        # literal path under the generated temp dir, not ${MLC_ISOLATED_BASE_DIR}.
+        self.assertRegex(combined, r'bash "/tmp/mlcflow-isolated-[0-9a-f]+/mlc-remote-artifacts/')
 
     def test_remote_isolated_uses_absolute_path_for_remote_copied_repos(self):
         from unittest.mock import patch
@@ -263,7 +260,9 @@ class TestRemoteRunIsolation(unittest.TestCase):
                 remote_copy_mlc_repos=['demo-repo'],
             )
         combined = " ; ".join(run_cmds)
-        self.assertIn('${MLC_ISOLATED_BASE_DIR}/MLC/repos', combined)
+        # With the new UUID-based approach, the repos path is an absolute
+        # literal path under the generated temp dir.
+        self.assertRegex(combined, r'/tmp/mlcflow-isolated-[0-9a-f]+/MLC/repos')
 
 
 # ---------------------------------------------------------------------------

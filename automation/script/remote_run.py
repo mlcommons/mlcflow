@@ -1,6 +1,7 @@
 from collections import defaultdict
 import os
 import shlex
+import uuid
 import mlc.utils as utils
 from mlc import utils
 from utils import *
@@ -104,31 +105,33 @@ def remote_run(self_module, i):
         "mlc-remote-artifacts")
 
     remote_copy_directory_for_cmd = remote_copy_directory
-    if remote_isolated and not remote_copy_directory.startswith('/'):
-        remote_copy_directory_for_cmd = f'${{MLC_ISOLATED_BASE_DIR}}/{remote_copy_directory}'
 
+    # For isolated mode, generate a unique temp dir path in Python rather than
+    # using shell constructs like $(mktemp -d).  Shell variable references such
+    # as $PWD, $(mktemp -d) and $MLC_ISOLATED_TMP_DIR inside run_cmds end up
+    # stored in env['MLC_SSH_CMD'], which convert_env_to_script wraps in
+    # double-quotes (export MLC_SSH_CMD="...").  When bash sources that env
+    # file, double-quote context expands $PWD and $(mktemp -d) locally and
+    # resolves $MLC_ISOLATED_TMP_DIR to empty, causing [ -n "" ] to fail.
+    # Using a Python-generated literal path avoids all unintended local
+    # expansion.
+    _remote_tmp_dir = ''
     if remote_isolated:
-        run_cmds.append('MLC_ISOLATED_BASE_DIR="$PWD"')
+        _uid = uuid.uuid4().hex[:16]
         if remote_isolated_base_dir:
-            safe_remote_isolated_base_dir = (
-                str(remote_isolated_base_dir)
-                .replace('\\', '\\\\')
-                .replace('"', '\\"')
-                .replace('$', '\\$')
-                .replace('`', '\\`')
-            )
-            run_cmds.extend([
-                f'MLC_ISOLATED_TMP_BASE_DIR="{safe_remote_isolated_base_dir}"',
-                '[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1',
-                'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
-            ])
+            _base = str(remote_isolated_base_dir).rstrip('/')
+            _remote_tmp_dir = f'{_base}/mlcflow-isolated-{_uid}'
         else:
-            run_cmds.append('MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1')
+            _remote_tmp_dir = f'/tmp/mlcflow-isolated-{_uid}'
+        if not remote_copy_directory.startswith('/'):
+            remote_copy_directory_for_cmd = f'{_remote_tmp_dir}/{remote_copy_directory}'
         run_cmds.extend([
-            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1',
-            'cd "$MLC_ISOLATED_TMP_DIR" || exit 1',
-            'export MLC_REPOS="$PWD/MLC"',
-            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP'
+            f'MLC_ISOLATED_TMP_DIR="{_remote_tmp_dir}"',
+            f'mkdir -p "{_remote_tmp_dir}" || exit 1',
+            f'[ -d "{_remote_tmp_dir}" ] || exit 1',
+            f'cd "{_remote_tmp_dir}" || exit 1',
+            f'export MLC_REPOS="{_remote_tmp_dir}/MLC"',
+            f'trap "rm -rf \\"{_remote_tmp_dir}/MLC\\" \\"{_remote_tmp_dir}\\"" EXIT INT TERM HUP'
         ])
         run_cmds_start_index = len(run_cmds)
 
@@ -236,8 +239,8 @@ def remote_run(self_module, i):
                 'files_to_copy', []) + repo_files
             remote_mlc_repos_path = i.get("remote_mlc_repos_path", "MLC/repos")
             remote_mlc_repos_path_for_cmd = remote_mlc_repos_path
-            if remote_isolated and not remote_mlc_repos_path.startswith('/'):
-                remote_mlc_repos_path_for_cmd = f'${{MLC_ISOLATED_BASE_DIR}}/{remote_mlc_repos_path}'
+            if remote_isolated and _remote_tmp_dir and not remote_mlc_repos_path.startswith('/'):
+                remote_mlc_repos_path_for_cmd = f'{_remote_tmp_dir}/{remote_mlc_repos_path}'
             remote_inputs['copy_directory'] = remote_mlc_repos_path
             # On the remote, if MLC_REPOS is set and differs, symlink so
             # mlcflow finds the copied repos
