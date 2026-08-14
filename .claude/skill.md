@@ -191,6 +191,41 @@ pip install -e .
 python -m pytest tests/
 ```
 
+### "I need to review a PR"
+
+Full spec — required structure, severity definitions, evidence rules — is in
+**AGENTS.md → "PR review format"**. Follow it exactly; the short version:
+
+```
+> attribution block: AI-performed, on whose request, what was inspected
+## Verdict                  ← 2-3 sentences + merge recommendation
+## 🔴 High severity         ← omit any tier with no findings
+## 🟠 Medium severity
+## 🟡 Low severity
+## Suggested path to merge  ← numbered, ordered, concrete
+```
+
+Investigate before writing:
+```bash
+gh pr diff <N> --repo mlcommons/mlcflow
+SHA=$(gh pr view <N> --repo mlcommons/mlcflow --json headRefOid -q .headRefOid)
+git fetch --depth 1 https://github.com/mlcommons/mlcflow.git refs/pull/<N>/head && git checkout FETCH_HEAD
+```
+
+- Read the **callers and callees** of changed code, not just the diff. A comment
+  claiming "we now read X" is only true if some caller actually reads X — grep
+  for readers before believing it.
+- Check whether CI actually runs for the change: compare the touched paths
+  against each workflow's `paths:` filter. `automation/**` is **not** covered by
+  `test-unit.yml`.
+- Check whether the change duplicates existing coverage in `tests/`.
+- Run the changed shell functions where you can; quote the real output as evidence.
+
+Post as a plain comment so no required review slot is consumed:
+```bash
+gh pr comment <N> --repo mlcommons/mlcflow --body-file review.md
+```
+
 ---
 
 ## Quick reference: key classes and where they live
