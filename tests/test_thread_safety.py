@@ -7,9 +7,11 @@ Thread safety tests for core mlc operations:
 
 import json
 import os
+import shutil
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from mlc.action import Action
 from mlc.cache_action import CacheAction
@@ -30,8 +32,10 @@ class ConcurrentRmCacheTest(unittest.TestCase):
 
         action = Action()
         action.parent = None
-        for name, tags in [("cache-a", "get,dataset,a"), ("cache-b", "get,dataset,b")]:
-            res = action.add({"target_name": "cache", "item": name, "tags": tags})
+        for name, tags in [("cache-a", "get,dataset,a"),
+                           ("cache-b", "get,dataset,b")]:
+            res = action.add(
+                {"target_name": "cache", "item": name, "tags": tags})
             self.assertEqual(res["return"], 0)
 
     def _restore_env(self):
@@ -42,31 +46,67 @@ class ConcurrentRmCacheTest(unittest.TestCase):
 
     def test_concurrent_rm_cache_does_not_raise(self):
         """Two threads deleting the same cache item must not raise an exception,
-        and the item must be gone from the filesystem and index afterwards."""
+        and the item must be gone from the filesystem and index afterwards.
+
+        The race is forced rather than left to the scheduler: rm() checks
+        os.path.exists(item_path) and only then calls shutil.rmtree(), so the
+        window is a few microseconds wide and is almost never hit naturally.
+        The barrier below holds both threads at the entry to rmtree -- which
+        they can only reach after passing that existence check -- and the lock
+        then serialises the deletions, so the second caller always meets an
+        already-removed directory.
+        """
         errors = []
         # Record the path of the item before deletion
         action_pre = Action()
         action_pre.parent = None
-        res_pre = action_pre.search({"target_name": "cache", "tags": "get,dataset,a"})
+        res_pre = action_pre.search(
+            {"target_name": "cache", "tags": "get,dataset,a"})
         self.assertEqual(res_pre["return"], 0)
-        self.assertGreater(len(res_pre["list"]), 0, "Item must exist before test")
+        self.assertGreater(len(res_pre["list"]),
+                           0, "Item must exist before test")
         item_path = res_pre["list"][0].path
+
+        real_rmtree = shutil.rmtree
+        # 2 parties: one per racing thread, so neither proceeds until both have
+        # cleared the existence check. The timeout is a safety net rather than
+        # part of the choreography -- if a thread never arrives, wait() raises
+        # BrokenBarrierError, which rm_cache records in `errors` and the
+        # assertion below reports, instead of hanging CI until it is killed.
+        both_threads_past_exists_check = threading.Barrier(2, timeout=30)
+        deletion_order = threading.Lock()
+
+        def racing_rmtree(path, *args, **kwargs):
+            # Only coordinate on the contended item; any other rmtree call
+            # (temp dirs, index internals) must pass straight through or it
+            # would pair up with the barrier and deadlock.
+            if os.path.abspath(path) != os.path.abspath(item_path):
+                return real_rmtree(path, *args, **kwargs)
+            # Blocking here *before* deleting guarantees the item is still on
+            # disk and in the index for the other thread's search, so both
+            # threads are certain to reach this point and the barrier cannot
+            # time out.
+            both_threads_past_exists_check.wait()
+            with deletion_order:
+                return real_rmtree(path, *args, **kwargs)
 
         def rm_cache(tags):
             try:
                 action = Action()
                 action.parent = None
-                # Call rm directly with target_name set (same as CacheAction.rm does)
+                # Call rm directly with target_name set (same as CacheAction.rm
+                # does)
                 action.rm({"target_name": "cache", "tags": tags, "f": True})
             except Exception as exc:
                 errors.append(exc)
 
-        t1 = threading.Thread(target=rm_cache, args=("get,dataset,a",))
-        t2 = threading.Thread(target=rm_cache, args=("get,dataset,a",))
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
+        with mock.patch.object(shutil, "rmtree", racing_rmtree):
+            t1 = threading.Thread(target=rm_cache, args=("get,dataset,a",))
+            t2 = threading.Thread(target=rm_cache, args=("get,dataset,a",))
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
 
         self.assertEqual(errors, [], f"Unexpected exceptions: {errors}")
         self.assertFalse(
@@ -76,7 +116,8 @@ class ConcurrentRmCacheTest(unittest.TestCase):
         # Index must also not list the item anymore
         action_post = Action()
         action_post.parent = None
-        res_post = action_post.search({"target_name": "cache", "tags": "get,dataset,a"})
+        res_post = action_post.search(
+            {"target_name": "cache", "tags": "get,dataset,a"})
         self.assertEqual(res_post["return"], 0)
         self.assertEqual(
             len(res_post["list"]), 0,
@@ -98,7 +139,8 @@ class ConcurrentMarkTmpTest(unittest.TestCase):
 
         action = Action()
         action.parent = None
-        res = action.add({"target_name": "cache", "item": "shared-cache", "tags": "get,shared"})
+        res = action.add(
+            {"target_name": "cache", "item": "shared-cache", "tags": "get,shared"})
         self.assertEqual(res["return"], 0)
         self.cache_path = res["path"]
 
@@ -146,7 +188,8 @@ class ConcurrentMarkTmpTest(unittest.TestCase):
         def patched_search(self_inner, i):
             result = original_search(self_inner, i)
             # Simulate a concurrent write that adds 'extra-tag' to the meta file
-            # after search() has already populated item.meta but before the lock.
+            # after search() has already populated item.meta but before the
+            # lock.
             if os.path.exists(meta_json):
                 with open(meta_json) as fh:
                     on_disk = json.load(fh)
