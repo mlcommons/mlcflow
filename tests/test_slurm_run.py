@@ -240,7 +240,8 @@ class TestRemoteRunIsolation(unittest.TestCase):
         self.assertIn(
             '[ -d "/scratch/mlcflow" ] || {', combined)
 
-    def test_remote_isolated_errors_when_combined_with_remote_no_internet(self):
+    def test_remote_isolated_errors_when_combined_with_remote_no_internet(
+            self):
         result, _ = self._invoke_remote_run(
             remote_isolated=True,
             remote_no_internet=True,
@@ -306,7 +307,8 @@ class TestRemoteRunIsolation(unittest.TestCase):
                 path='/fake/path'
             )
         }
-        mock_self.update_run_state_for_selected_script_and_variations.return_value = {'return': 0}
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
         mock_self.run_state = {'remote_run': {}}
         mock_self.env = {}
         mock_self.state = {}
@@ -340,7 +342,8 @@ class TestRemoteRunIsolation(unittest.TestCase):
         self.assertEqual(result['return'], 0)
         copy_dir = captured_remote_input.get('copy_directory', '')
         # copy_directory must stay relative (home-dir-relative) so rsync can
-        # write to it before the isolated dir is created by the command payload.
+        # write to it before the isolated dir is created by the command
+        # payload.
         self.assertFalse(copy_dir.startswith('/'),
                          f"copy_directory should be relative (for rsync), got: {copy_dir!r}")
         # The isolated tmp dir must still appear in run_cmds (for MLC_REPOS)
@@ -349,7 +352,8 @@ class TestRemoteRunIsolation(unittest.TestCase):
         self.assertRegex(combined, r'/tmp/mlcflow-isolated-[0-9a-f]+',
                          "Isolated tmp dir not found in run_cmds")
 
-    def test_remote_isolated_repos_copy_directory_stays_relative_for_rsync(self):
+    def test_remote_isolated_repos_copy_directory_stays_relative_for_rsync(
+            self):
         """copy_directory for repo copies must stay relative so rsync can write to it."""
         from unittest.mock import patch
         with patch('script.remote_run.os.listdir', return_value=['demo-repo']), \

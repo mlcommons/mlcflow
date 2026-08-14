@@ -146,7 +146,8 @@ def remote_run(self_module, i):
         # dir via mkdir.  Pointing copy_directory at the isolated path would
         # mean rsync tries to write to a directory that does not yet exist.
         # Artifact paths stay relative/unchanged; only MLC_REPOS is redirected
-        # to the isolated temp dir so that MLC state is contained and cleaned up.
+        # to the isolated temp dir so that MLC state is contained and cleaned
+        # up.
         preamble = [
             f'MLC_ISOLATED_TMP_DIR="{_remote_tmp_dir}"',
         ]
@@ -154,7 +155,8 @@ def remote_run(self_module, i):
             # Require that the base directory already exists (consistent with
             # slurm_isolated_base_dir behaviour) so a typo is a hard error
             # rather than creating an unexpected directory tree.
-            preamble.append(f'[ -d "{_safe_base}" ] || {{ echo "remote_isolated_base_dir does not exist: {_safe_base}" >&2; exit 1; }}')
+            preamble.append(
+                f'[ -d "{_safe_base}" ] || {{ echo "remote_isolated_base_dir does not exist: {_safe_base}" >&2; exit 1; }}')
         preamble.extend([
             f'mkdir -p "{_remote_tmp_dir}" || exit 1',
             f'chmod 700 "{_remote_tmp_dir}"',
