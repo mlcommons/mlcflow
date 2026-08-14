@@ -13,6 +13,59 @@ from .repo import Repo
 from .index import Index
 from filelock import FileLock, Timeout
 
+# How long to wait for another process's per-repo lock before giving up.
+# A cold clone of a large repo on a throttled link can run well past five
+# minutes, so the default is generous and can be raised further.
+REPO_LOCK_TIMEOUT_ENV = "MLC_REPO_LOCK_TIMEOUT"
+DEFAULT_REPO_LOCK_TIMEOUT = 1800
+
+
+def _atomic_write_json(file_path, data):
+    """Write JSON so a concurrent reader never observes a partial file.
+
+    open(path, 'w') truncates and json.dump rewrites incrementally, so a
+    reader landing in that window sees a truncated file and raises
+    JSONDecodeError. Action.load_repos_and_meta() and Action.load_repos()
+    both read repos.json with a bare json.load and no lock, so the writer's
+    lock alone does not protect them. Writing to a sibling temp file and
+    os.replace()-ing it -- atomic on POSIX and Windows -- makes those
+    lock-free readers safe without having to change them.
+
+    If this process dies mid-write, os.replace never runs: the original file
+    is left intact and only the temp file is orphaned.
+    """
+    tmp_path = f"{file_path}.tmp"
+    try:
+        with open(tmp_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, file_path)
+    except BaseException:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _get_repo_lock_timeout():
+    """Seconds to wait for a per-repo lock, overridable via the environment."""
+    raw = os.environ.get(REPO_LOCK_TIMEOUT_ENV, "")
+    if not raw:
+        return DEFAULT_REPO_LOCK_TIMEOUT
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            f"Ignoring invalid {REPO_LOCK_TIMEOUT_ENV}={raw!r}; "
+            f"using {DEFAULT_REPO_LOCK_TIMEOUT}s.")
+        return DEFAULT_REPO_LOCK_TIMEOUT
+    if timeout <= 0:
+        logger.warning(
+            f"Ignoring non-positive {REPO_LOCK_TIMEOUT_ENV}={raw!r}; "
+            f"using {DEFAULT_REPO_LOCK_TIMEOUT}s.")
+        return DEFAULT_REPO_LOCK_TIMEOUT
+    return timeout
+
 
 class RepoAction(Action):
     """
@@ -134,7 +187,8 @@ class RepoAction(Action):
                     f"Initial checkout of '{branch}' failed in {repo_path}. "
                     "After fetching from origin, creating a tracking branch also failed. "
                     f"Initial error: {checkout_error_text}. "
-                    f"Tracking branch error: {self._subprocess_error_message(tracking_error)}. "
+                    f"Tracking branch error: {
+                        self._subprocess_error_message(tracking_error)}. "
                     "Check that the branch name is correct and that your local checkout can track origin."
                 ) from tracking_error
 
@@ -198,6 +252,26 @@ class RepoAction(Action):
                     "--extra_git_args may not include carriage returns or newlines."
                 )
         return None
+
+    @staticmethod
+    def _is_valid_git_repo(repo_path):
+        """True only if repo_path is a git checkout with a resolvable HEAD.
+
+        `git status` is not sufficient here: on the directory left behind by
+        an interrupted clone it exits 0 with empty stdout, which reads as
+        "clean", and on a non-git directory it exits 128 with empty stdout,
+        which reads the same way. `rev-parse HEAD` distinguishes both cases
+        because a half-cloned repo has no HEAD to resolve.
+        """
+        if not os.path.isdir(repo_path):
+            return False
+        try:
+            result = subprocess.run(
+                ['git', '-C', repo_path, 'rev-parse', 'HEAD'],
+                capture_output=True, text=True)
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return result.returncode == 0 and bool(result.stdout.strip())
 
     def add(self, run_args):
         """
@@ -329,6 +403,10 @@ class RepoAction(Action):
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
 
         try:
+            # LOCK ORDERING: repos.json.lock is the *inner* lock -- pull_repo
+            # already holds <repo_path>.lock when it calls this. Never acquire
+            # a per-repo lock while holding this one, or the two orders will
+            # deadlock until their timeouts expire.
             with FileLock(_repos_lock_file(repos_file_path), timeout=60):
                 with open(repos_file_path, 'r') as f:
                     repos_list = json.load(f)
@@ -337,9 +415,8 @@ class RepoAction(Action):
                     repos_list.append(repo_path)
                     logger.info(f"Added new repo path: {repo_path}")
 
-                with open(repos_file_path, 'w') as f:
-                    json.dump(repos_list, f, indent=2)
-                    logger.info(f"Updated repos.json at {repos_file_path}")
+                _atomic_write_json(repos_file_path, repos_list)
+                logger.info(f"Updated repos.json at {repos_file_path}")
         except Timeout:
             return {
                 'return': 1,
@@ -350,11 +427,24 @@ class RepoAction(Action):
                 )
             }
 
+        # Deliberately outside the lock. load_repos_and_meta() calls rm_repo()
+        # for entries whose path has vanished (mlc/action.py), and rm_repo ->
+        # unregister_repo takes this same repos.json lock on a fresh FileLock
+        # instance. filelock is only reentrant per instance, so re-entering it
+        # here would block the process against itself for the full 60s timeout
+        # on every pull whose repos.json holds one stale entry.
+        #
+        # The window this leaves is that a concurrent writer may have replaced
+        # repos.json before the reload, so the lookup below can miss the repo
+        # just registered. Falling back to the meta already in hand closes
+        # that without widening the lock.
         self.repos = self.load_repos_and_meta()
         repo_obj = next(
             (r for r in self.repos if r.path == repo_path),
             None
         )
+        if repo_obj is None:
+            repo_obj = Repo(path=repo_path, meta=repo_meta)
 
         if repo_obj:
             index = Action.get_index(self)
@@ -504,6 +594,8 @@ class RepoAction(Action):
                   pat=None, ssh=None, ignore_on_conflict=False, repo_path=None, force=False,
                   shallow=False, depth=None, extra_git_args=None, fast_forward_only=False):
 
+        repo_lock_timeout = _get_repo_lock_timeout()
+
         # Determine the checkout path from environment or default
         repo_base_path = self.repos_path  # either the value will be from 'MLC_REPOS'
         # Ensure the directory exists
@@ -576,12 +668,38 @@ class RepoAction(Action):
 
             # Lock file sits next to the repo directory; left on disk but
             # harmless.
+            #
+            # LOCK ORDERING: the per-repo lock is always acquired *before*
+            # repos.json.lock -- register_repo() is called from inside this
+            # block and takes that second lock. Any new code path that needs
+            # both must acquire them in this same order, or the two will
+            # deadlock until their timeouts expire.
             repo_lock_file = repo_path + ".lock"
-            with FileLock(repo_lock_file, timeout=300):
+            with FileLock(repo_lock_file, timeout=repo_lock_timeout):
+                # A directory left behind by an interrupted clone is not a
+                # usable repo: it has a .git with an origin but no HEAD, and
+                # every later pull fails against it. Treat anything that is
+                # not a valid checkout as absent and clone afresh.
+                if os.path.exists(repo_path) and not self._is_valid_git_repo(
+                        repo_path):
+                    logger.warning(
+                        f"{repo_path} exists but is not a usable git checkout "
+                        "(likely a previously interrupted clone). Removing it "
+                        "and cloning again.")
+                    shutil.rmtree(repo_path, ignore_errors=True)
+
                 # If the directory doesn't exist, clone it
                 if not os.path.exists(repo_path):
                     logger.info(
                         f"Cloning repository {repo_url} to {repo_path}...")
+
+                    # Clone into a sibling temp path and rename into place, so
+                    # repo_path is only ever absent or complete. Without this,
+                    # a clone killed part-way (SIGKILL/OOM/dropped link) leaves
+                    # a half-repo that the existence check above would have to
+                    # clean up on the *next* run.
+                    tmp_clone_path = repo_path + ".tmp-clone"
+                    shutil.rmtree(tmp_clone_path, ignore_errors=True)
 
                     # Build clone command
                     clone_command = ['git', 'clone']
@@ -590,9 +708,15 @@ class RepoAction(Action):
                     if clone_depth is not None:
                         clone_command += ['--depth', str(clone_depth)]
                     clone_command += extra_args
-                    clone_command += [repo_url, repo_path]
+                    clone_command += [repo_url, tmp_clone_path]
 
-                    subprocess.run(clone_command, check=True)
+                    try:
+                        subprocess.run(clone_command, check=True)
+                        os.rename(tmp_clone_path, repo_path)
+                    except BaseException:
+                        # BaseException so KeyboardInterrupt also cleans up.
+                        shutil.rmtree(tmp_clone_path, ignore_errors=True)
+                        raise
 
                 else:
                     logger.info(
@@ -793,12 +917,37 @@ class RepoAction(Action):
         except subprocess.CalledProcessError as e:
             return {'return': 1, 'error': f"Git command failed: {e}"}
         except Timeout:
+            # Waiting out the timeout is not itself a failure: the holder may
+            # simply have been doing a slow cold clone and finished. If the
+            # repo is now a valid checkout, the work this call wanted done is
+            # done, so report success rather than a spurious error.
+            if self._is_valid_git_repo(repo_path):
+                logger.info(
+                    f"Lock for {repo_path} was held by another mlc process, "
+                    "which has left a valid checkout in place. Nothing to do.")
+                return {'return': 0}
             return {
                 'return': 1,
                 'error': (
-                    f"Could not acquire lock for {repo_path} after 300 seconds. "
-                    "Another mlc process may be cloning or pulling this repo. "
-                    "Try again once the other operation completes."
+                    f"Could not acquire lock for {repo_path} after "
+                    f"{repo_lock_timeout} seconds, and no valid checkout was "
+                    "left behind. Another mlc process may still be cloning or "
+                    "pulling this repo. Try again once it completes, or raise "
+                    f"the timeout via {REPO_LOCK_TIMEOUT_ENV}."
+                )
+            }
+        except PermissionError as e:
+            # Creating <repo_path>.lock needs write permission on the repos
+            # directory itself, not just on the repo. On a shared MLC_REPOS
+            # this is the usual cause, and the generic handler below would
+            # only surface a bare "[Errno 13]".
+            return {
+                'return': 1,
+                'error': (
+                    f"Permission denied while pulling {repo_path}: {e}. "
+                    "Creating the lock file requires write access to "
+                    f"{self.repos_path}; check the permissions on that "
+                    "directory if MLC_REPOS is shared between users."
                 )
             }
         except Exception as e:
@@ -1073,14 +1222,17 @@ def unregister_repo(repo_path, repos_file_path):
     logger.info(f"Unregistering the repo in path {repo_path}")
 
     try:
+        # LOCK ORDERING: repos.json.lock is the *inner* lock -- callers such as
+        # pull_repo may already hold <repo_path>.lock. Never acquire a per-repo
+        # lock while holding this one, or the two orders will deadlock until
+        # their timeouts expire.
         with FileLock(_repos_lock_file(repos_file_path), timeout=60):
             with open(repos_file_path, 'r') as f:
                 repos_list = json.load(f)
 
             if repo_path in repos_list:
                 repos_list.remove(repo_path)
-                with open(repos_file_path, 'w') as f:
-                    json.dump(repos_list, f, indent=2)
+                _atomic_write_json(repos_file_path, repos_list)
                 logger.info(f"Path: {repo_path} has been removed.")
             else:
                 logger.info(
