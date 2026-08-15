@@ -36,7 +36,7 @@ fi
 MIN_PYTHON_VERSION="3.7"
 DEFAULT_VENV_DIR="$HOME/mlcflow"
 DEFAULT_REPO="mlcommons@mlperf-automations"
-DEFAULT_BRANCH="dev"
+DEFAULT_BRANCH="main"
 PYTHON_CMD="python3"
 
 # What to hand to `pip install` for mlcflow itself. Defaults to the PyPI
