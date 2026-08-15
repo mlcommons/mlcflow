@@ -55,6 +55,12 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
     slurm_no_internet = is_true(i.get('slurm_no_internet', False))
+    slurm_mlcflow_upgrade = is_true(i.get('slurm_mlcflow_upgrade', False))
+    if slurm_mlcflow_upgrade and slurm_no_internet:
+        return {
+            'return': 1,
+            'error': '--slurm_mlcflow_upgrade cannot be combined with --slurm_no_internet: the SLURM node has no network access to upgrade mlcflow.'
+        }
     slurm_isolated = is_true(i.get('slurm_isolated', False))
     slurm_isolated_base_dir = i.get('slurm_isolated_base_dir', '')
 
@@ -168,13 +174,16 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     # Bootstrap mlcflow on the node
     if slurm_no_internet:
-        # Use installer from local mlcflow repo or pre-downloaded copy
+        # --slurm_no_internet selects the local-installer path; network-requiring
+        # operations like --slurm_mlcflow_upgrade are already blocked by the
+        # guard above.
         installer_path = _get_local_installer()
         run_cmds.append(
             f'bash {shlex.quote(installer_path)} --yes --venv-dir {shlex.quote(slurm_python_venv)}')
     else:
+        upgrade_flag = ' --upgrade' if slurm_mlcflow_upgrade else ''
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}')
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/main/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}{upgrade_flag}')
     run_cmds.append(build_venv_activation_command(slurm_python_venv))
 
     if is_true(slurm_pull_mlc_repos):

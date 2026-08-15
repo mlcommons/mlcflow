@@ -38,6 +38,12 @@ def remote_run(self_module, i):
     remote_action = i.get('remote_action', 'run')
     remote_shell = i.get('remote_shell', '')
     remote_no_internet = is_true(i.get('remote_no_internet', False))
+    remote_mlcflow_upgrade = is_true(i.get('remote_mlcflow_upgrade', False))
+    if remote_mlcflow_upgrade and remote_no_internet:
+        return {
+            'return': 1,
+            'error': '--remote_mlcflow_upgrade cannot be combined with --remote_no_internet: the remote node has no network access to upgrade mlcflow.'
+        }
     remote_isolated = is_true(i.get('remote_isolated', False))
     remote_isolated_base_dir = i.get('remote_isolated_base_dir', '')
 
@@ -174,7 +180,9 @@ def remote_run(self_module, i):
     # Even if we're running from Windows locally, the remote commands execute
     # on the remote server
     if remote_no_internet:
-        # Download installer locally and copy it to the remote machine
+        # --remote_no_internet selects the local-installer path; network-requiring
+        # operations like --remote_mlcflow_upgrade are already blocked by the
+        # guard above.
         installer_local_path = _get_local_installer()
         files_to_copy.append(installer_local_path)
         remote_installer = remote_copy_directory_for_cmd + "/" + \
@@ -182,8 +190,9 @@ def remote_run(self_module, i):
         run_cmds.append(
             f'bash "{remote_installer}" --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
     else:
+        upgrade_flag = ' --upgrade' if remote_mlcflow_upgrade else ''
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/main/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}{upgrade_flag}')
     run_cmds.append(build_venv_activation_command(remote_mlc_python_venv))
     # is_true() rather than a bare truthiness check: this arrives from the CLI
     # as a string, so '--remote_pull_mlc_repos=no' is a non-empty (truthy)

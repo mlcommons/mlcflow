@@ -480,11 +480,15 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
-    12. --remote_isolated:
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
         Run in an isolated temporary workspace on remote host, set MLC_REPOS to
         that workspace, and clean it up on exit/signals. With the default
         relative --remote_python_venv, the venv is recreated for each run.
-    13. --remote_isolated_base_dir:
+    15. --remote_isolated_base_dir:
         Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
@@ -668,11 +672,15 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
-    12. --remote_isolated:
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
         Run in an isolated temporary workspace on remote host, set MLC_REPOS to
         that workspace, and clean it up on exit/signals. With the default
         relative --remote_python_venv, the venv is recreated for each run.
-    13. --remote_isolated_base_dir:
+    15. --remote_isolated_base_dir:
         Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
@@ -717,11 +725,15 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
-    12. --remote_isolated:
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
         Run in an isolated temporary workspace on remote host, set MLC_REPOS to
         that workspace, and clean it up on exit/signals. With the default
         relative --remote_python_venv, the venv is recreated for each run.
-    13. --remote_isolated_base_dir:
+    15. --remote_isolated_base_dir:
         Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
@@ -794,11 +806,15 @@ Main Script Meta:""")
         Commands to run on the node before the main script
     25. --slurm_post_run_cmds:
         Commands to run on the node after the main script
-    26. --slurm_isolated:
+    26. --slurm_mlcflow_upgrade:
+        Upgrade mlcflow on the SLURM node before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    27. --slurm_no_internet:
+        Use a locally available installer on the SLURM node (incompatible with --slurm_mlcflow_upgrade)
+    28. --slurm_isolated:
         Run in an isolated temporary workspace on the node, set MLC_REPOS to
         that workspace, and clean it up on exit/signals. With the default
         relative --slurm_python_venv, the venv is recreated for each run.
-    27. --slurm_isolated_base_dir:
+    29. --slurm_isolated_base_dir:
         Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
