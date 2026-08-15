@@ -178,7 +178,8 @@ def remote_run(self_module, i):
 
     # Export user-specified environment variables on the remote shell early,
     # before the installer runs (e.g. LC_ALL for locale, PATH for brew).
-    # Usage: --remote_env.LC_ALL=C.UTF-8 --remote_env.PATH='$PATH:/opt/homebrew/bin'
+    # Usage: --remote_env.LC_ALL=C.UTF-8
+    # --remote_env.PATH='$PATH:/opt/homebrew/bin'
     user_remote_env = i.get('remote_env', {})
     if isinstance(user_remote_env, dict):
         for key, value in user_remote_env.items():
