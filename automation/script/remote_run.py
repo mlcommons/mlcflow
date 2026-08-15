@@ -176,6 +176,14 @@ def remote_run(self_module, i):
     # Determine if the local system is Windows to adjust command formatting
     is_windows = platform.system() == 'Windows'
 
+    # Export user-specified environment variables on the remote shell early,
+    # before the installer runs (e.g. LC_ALL for locale, PATH for brew).
+    # Usage: --remote_env.LC_ALL=C.UTF-8 --remote_env.PATH='$PATH:/opt/homebrew/bin'
+    user_remote_env = i.get('remote_env', {})
+    if isinstance(user_remote_env, dict):
+        for key, value in user_remote_env.items():
+            run_cmds.append(f'export {key}={value}')
+
     # Note: The remote activation command uses Unix syntax because we're SSHing into a (likely) Unix server
     # Even if we're running from Windows locally, the remote commands execute
     # on the remote server
