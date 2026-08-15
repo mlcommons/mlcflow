@@ -141,6 +141,242 @@ class TestVenvActivationCommand(unittest.TestCase):
         self.assertEqual(completed.stdout, expected)
 
 
+class TestRemoteRunIsolation(unittest.TestCase):
+    def _invoke_remote_run(self, **run_args):
+        """Return (result, captured_remote_input) from a mocked remote_run call."""
+        from unittest.mock import patch, MagicMock
+        from script.remote_run import remote_run
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {'remote_run': {}}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured_remote_input = {}
+
+        def fake_access(input_dict):
+            captured_remote_input.update(input_dict)
+            return {'return': 0}
+
+        mock_self.action_object = MagicMock()
+        mock_self.action_object.access.side_effect = fake_access
+
+        with patch('script.remote_run.call_remote_run_prepare',
+                   return_value={'return': 0, 'files_to_copy': [], 'remote_env': {}}), \
+                patch('script.remote_run.regenerate_script_cmd',
+                      return_value={'return': 0, 'run_cmd_string': 'true'}), \
+                patch('script.remote_run._get_local_installer', return_value='/bin/true'), \
+                patch('script.remote_run.build_venv_activation_command',
+                      return_value='true'):
+            args = {
+                'tags': 'detect,os',
+                'mlc_run_cmd': 'mlcr detect,os',
+                'env': {},
+                **run_args
+            }
+            result = remote_run(mock_self, args)
+
+        return result, captured_remote_input
+
+    def _capture_remote_run_cmds(self, **run_args):
+        result, captured = self._invoke_remote_run(**run_args)
+        self.assertEqual(result['return'], 0)
+        return captured['run_cmds']
+
+    def test_remote_isolated_sets_tmp_mlc_repos_and_cleanup(self):
+        run_cmds = self._capture_remote_run_cmds(remote_isolated=True)
+        combined = " ; ".join(run_cmds)
+        # The isolated temp dir is now a Python-generated UUID-based literal path
+        # so there are no shell variables that would be expanded locally.
+        self.assertRegex(
+            combined,
+            r'MLC_ISOLATED_TMP_DIR="/tmp/mlcflow-isolated-[0-9a-f]+"')
+        self.assertRegex(
+            combined,
+            r'mkdir -p "/tmp/mlcflow-isolated-[0-9a-f]+" \|\| exit 1')
+        # Workspace is created with restricted permissions so other users on a
+        # shared remote host cannot read it.
+        self.assertRegex(
+            combined,
+            r'chmod 700 "/tmp/mlcflow-isolated-[0-9a-f]+"')
+        self.assertRegex(
+            combined,
+            r'\[ -d "/tmp/mlcflow-isolated-[0-9a-f]+" \] \|\| exit 1')
+        # No cd: artifact paths stay relative so rsync can write to them before
+        # the isolated dir is created by the command payload.
+        self.assertNotIn('cd "/tmp/mlcflow-isolated-', combined)
+        self.assertRegex(
+            combined,
+            r'export MLC_REPOS="/tmp/mlcflow-isolated-[0-9a-f]+/MLC"')
+        # The trap body uses the literal path (no inner quoting needed — the
+        # path only contains safe characters).  Inner backslash-escaped quotes
+        # caused convert_env_to_script to corrupt MLC_SSH_CMD in the env file.
+        self.assertRegex(
+            combined,
+            r'trap "rm -rf /tmp/mlcflow-isolated-[0-9a-f]+" EXIT INT TERM HUP')
+
+    def test_remote_isolated_supports_custom_tmp_base_dir(self):
+        run_cmds = self._capture_remote_run_cmds(
+            remote_isolated=True,
+            remote_isolated_base_dir='/scratch/mlcflow',
+        )
+        combined = " ; ".join(run_cmds)
+        self.assertRegex(
+            combined,
+            r'MLC_ISOLATED_TMP_DIR="/scratch/mlcflow/mlcflow-isolated-[0-9a-f]+"')
+        self.assertRegex(
+            combined,
+            r'mkdir -p "/scratch/mlcflow/mlcflow-isolated-[0-9a-f]+" \|\| exit 1')
+        # The base directory must already exist — a typo produces a hard error.
+        self.assertIn(
+            '[ -d "/scratch/mlcflow" ] || {', combined)
+
+    def test_remote_isolated_errors_when_combined_with_remote_no_internet(
+            self):
+        result, _ = self._invoke_remote_run(
+            remote_isolated=True,
+            remote_no_internet=True,
+        )
+        self.assertGreater(result['return'], 0)
+        self.assertIn('remote_no_internet', result.get('error', ''))
+
+    def test_remote_isolated_command_survives_remote_escaping_and_cleans_up(
+            self):
+        # Use a unique per-run marker file so parallel CI runs do not collide.
+        with tempfile.NamedTemporaryFile(
+                prefix='mlcflow_remote_iso_', suffix='.txt', delete=False) as f:
+            marker_file = f.name
+        os.remove(marker_file)  # we only need the path; bash will create it
+
+        try:
+            run_cmds = self._capture_remote_run_cmds(
+                remote_isolated=True,
+                remote_pre_run_cmds=[
+                    f'printf "%s" "$MLC_ISOLATED_TMP_DIR" > {marker_file}'],
+            )
+            # Strip any curl/installer commands that require internet access or
+            # files that don't exist locally – we only need to test isolation
+            # setup and cleanup.
+            run_cmds = [c for c in run_cmds if not c.startswith('curl ')]
+            cmd_string = " ; ".join(run_cmds)
+            # Match remote-run-commands escaping pipeline behavior.
+            cmd_string = cmd_string.replace("'", "'\\''")
+            safe_cmd_string = shlex.quote(cmd_string)
+            completed = subprocess.run(
+                ['bash', '-lc', f'cmd={safe_cmd_string}; eval "$cmd"'],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+            with open(marker_file, 'r', encoding='utf-8') as f:
+                isolated_tmp_dir = f.read().strip()
+            self.assertTrue(isolated_tmp_dir)
+            self.assertFalse(os.path.exists(isolated_tmp_dir))
+        finally:
+            if os.path.exists(marker_file):
+                os.remove(marker_file)
+
+    def test_remote_isolated_copy_directory_stays_relative_for_rsync(self):
+        """copy_directory (rsync target) must stay relative so rsync can write to it.
+
+        Files are rsynced before the remote command payload runs — which is the
+        payload that creates the isolated dir via mkdir.  If copy_directory were
+        set to the absolute isolated path, rsync would fail because the target
+        does not yet exist.  Artifact paths must remain relative (home-relative);
+        only MLC_REPOS is redirected to the isolated dir.
+        """
+        from unittest.mock import patch, MagicMock
+        from script.remote_run import remote_run
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {'remote_run': {}}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured_remote_input = {}
+
+        def fake_access(input_dict):
+            captured_remote_input.update(input_dict)
+            return {'return': 0}
+
+        mock_self.action_object = MagicMock()
+        mock_self.action_object.access.side_effect = fake_access
+
+        with patch('script.remote_run.call_remote_run_prepare',
+                   return_value={'return': 0,
+                                 'files_to_copy': ['/fake/some_artifact.txt'],
+                                 'remote_env': {}}), \
+                patch('script.remote_run.regenerate_script_cmd',
+                      return_value={'return': 0, 'run_cmd_string': 'true'}), \
+                patch('script.remote_run._get_local_installer', return_value='/bin/true'), \
+                patch('script.remote_run.build_venv_activation_command',
+                      return_value='true'):
+            result = remote_run(mock_self, {
+                'tags': 'detect,os',
+                'mlc_run_cmd': 'mlcr detect,os',
+                'env': {},
+                'remote_isolated': True,
+            })
+
+        self.assertEqual(result['return'], 0)
+        copy_dir = captured_remote_input.get('copy_directory', '')
+        # copy_directory must stay relative (home-dir-relative) so rsync can
+        # write to it before the isolated dir is created by the command
+        # payload.
+        self.assertFalse(copy_dir.startswith('/'),
+                         f"copy_directory should be relative (for rsync), got: {copy_dir!r}")
+        # The isolated tmp dir must still appear in run_cmds (for MLC_REPOS)
+        run_cmds = captured_remote_input.get('run_cmds', [])
+        combined = " ; ".join(run_cmds)
+        self.assertRegex(combined, r'/tmp/mlcflow-isolated-[0-9a-f]+',
+                         "Isolated tmp dir not found in run_cmds")
+
+    def test_remote_isolated_repos_copy_directory_stays_relative_for_rsync(
+            self):
+        """copy_directory for repo copies must stay relative so rsync can write to it."""
+        from unittest.mock import patch
+        with patch('script.remote_run.os.listdir', return_value=['demo-repo']), \
+                patch('script.remote_run.os.path.isdir', return_value=True):
+            result, captured = self._invoke_remote_run(
+                remote_isolated=True,
+                remote_copy_mlc_repos=['demo-repo'],
+            )
+        self.assertEqual(result['return'], 0)
+        copy_dir = captured.get('copy_directory', '')
+        # copy_directory (the rsync target) must stay relative — the isolated dir
+        # does not exist yet when rsync runs.
+        self.assertFalse(copy_dir.startswith('/'),
+                         f"copy_directory should be relative (for rsync), got: {copy_dir!r}")
+        # The run_cmds should contain a symlink step that links the relative
+        # repos path into MLC_REPOS so mlcflow finds them.
+        run_cmds = captured.get('run_cmds', [])
+        combined = " ; ".join(run_cmds)
+        self.assertIn('MLC/repos', combined)
+        self.assertIn('$MLC_REPOS', combined)
+
+
 # ---------------------------------------------------------------------------
 # slurm_run.regenerate_script_cmd — slurm_action → mlc command mapping
 # ---------------------------------------------------------------------------
@@ -234,6 +470,97 @@ class TestSlurmRunInputNormalization(unittest.TestCase):
         bash_c_cmd = captured_args[-1]  # last element after 'bash', '-c'
         self.assertIn('module load cuda', bash_c_cmd,
                       "Pre-run command string was expanded char-by-char instead of as a whole")
+
+    def test_slurm_isolated_sets_tmp_mlc_repos_and_cleanup(self):
+        from unittest.mock import patch, MagicMock
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured_args = []
+
+        def fake_call(args):
+            captured_args.extend(args)
+            return 0
+
+        with patch('script.slurm_run.shutil.which', return_value='/usr/bin/srun'), \
+                patch('script.slurm_run.subprocess.call', side_effect=fake_call):
+            from script.slurm_run import slurm_run
+            result = slurm_run(mock_self, {
+                'tags': 'detect,os',
+                'slurm_isolated': True,
+                'env': {},
+            })
+
+        self.assertEqual(result['return'], 0)
+        bash_c_cmd = captured_args[-1]  # last element after 'bash', '-c'
+        self.assertIn(
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1',
+            bash_c_cmd)
+        self.assertIn(
+            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1', bash_c_cmd)
+        self.assertIn('cd "$MLC_ISOLATED_TMP_DIR" || exit 1', bash_c_cmd)
+        self.assertIn('export MLC_REPOS="$PWD/MLC"', bash_c_cmd)
+        self.assertIn(
+            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP', bash_c_cmd)
+
+    def test_slurm_isolated_supports_custom_tmp_base_dir(self):
+        from unittest.mock import patch, MagicMock
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured_args = []
+
+        def fake_call(args):
+            captured_args.extend(args)
+            return 0
+
+        with patch('script.slurm_run.shutil.which', return_value='/usr/bin/srun'), \
+                patch('script.slurm_run.subprocess.call', side_effect=fake_call):
+            from script.slurm_run import slurm_run
+            result = slurm_run(mock_self, {
+                'tags': 'detect,os',
+                'slurm_isolated': True,
+                'slurm_isolated_base_dir': '/scratch/mlcflow',
+                'env': {},
+            })
+
+        self.assertEqual(result['return'], 0)
+        bash_c_cmd = captured_args[-1]
+        self.assertIn(
+            'MLC_ISOLATED_TMP_BASE_DIR="/scratch/mlcflow"',
+            bash_c_cmd)
+        self.assertIn(
+            '[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1',
+            bash_c_cmd)
+        self.assertIn(
+            'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
+            bash_c_cmd)
 
 
 if __name__ == '__main__':

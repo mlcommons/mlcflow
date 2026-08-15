@@ -480,6 +480,12 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    13. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -662,6 +668,12 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    13. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -705,6 +717,12 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    13. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -776,6 +794,12 @@ Main Script Meta:""")
         Commands to run on the node before the main script
     25. --slurm_post_run_cmds:
         Commands to run on the node after the main script
+    26. --slurm_isolated:
+        Run in an isolated temporary workspace on the node, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --slurm_python_venv, the venv is recreated for each run.
+    27. --slurm_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
