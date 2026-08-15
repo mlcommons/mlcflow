@@ -671,13 +671,15 @@ class TestMlcflowUpgradeFlag(unittest.TestCase):
 
     def test_remote_upgrade_flag_adds_upgrade_to_installer_cmd(self):
         result, run_cmds = self._run_remote(upgrade=True)
-        installer_cmd = next((c for c in run_cmds if 'mlcflow_unix_installer' in c), '')
+        installer_cmd = next(
+            (c for c in run_cmds if 'mlcflow_unix_installer' in c), '')
         self.assertIn('--upgrade', installer_cmd,
                       "--upgrade should be passed to installer when remote_mlcflow_upgrade=True")
 
     def test_remote_upgrade_flag_absent_by_default(self):
         result, run_cmds = self._run_remote(upgrade=False)
-        installer_cmd = next((c for c in run_cmds if 'mlcflow_unix_installer' in c), '')
+        installer_cmd = next(
+            (c for c in run_cmds if 'mlcflow_unix_installer' in c), '')
         self.assertNotIn('--upgrade', installer_cmd,
                          "--upgrade should not appear when remote_mlcflow_upgrade=False")
 
