@@ -501,10 +501,10 @@ Main Script Meta:""")
 
     def run(self, run_args):
         """
-    ####################################################################################################################
+    ################################################################################
     Target: Script
     Action: Run
-    ####################################################################################################################
+    ################################################################################
 
     The `run` action executes a script from an MLC repository.
 
@@ -518,11 +518,67 @@ Main Script Meta:""")
     1. -j: Displays the output in JSON format.
     2. Instead of using `mlc run script --tags=`, you can simply use `mlcr`.
     3. *<Individual script inputs>: The `mlcr` command can accept additional inputs defined in the script's `input_mappings` metadata.
+    4. --mlc_isolate: Run in an isolated temporary directory with a fresh MLC_REPOS.
+    5. --mlc_isolate_dir: Base directory for isolation (default: system temp dir).
+    6. --mlc_isolate_clean: Auto-remove the isolated directory after the run.
 
         """
         if not run_args.get('tags') and not run_args.get('details'):
             return self.call_script_module_function("help", run_args)
+
+        if utils.is_true(run_args.get('mlc_isolate', False)):
+            return self._run_isolated(run_args)
+
         return self.call_script_module_function("run", run_args)
+
+    def _run_isolated(self, run_args):
+        """Run a script in an isolated temporary directory with a fresh MLC_REPOS."""
+        import tempfile
+        import uuid
+        import shutil
+
+        isolate_dir = run_args.get('mlc_isolate_dir', '')
+        isolate_clean = utils.is_true(run_args.get('mlc_isolate_clean', False))
+        uid = uuid.uuid4().hex[:16]
+
+        if isolate_dir:
+            base = os.path.abspath(isolate_dir)
+            if not os.path.isdir(base):
+                return {'return': 1, 'error': f'mlc_isolate_dir does not exist: {base}'}
+            tmp_dir = os.path.join(base, f'mlcflow-isolated-{uid}')
+        else:
+            tmp_dir = os.path.join(tempfile.gettempdir(), f'mlcflow-isolated-{uid}')
+
+        os.makedirs(tmp_dir, exist_ok=True)
+        logger.info(f"Isolated run directory: {tmp_dir}")
+
+        orig_dir = os.getcwd()
+        orig_repos = os.environ.get('MLC_REPOS')
+
+        try:
+            os.chdir(tmp_dir)
+            os.environ['MLC_REPOS'] = os.path.join(tmp_dir, 'MLC')
+
+            # Re-initialize parent with new MLC_REPOS so index/repos are fresh
+            from .action import Action
+            new_parent = Action()
+            self.__dict__.update(vars(new_parent))
+
+            result = self.call_script_module_function("run", run_args)
+        finally:
+            os.chdir(orig_dir)
+            if orig_repos is not None:
+                os.environ['MLC_REPOS'] = orig_repos
+            elif 'MLC_REPOS' in os.environ:
+                del os.environ['MLC_REPOS']
+
+            if isolate_clean:
+                logger.info(f"Cleaning up isolated directory: {tmp_dir}")
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            else:
+                logger.info(f"Isolated run artifacts preserved at: {tmp_dir}")
+
+        return result
 
     def test(self, run_args):
         """
