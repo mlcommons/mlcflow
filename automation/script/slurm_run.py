@@ -150,7 +150,8 @@ def slurm_run(self_module, i, slurm_action='run'):
     # Bootstrap mlcflow on the node
     if slurm_no_internet:
         # --slurm_no_internet selects the local-installer path; network-requiring
-        # operations like --slurm_mlcflow_upgrade are already blocked by the guard above.
+        # operations like --slurm_mlcflow_upgrade are already blocked by the
+        # guard above.
         installer_path = _get_local_installer()
         run_cmds.append(
             f'bash {shlex.quote(installer_path)} --yes --venv-dir {shlex.quote(slurm_python_venv)}')
