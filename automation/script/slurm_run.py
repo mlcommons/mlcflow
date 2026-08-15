@@ -61,6 +61,8 @@ def slurm_run(self_module, i, slurm_action='run'):
             'return': 1,
             'error': '--slurm_mlcflow_upgrade cannot be combined with --slurm_no_internet: the SLURM node has no network access to upgrade mlcflow.'
         }
+    slurm_isolated = is_true(i.get('slurm_isolated', False))
+    slurm_isolated_base_dir = i.get('slurm_isolated_base_dir', '')
 
     # Normalize str → list so a single command string doesn't get iterated
     # char-by-char
@@ -146,6 +148,29 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     # Build the commands to run inside srun
     run_cmds = []
+
+    if slurm_isolated:
+        if slurm_isolated_base_dir:
+            safe_slurm_isolated_base_dir = (
+                str(slurm_isolated_base_dir)
+                .replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace('$', '\\$')
+                .replace('`', '\\`')
+            )
+            run_cmds.extend([
+                f'MLC_ISOLATED_TMP_BASE_DIR="{safe_slurm_isolated_base_dir}"',
+                '[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1',
+                'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
+            ])
+        else:
+            run_cmds.append('MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1')
+        run_cmds.extend([
+            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1',
+            'cd "$MLC_ISOLATED_TMP_DIR" || exit 1',
+            'export MLC_REPOS="$PWD/MLC"',
+            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP'
+        ])
 
     # Bootstrap mlcflow on the node
     if slurm_no_internet:

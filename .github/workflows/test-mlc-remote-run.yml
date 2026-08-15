@@ -9,6 +9,10 @@ on:
     paths:
       - '.github/workflows/test-mlc-remote-run.yml'
       - 'mlc/**'
+      - 'automation/script/remote_run.py'
+      - 'automation/script/module.py'
+      - 'automation/utils.py'
+      - 'tests/test_slurm_run.py'
       - 'docs/install/**'
       - '!**.md'
 
@@ -62,10 +66,18 @@ jobs:
           --remote_ssh_key_file=~/.ssh/id_ed25519 \
           --remote_skip_host_verify=yes
 
-    - name: Test 3 - remote-docker help (smoke test)
+    - name: Test 3 - remote-run isolated mode
+      run: |
+        mlcrr detect-os \
+          --remote_host=localhost \
+          --remote_ssh_key_file=~/.ssh/id_ed25519 \
+          --remote_skip_host_verify=yes \
+          --remote_isolated=yes
+
+    - name: Test 4 - remote-docker help (smoke test)
       run: |
         mlcrd --help | grep -q "remote-docker"
 
-    - name: Test 4 - remote-experiment help (smoke test)
+    - name: Test 5 - remote-experiment help (smoke test)
       run: |
         mlcre --help | grep -q "remote-experiment"
