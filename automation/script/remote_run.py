@@ -121,7 +121,7 @@ def remote_run(self_module, i):
     else:
         upgrade_flag = ' --upgrade' if remote_mlcflow_upgrade else ''
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}{upgrade_flag}')
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/main/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}{upgrade_flag}')
     run_cmds.append(build_venv_activation_command(remote_mlc_python_venv))
     # is_true() rather than a bare truthiness check: this arrives from the CLI
     # as a string, so '--remote_pull_mlc_repos=no' is a non-empty (truthy)
