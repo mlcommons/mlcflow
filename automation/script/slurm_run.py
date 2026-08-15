@@ -157,7 +157,7 @@ def slurm_run(self_module, i, slurm_action='run'):
     else:
         upgrade_flag = ' --upgrade' if slurm_mlcflow_upgrade else ''
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}{upgrade_flag}')
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/main/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}{upgrade_flag}')
     run_cmds.append(build_venv_activation_command(slurm_python_venv))
 
     if is_true(slurm_pull_mlc_repos):
