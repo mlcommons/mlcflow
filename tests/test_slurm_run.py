@@ -787,17 +787,28 @@ class TestCopyBackMlcCache(unittest.TestCase):
             captured.get('path_to_copy_back_files'),
             '/data/mlc-cache')
 
-    def test_remote_copy_back_mlc_cache_isolated_uses_absolute_tmp_path(self):
+    def test_remote_copy_back_mlc_cache_isolated_stages_cache_before_cleanup(
+            self):
         result, captured = self._invoke_remote_run(
             remote_copy_back_mlc_cache=True,
             remote_isolated=True,
         )
         self.assertEqual(result['return'], 0)
         files_to_copy_back = captured.get('files_to_copy_back', [])
+        self.assertIn(
+            'mlc-remote-artifacts/local/cache',
+            files_to_copy_back,
+            f"Expected staged cache path, got: {files_to_copy_back}"
+        )
+        post_run_cmds = captured.get('post_run_cmds', [])
         self.assertTrue(
-            any(f.startswith('/tmp/mlcflow-isolated-')
-                for f in files_to_copy_back),
-            f"Expected absolute isolated-tmp cache path, got: {files_to_copy_back}"
+            any(
+                'cp -a' in cmd and
+                '/tmp/mlcflow-isolated-' in cmd and
+                'mlc-remote-artifacts/local/cache' in cmd
+                for cmd in post_run_cmds
+            ),
+            f"Expected isolated cache staging command, got: {post_run_cmds}"
         )
 
     def test_remote_no_copy_back_when_flag_absent(self):
