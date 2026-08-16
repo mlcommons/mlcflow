@@ -727,6 +727,7 @@ class TestCopyBackMlcCache(unittest.TestCase):
 
         mock_self.action_object = MagicMock()
         mock_self.action_object.access.side_effect = fake_access
+        mock_self.action_object.repos_path = '/tmp/test-mlc-repos'
 
         with patch('script.remote_run.call_remote_run_prepare',
                    return_value={'return': 0, 'files_to_copy': [], 'remote_env': {}}), \
@@ -759,8 +760,7 @@ class TestCopyBackMlcCache(unittest.TestCase):
             remote_copy_back_mlc_cache=True)
         self.assertEqual(result['return'], 0)
         dest = captured.get('path_to_copy_back_files', '')
-        expected = os.path.join(os.path.expanduser(
-            "~"), "MLC", "repos", "local", "cache")
+        expected = os.path.join('/tmp/test-mlc-repos', 'local', 'cache')
         self.assertEqual(dest, expected)
 
     def test_remote_copy_back_mlc_cache_custom_path(self):
@@ -837,6 +837,8 @@ class TestCopyBackMlcCache(unittest.TestCase):
         mock_self.env = {}
         mock_self.state = {}
         mock_self.logger = MagicMock()
+        mock_self.action_object = MagicMock()
+        mock_self.action_object.repos_path = '/tmp/test-mlc-repos'
 
         captured_args = []
 
@@ -860,6 +862,7 @@ class TestCopyBackMlcCache(unittest.TestCase):
         self.assertEqual(result['return'], 0)
         self.assertIn('rsync', bash_c_cmd)
         self.assertIn('$MLC_REPOS/local/cache', bash_c_cmd)
+        self.assertIn('/tmp/test-mlc-repos/local/cache', bash_c_cmd)
 
     def test_slurm_copy_back_mlc_cache_isolated_uses_custom_path(self):
         result, bash_c_cmd = self._invoke_slurm_run(

@@ -7,6 +7,14 @@ from utils import is_true, prune_input
 from script.script_utils import *
 
 
+def _get_local_mlc_cache_path(self_module):
+    repos_path = getattr(
+        getattr(self_module, 'action_object', None), 'repos_path', '')
+    if not isinstance(repos_path, str) or not repos_path:
+        repos_path = os.path.join(os.path.expanduser("~"), "MLC", "repos")
+    return os.path.join(repos_path, 'local', 'cache')
+
+
 def slurm_run(self_module, i, slurm_action='run'):
     """
     Run MLC scripts on a SLURM cluster node via srun.
@@ -207,8 +215,8 @@ def slurm_run(self_module, i, slurm_action='run'):
     # filesystem so a copy is only performed when an explicit target path is
     # given.
     if slurm_copy_back_mlc_cache:
-        local_cache = slurm_copy_back_mlc_cache_path or os.path.join(
-            os.path.expanduser("~"), "MLC", "repos", "local", "cache")
+        local_cache = slurm_copy_back_mlc_cache_path or _get_local_mlc_cache_path(
+            self_module)
         safe_local_cache = (
             str(local_cache)
             .replace('\\', '\\\\')

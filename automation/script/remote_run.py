@@ -14,6 +14,14 @@ from script.script_utils import *
 import platform
 
 
+def _get_local_mlc_cache_path(self_module):
+    repos_path = getattr(
+        getattr(self_module, 'action_object', None), 'repos_path', '')
+    if not isinstance(repos_path, str) or not repos_path:
+        repos_path = os.path.join(os.path.expanduser("~"), "MLC", "repos")
+    return os.path.join(repos_path, 'local', 'cache')
+
+
 def remote_run(self_module, i):
     """
     Remote run of MLC scripts.
@@ -334,8 +342,7 @@ def remote_run(self_module, i):
         if remote_copy_back_mlc_cache_path:
             path_to_copy_back_files = remote_copy_back_mlc_cache_path
         elif not path_to_copy_back_files:
-            path_to_copy_back_files = os.path.join(
-                os.path.expanduser("~"), "MLC", "repos", "local", "cache")
+            path_to_copy_back_files = _get_local_mlc_cache_path(self_module)
 
     if files_to_copy_back:
         remote_inputs['files_to_copy_back'] = files_to_copy_back
