@@ -56,6 +56,8 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
     slurm_no_internet = is_true(i.get('slurm_no_internet', False))
     slurm_mlcflow_upgrade = is_true(i.get('slurm_mlcflow_upgrade', False))
+    slurm_copy_back_mlc_cache = is_true(i.get('slurm_copy_back_mlc_cache', False))
+    slurm_copy_back_mlc_cache_path = i.get('slurm_copy_back_mlc_cache_path', '')
     if slurm_mlcflow_upgrade and slurm_no_internet:
         return {
             'return': 1,
@@ -197,6 +199,33 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     # Post-run commands
     run_cmds.extend(slurm_post_run_cmds)
+
+    # Copy MLC cache back to a persistent location if requested.
+    # For isolated mode the cache lives in a temp dir that is cleaned up on
+    # EXIT; the copy must therefore happen inside srun, after the script but
+    # before the trap fires.  For non-isolated mode the SLURM nodes share the
+    # filesystem so a copy is only performed when an explicit target path is
+    # given.
+    if slurm_copy_back_mlc_cache:
+        local_cache = slurm_copy_back_mlc_cache_path or os.path.join(
+            os.path.expanduser("~"), "MLC", "repos", "local", "cache")
+        safe_local_cache = (
+            str(local_cache)
+            .replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('$', '\\$')
+            .replace('`', '\\`')
+        )
+        if slurm_isolated:
+            run_cmds.append(
+                f'mkdir -p "{safe_local_cache}" && '
+                f'rsync -a "$MLC_REPOS/local/cache/" "{safe_local_cache}/"'
+            )
+        elif slurm_copy_back_mlc_cache_path:
+            run_cmds.append(
+                f'mkdir -p "{safe_local_cache}" && '
+                f'rsync -a ~/MLC/repos/local/cache/ "{safe_local_cache}/"'
+            )
 
     # Join all commands with && so failure stops execution
     combined_cmd = ' && '.join(run_cmds)
