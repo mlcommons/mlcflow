@@ -735,13 +735,18 @@ class TestCopyBackMlcCache(unittest.TestCase):
                 patch('script.remote_run._get_local_installer', return_value='/bin/true'), \
                 patch('script.remote_run.build_venv_activation_command',
                       return_value='true'):
-            args = {'tags': 'detect,os', 'mlc_run_cmd': 'mlcr detect,os', 'env': {}, **run_args}
+            args = {
+                'tags': 'detect,os',
+                'mlc_run_cmd': 'mlcr detect,os',
+                'env': {},
+                **run_args}
             result = remote_run(mock_self, args)
 
         return result, captured
 
     def test_remote_copy_back_mlc_cache_adds_cache_path(self):
-        result, captured = self._invoke_remote_run(remote_copy_back_mlc_cache=True)
+        result, captured = self._invoke_remote_run(
+            remote_copy_back_mlc_cache=True)
         self.assertEqual(result['return'], 0)
         files_to_copy_back = captured.get('files_to_copy_back', [])
         self.assertTrue(
@@ -750,10 +755,12 @@ class TestCopyBackMlcCache(unittest.TestCase):
         )
 
     def test_remote_copy_back_mlc_cache_default_dest(self):
-        result, captured = self._invoke_remote_run(remote_copy_back_mlc_cache=True)
+        result, captured = self._invoke_remote_run(
+            remote_copy_back_mlc_cache=True)
         self.assertEqual(result['return'], 0)
         dest = captured.get('path_to_copy_back_files', '')
-        expected = os.path.join(os.path.expanduser("~"), "MLC", "repos", "local", "cache")
+        expected = os.path.join(os.path.expanduser(
+            "~"), "MLC", "repos", "local", "cache")
         self.assertEqual(dest, expected)
 
     def test_remote_copy_back_mlc_cache_custom_path(self):
@@ -762,9 +769,12 @@ class TestCopyBackMlcCache(unittest.TestCase):
             remote_copy_back_mlc_cache_path='/data/mlc-cache',
         )
         self.assertEqual(result['return'], 0)
-        self.assertEqual(captured.get('path_to_copy_back_files'), '/data/mlc-cache')
+        self.assertEqual(
+            captured.get('path_to_copy_back_files'),
+            '/data/mlc-cache')
 
-    def test_remote_copy_back_mlc_cache_custom_path_overrides_preexisting(self):
+    def test_remote_copy_back_mlc_cache_custom_path_overrides_preexisting(
+            self):
         """An explicit remote_copy_back_mlc_cache_path always wins."""
         result, captured = self._invoke_remote_run(
             remote_copy_back_mlc_cache=True,
@@ -773,7 +783,9 @@ class TestCopyBackMlcCache(unittest.TestCase):
             path_to_copy_back_files='/previously/set/dest',
         )
         self.assertEqual(result['return'], 0)
-        self.assertEqual(captured.get('path_to_copy_back_files'), '/data/mlc-cache')
+        self.assertEqual(
+            captured.get('path_to_copy_back_files'),
+            '/data/mlc-cache')
 
     def test_remote_copy_back_mlc_cache_isolated_uses_absolute_tmp_path(self):
         result, captured = self._invoke_remote_run(
@@ -783,7 +795,8 @@ class TestCopyBackMlcCache(unittest.TestCase):
         self.assertEqual(result['return'], 0)
         files_to_copy_back = captured.get('files_to_copy_back', [])
         self.assertTrue(
-            any(f.startswith('/tmp/mlcflow-isolated-') for f in files_to_copy_back),
+            any(f.startswith('/tmp/mlcflow-isolated-')
+                for f in files_to_copy_back),
             f"Expected absolute isolated-tmp cache path, got: {files_to_copy_back}"
         )
 
@@ -851,9 +864,11 @@ class TestCopyBackMlcCache(unittest.TestCase):
         self.assertEqual(result['return'], 0)
         self.assertNotIn('rsync', bash_c_cmd)
 
-    def test_slurm_copy_back_mlc_cache_non_isolated_no_explicit_path_is_noop(self):
+    def test_slurm_copy_back_mlc_cache_non_isolated_no_explicit_path_is_noop(
+            self):
         """Without a path and not isolated, no rsync command is added."""
-        result, bash_c_cmd = self._invoke_slurm_run(slurm_copy_back_mlc_cache=True)
+        result, bash_c_cmd = self._invoke_slurm_run(
+            slurm_copy_back_mlc_cache=True)
         self.assertEqual(result['return'], 0)
         self.assertNotIn('rsync', bash_c_cmd)
 
