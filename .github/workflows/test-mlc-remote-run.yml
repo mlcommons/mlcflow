@@ -88,8 +88,8 @@ jobs:
           --remote_copy_back_mlc_cache=yes \
           --remote_copy_back_mlc_cache_path="$CACHE_DEST"
         # The remote cache dir should have been rsynced back
-        test -d "$CACHE_DEST" && echo "Cache directory exists at $CACHE_DEST"
-        ls "$CACHE_DEST"
+        find "$CACHE_DEST" -mindepth 1 -maxdepth 1 -print -quit | grep -q .
+        find "$CACHE_DEST" -mindepth 1 -maxdepth 2 -print
 
     - name: Test 5 - remote-run copy-back mlc cache (isolated mode)
       run: |
@@ -101,8 +101,8 @@ jobs:
           --remote_isolated=yes \
           --remote_copy_back_mlc_cache=yes \
           --remote_copy_back_mlc_cache_path="$CACHE_DEST"
-        test -d "$CACHE_DEST" && echo "Cache directory exists at $CACHE_DEST"
-        ls "$CACHE_DEST"
+        find "$CACHE_DEST" -mindepth 1 -maxdepth 1 -print -quit | grep -q .
+        find "$CACHE_DEST" -mindepth 1 -maxdepth 2 -print
 
     - name: Test 6 - remote-docker help (smoke test)
       run: |
