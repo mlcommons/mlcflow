@@ -39,8 +39,10 @@ def remote_run(self_module, i):
     remote_shell = i.get('remote_shell', '')
     remote_no_internet = is_true(i.get('remote_no_internet', False))
     remote_mlcflow_upgrade = is_true(i.get('remote_mlcflow_upgrade', False))
-    remote_copy_back_mlc_cache = is_true(i.get('remote_copy_back_mlc_cache', False))
-    remote_copy_back_mlc_cache_path = i.get('remote_copy_back_mlc_cache_path', '')
+    remote_copy_back_mlc_cache = is_true(
+        i.get('remote_copy_back_mlc_cache', False))
+    remote_copy_back_mlc_cache_path = i.get(
+        'remote_copy_back_mlc_cache_path', '')
     if remote_mlcflow_upgrade and remote_no_internet:
         return {
             'return': 1,
@@ -253,7 +255,8 @@ def remote_run(self_module, i):
     remote_pre_run_cmds = i.get('remote_pre_run_cmds', [])
     remote_post_run_cmds = i.get('remote_post_run_cmds', [])
     if isinstance(remote_post_run_cmds, str):
-        remote_post_run_cmds = [remote_post_run_cmds] if remote_post_run_cmds else []
+        remote_post_run_cmds = [
+            remote_post_run_cmds] if remote_post_run_cmds else []
     elif remote_post_run_cmds is None:
         remote_post_run_cmds = []
     else:
