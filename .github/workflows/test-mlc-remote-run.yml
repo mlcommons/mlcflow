@@ -31,7 +31,11 @@ jobs:
     - name: Install mlcflow
       run: |
         python -m pip install --upgrade pip
-        python -m pip install .
+        python -m pip install . pytest
+
+    - name: Run copy-back unit tests
+      run: |
+        python -m pytest tests/test_slurm_run.py -v -k "copy_back"
 
     - name: Pull automation repo
       run: |
@@ -74,10 +78,36 @@ jobs:
           --remote_skip_host_verify=yes \
           --remote_isolated=yes
 
-    - name: Test 4 - remote-docker help (smoke test)
+    - name: Test 4 - remote-run copy-back mlc cache
+      run: |
+        CACHE_DEST=$(mktemp -d)
+        mlcrr detect-os \
+          --remote_host=localhost \
+          --remote_ssh_key_file=~/.ssh/id_ed25519 \
+          --remote_skip_host_verify=yes \
+          --remote_copy_back_mlc_cache=yes \
+          --remote_copy_back_mlc_cache_path="$CACHE_DEST"
+        # The remote cache dir should have been rsynced back
+        test -d "$CACHE_DEST" && echo "Cache directory exists at $CACHE_DEST"
+        ls "$CACHE_DEST"
+
+    - name: Test 5 - remote-run copy-back mlc cache (isolated mode)
+      run: |
+        CACHE_DEST=$(mktemp -d)
+        mlcrr detect-os \
+          --remote_host=localhost \
+          --remote_ssh_key_file=~/.ssh/id_ed25519 \
+          --remote_skip_host_verify=yes \
+          --remote_isolated=yes \
+          --remote_copy_back_mlc_cache=yes \
+          --remote_copy_back_mlc_cache_path="$CACHE_DEST"
+        test -d "$CACHE_DEST" && echo "Cache directory exists at $CACHE_DEST"
+        ls "$CACHE_DEST"
+
+    - name: Test 6 - remote-docker help (smoke test)
       run: |
         mlcrd --help | grep -q "remote-docker"
 
-    - name: Test 5 - remote-experiment help (smoke test)
+    - name: Test 7 - remote-experiment help (smoke test)
       run: |
         mlcre --help | grep -q "remote-experiment"
