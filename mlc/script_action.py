@@ -526,7 +526,8 @@ Main Script Meta:""")
         if not run_args.get('tags') and not run_args.get('details'):
             return self.call_script_module_function("help", run_args)
 
-        if str(run_args.get('mlc_isolate', '')).lower() in ('true', 'yes', '1'):
+        if str(run_args.get('mlc_isolate', '')
+               ).lower() in ('true', 'yes', '1'):
             return self._run_isolated(run_args)
 
         return self.call_script_module_function("run", run_args)
@@ -538,16 +539,25 @@ Main Script Meta:""")
         import shutil
 
         isolate_dir = run_args.get('mlc_isolate_dir', '')
-        isolate_clean = str(run_args.get('mlc_isolate_clean', '')).lower() in ('true', 'yes', '1')
+        isolate_clean = str(
+            run_args.get(
+                'mlc_isolate_clean',
+                '')).lower() in (
+            'true',
+            'yes',
+            '1')
         uid = uuid.uuid4().hex[:16]
 
         if isolate_dir:
             base = os.path.abspath(isolate_dir)
             if not os.path.isdir(base):
-                return {'return': 1, 'error': f'mlc_isolate_dir does not exist: {base}'}
+                return {'return': 1,
+                        'error': f'mlc_isolate_dir does not exist: {base}'}
             tmp_dir = os.path.join(base, f'mlcflow-isolated-{uid}')
         else:
-            tmp_dir = os.path.join(tempfile.gettempdir(), f'mlcflow-isolated-{uid}')
+            tmp_dir = os.path.join(
+                tempfile.gettempdir(),
+                f'mlcflow-isolated-{uid}')
 
         os.makedirs(tmp_dir, exist_ok=True)
         logger.info(f"Isolated run directory: {tmp_dir}")
