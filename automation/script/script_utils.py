@@ -75,6 +75,14 @@ def build_venv_activation_command(venv_dir):
     return f'{exec_cmd} > {activation_script} && . {activation_script}'
 
 
+def get_local_mlc_cache_path(self_module):
+    repos_path = getattr(
+        getattr(self_module, 'action_object', None), 'repos_path', '')
+    if not isinstance(repos_path, str) or not repos_path:
+        repos_path = os.path.join(os.path.expanduser("~"), "MLC", "repos")
+    return os.path.join(repos_path, 'local', 'cache')
+
+
 def select_script_and_cache(
     self,
     i,

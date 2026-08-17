@@ -39,6 +39,10 @@ def remote_run(self_module, i):
     remote_shell = i.get('remote_shell', '')
     remote_no_internet = is_true(i.get('remote_no_internet', False))
     remote_mlcflow_upgrade = is_true(i.get('remote_mlcflow_upgrade', False))
+    remote_copy_back_mlc_cache = is_true(
+        i.get('remote_copy_back_mlc_cache', False))
+    remote_copy_back_mlc_cache_path = i.get(
+        'remote_copy_back_mlc_cache_path', '')
     if remote_mlcflow_upgrade and remote_no_internet:
         return {
             'return': 1,
@@ -250,6 +254,13 @@ def remote_run(self_module, i):
 
     remote_pre_run_cmds = i.get('remote_pre_run_cmds', [])
     remote_post_run_cmds = i.get('remote_post_run_cmds', [])
+    if isinstance(remote_post_run_cmds, str):
+        remote_post_run_cmds = [
+            remote_post_run_cmds] if remote_post_run_cmds else []
+    elif remote_post_run_cmds is None:
+        remote_post_run_cmds = []
+    else:
+        remote_post_run_cmds = list(remote_post_run_cmds)
 
     # Insert pre_run_cmds into run_cmds (after install+activate) so they
     # execute with mlcflow available, rather than passing them separately
@@ -304,6 +315,29 @@ def remote_run(self_module, i):
                             f'mkdir -p "{remote_mlc_repos_path_for_cmd}" && '
                             f'ln -sfn "$(realpath {remote_mlc_repos_path_for_cmd})"/* "$MLC_REPOS/"; '
                             f'fi')
+
+    if remote_copy_back_mlc_cache:
+        if remote_isolated:
+            remote_cache_path = f'{_remote_tmp_dir}/MLC/local/cache'
+            staged_remote_cache_path = str(
+                PurePosixPath(remote_copy_directory_for_cmd) / 'local' / 'cache')
+            staged_remote_cache_parent = str(
+                PurePosixPath(remote_copy_directory_for_cmd) / 'local')
+            remote_post_run_cmds.append(
+                f'rm -rf {shlex.quote(staged_remote_cache_path)} && '
+                f'mkdir -p {shlex.quote(staged_remote_cache_parent)} && '
+                f'if [ -d {shlex.quote(remote_cache_path)} ]; then '
+                f'cp -a {shlex.quote(remote_cache_path)} {shlex.quote(staged_remote_cache_path)}; '
+                f'else mkdir -p {shlex.quote(staged_remote_cache_path)}; fi'
+            )
+            remote_cache_path = staged_remote_cache_path
+        else:
+            remote_cache_path = '~/MLC/repos/local/cache'
+        files_to_copy_back.append(remote_cache_path)
+        if remote_copy_back_mlc_cache_path:
+            path_to_copy_back_files = remote_copy_back_mlc_cache_path
+        elif not path_to_copy_back_files:
+            path_to_copy_back_files = get_local_mlc_cache_path(self_module)
 
     if files_to_copy_back:
         remote_inputs['files_to_copy_back'] = files_to_copy_back
