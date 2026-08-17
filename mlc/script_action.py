@@ -554,6 +554,7 @@ Main Script Meta:""")
 
         orig_dir = os.getcwd()
         orig_repos = os.environ.get('MLC_REPOS')
+        original_state = dict(self.__dict__)
 
         try:
             os.chdir(tmp_dir)
@@ -563,9 +564,12 @@ Main Script Meta:""")
             from .action import Action
             new_parent = Action()
             self.__dict__.update(vars(new_parent))
+            self.parent = new_parent
 
             result = self.call_script_module_function("run", run_args)
         finally:
+            self.__dict__.clear()
+            self.__dict__.update(original_state)
             os.chdir(orig_dir)
             if orig_repos is not None:
                 os.environ['MLC_REPOS'] = orig_repos
