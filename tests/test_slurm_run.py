@@ -692,5 +692,209 @@ class TestMlcflowUpgradeFlag(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# copy-back mlc cache — remote_run and slurm_run
+# ---------------------------------------------------------------------------
+class TestCopyBackMlcCache(unittest.TestCase):
+    """Tests for --remote_copy_back_mlc_cache and --slurm_copy_back_mlc_cache."""
+
+    # --- remote_run helpers ---
+
+    def _invoke_remote_run(self, **run_args):
+        from unittest.mock import patch, MagicMock
+        from script.remote_run import remote_run
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {'remote_run': {}}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured = {}
+
+        def fake_access(inp):
+            captured.update(inp)
+            return {'return': 0}
+
+        mock_self.action_object = MagicMock()
+        mock_self.action_object.access.side_effect = fake_access
+        mock_self.action_object.repos_path = '/tmp/test-mlc-repos'
+
+        with patch('script.remote_run.call_remote_run_prepare',
+                   return_value={'return': 0, 'files_to_copy': [], 'remote_env': {}}), \
+                patch('script.remote_run.regenerate_script_cmd',
+                      return_value={'return': 0, 'run_cmd_string': 'true'}), \
+                patch('script.remote_run._get_local_installer', return_value='/bin/true'), \
+                patch('script.remote_run.build_venv_activation_command',
+                      return_value='true'):
+            args = {
+                'tags': 'detect,os',
+                'mlc_run_cmd': 'mlcr detect,os',
+                'env': {},
+                **run_args}
+            result = remote_run(mock_self, args)
+
+        return result, captured
+
+    def test_remote_copy_back_mlc_cache_adds_cache_path(self):
+        result, captured = self._invoke_remote_run(
+            remote_copy_back_mlc_cache=True)
+        self.assertEqual(result['return'], 0)
+        files_to_copy_back = captured.get('files_to_copy_back', [])
+        self.assertTrue(
+            any('local/cache' in f or 'MLC/repos/local/cache' in f for f in files_to_copy_back),
+            f"Expected cache path in files_to_copy_back, got: {files_to_copy_back}"
+        )
+
+    def test_remote_copy_back_mlc_cache_default_dest(self):
+        result, captured = self._invoke_remote_run(
+            remote_copy_back_mlc_cache=True)
+        self.assertEqual(result['return'], 0)
+        dest = captured.get('path_to_copy_back_files', '')
+        expected = os.path.join('/tmp/test-mlc-repos', 'local', 'cache')
+        self.assertEqual(dest, expected)
+
+    def test_remote_copy_back_mlc_cache_custom_path(self):
+        result, captured = self._invoke_remote_run(
+            remote_copy_back_mlc_cache=True,
+            remote_copy_back_mlc_cache_path='/data/mlc-cache',
+        )
+        self.assertEqual(result['return'], 0)
+        self.assertEqual(
+            captured.get('path_to_copy_back_files'),
+            '/data/mlc-cache')
+
+    def test_remote_copy_back_mlc_cache_custom_path_overrides_preexisting(
+            self):
+        """An explicit remote_copy_back_mlc_cache_path always wins."""
+        result, captured = self._invoke_remote_run(
+            remote_copy_back_mlc_cache=True,
+            remote_copy_back_mlc_cache_path='/data/mlc-cache',
+            files_to_copy_back=['/some/other/file'],
+            path_to_copy_back_files='/previously/set/dest',
+        )
+        self.assertEqual(result['return'], 0)
+        self.assertEqual(
+            captured.get('path_to_copy_back_files'),
+            '/data/mlc-cache')
+
+    def test_remote_copy_back_mlc_cache_isolated_stages_cache_before_cleanup(
+            self):
+        result, captured = self._invoke_remote_run(
+            remote_copy_back_mlc_cache=True,
+            remote_isolated=True,
+        )
+        self.assertEqual(result['return'], 0)
+        files_to_copy_back = captured.get('files_to_copy_back', [])
+        self.assertIn(
+            'mlc-remote-artifacts/local/cache',
+            files_to_copy_back,
+            f"Expected staged cache path, got: {files_to_copy_back}"
+        )
+        post_run_cmds = captured.get('post_run_cmds', [])
+        self.assertTrue(
+            any(
+                'cp -a' in cmd and
+                '/tmp/mlcflow-isolated-' in cmd and
+                'mlc-remote-artifacts/local/cache' in cmd
+                for cmd in post_run_cmds
+            ),
+            f"Expected isolated cache staging command, got: {post_run_cmds}"
+        )
+
+    def test_remote_no_copy_back_when_flag_absent(self):
+        result, captured = self._invoke_remote_run()
+        self.assertEqual(result['return'], 0)
+        self.assertNotIn('files_to_copy_back', captured)
+        self.assertNotIn('path_to_copy_back_files', captured)
+
+    # --- slurm_run helpers ---
+
+    def _invoke_slurm_run(self, **run_args):
+        from unittest.mock import patch, MagicMock
+        from script.slurm_run import slurm_run
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path'
+            )
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+        mock_self.action_object = MagicMock()
+        mock_self.action_object.repos_path = '/tmp/test-mlc-repos'
+
+        captured_args = []
+
+        def fake_call(args):
+            captured_args.extend(args)
+            return 0
+
+        with patch('script.slurm_run.shutil.which', return_value='/usr/bin/srun'), \
+                patch('script.slurm_run.subprocess.call', side_effect=fake_call):
+            args = {'tags': 'detect,os', 'env': {}, **run_args}
+            result = slurm_run(mock_self, args)
+
+        bash_c_cmd = captured_args[-1] if captured_args else ''
+        return result, bash_c_cmd
+
+    def test_slurm_copy_back_mlc_cache_isolated_adds_rsync(self):
+        result, bash_c_cmd = self._invoke_slurm_run(
+            slurm_isolated=True,
+            slurm_copy_back_mlc_cache=True,
+        )
+        self.assertEqual(result['return'], 0)
+        self.assertIn('rsync', bash_c_cmd)
+        self.assertIn('$MLC_REPOS/local/cache', bash_c_cmd)
+        self.assertIn('/tmp/test-mlc-repos/local/cache', bash_c_cmd)
+
+    def test_slurm_copy_back_mlc_cache_isolated_uses_custom_path(self):
+        result, bash_c_cmd = self._invoke_slurm_run(
+            slurm_isolated=True,
+            slurm_copy_back_mlc_cache=True,
+            slurm_copy_back_mlc_cache_path='/scratch/my-cache',
+        )
+        self.assertEqual(result['return'], 0)
+        self.assertIn('/scratch/my-cache', bash_c_cmd)
+
+    def test_slurm_copy_back_mlc_cache_no_rsync_without_flag(self):
+        result, bash_c_cmd = self._invoke_slurm_run(slurm_isolated=True)
+        self.assertEqual(result['return'], 0)
+        self.assertNotIn('rsync', bash_c_cmd)
+
+    def test_slurm_copy_back_mlc_cache_non_isolated_no_explicit_path_is_noop(
+            self):
+        """Without a path and not isolated, no rsync command is added."""
+        result, bash_c_cmd = self._invoke_slurm_run(
+            slurm_copy_back_mlc_cache=True)
+        self.assertEqual(result['return'], 0)
+        self.assertNotIn('rsync', bash_c_cmd)
+
+    def test_slurm_copy_back_mlc_cache_non_isolated_with_explicit_path(self):
+        result, bash_c_cmd = self._invoke_slurm_run(
+            slurm_copy_back_mlc_cache=True,
+            slurm_copy_back_mlc_cache_path='/shared/cache',
+        )
+        self.assertEqual(result['return'], 0)
+        self.assertIn('rsync', bash_c_cmd)
+        self.assertIn('/shared/cache', bash_c_cmd)
+
+
 if __name__ == '__main__':
     unittest.main()
