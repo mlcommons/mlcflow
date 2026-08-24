@@ -1059,7 +1059,8 @@ class RepoAction(Action):
         # packaged repo only lasts until the next one. Say so rather than
         # letting it look like the removal silently failed.
         pkg_path = getattr(self, 'package_repo_path', None)
-        if pkg_path and os.path.abspath(repo_path) == os.path.abspath(pkg_path):
+        if pkg_path and os.path.abspath(
+                repo_path) == os.path.abspath(pkg_path):
             logger.warning(
                 f"{repo_path} belongs to the installed {PACKAGE_REPO_DIST} and is re-registered at the start of "
                 f"every command. To stop using it, `pip uninstall {PACKAGE_REPO_DIST}`, or pull a checkout of the "
