@@ -25,18 +25,26 @@ test pass **must** include a non-editable mlcflow install.
 
 ## 1. Root resolution
 
-Risk: two independent resolution chains with a deliberate asymmetry (an
-explicit `MLC_REPOS` also sets the cache root, but the *auto* repo root never
-does). Getting this wrong silently relocates every cached dataset.
+Risk: two fully independent resolution chains. Getting this wrong silently
+relocates every cached dataset.
+
+> **Rule changed after this pass.** `resolve_cache_path()` originally fell back
+> to `$MLC_REPOS` when `MLC_CACHE` was unset, so an explicit `MLC_REPOS` moved
+> both roots. It no longer does: `MLC_CACHE` is the only variable that moves
+> the cache. Cases **1.2** and **1.6** below record the old rule and are marked
+> **RE-RUN**; compatibility for existing single-root users now comes from the
+> registry (`_ensure_local_registered()` keeps an already-registered `local`),
+> which is §12 and case 15.2d, not from this function. The four combinations
+> are now pinned by `tests/test_root_resolution.py`.
 
 | # | Case | Expected | Result |
 |---|---|---|---|
 | 1.1 | no vars, no package | both roots = `~/MLC/repos` | **PASS** |
-| 1.2 | `MLC_REPOS` only, no package | both roots = `$MLC_REPOS` (back-compat rule) | **PASS** |
+| 1.2 | `MLC_REPOS` only, no package | repo = `$MLC_REPOS`, cache = `~/MLC/repos` | **RE-RUN** — passed under the old both-roots rule |
 | 1.3 | `MLC_CACHE` only, no package | cache = `$MLC_CACHE`, repo = `~/MLC/repos` | **PASS** |
 | 1.4 | both set, no package | independent | **PASS** |
 | 1.5 | no vars, package installed | cache = `~/MLC/repos`, repo = `~/MLC/envs/<12hex>` | **PASS** |
-| 1.6 | `MLC_REPOS` set, package installed | `MLC_REPOS` wins for repo root, and also sets cache root | **PASS** |
+| 1.6 | `MLC_REPOS` set, package installed | repo = `$MLC_REPOS`, cache = `~/MLC/repos` | **RE-RUN** — passed under the old both-roots rule |
 | 1.7 | `MLC_CACHE` only, package installed | cache = `$MLC_CACHE`, repo = `~/MLC/envs/<hash>` | **PASS** |
 | 1.8 | empty-string / whitespace-only env vars | treated as unset (`.strip()`) | **PASS** |
 | 1.9 | relative `MLC_REPOS` | resolved to abspath once, at `Action.__init__` | **PASS** |
@@ -182,12 +190,22 @@ Simulated a pre-1.4.0 layout (`repos.json`, `local/meta.yaml`,
 `local/cache/get-legacy_1234abcd/mlc-cached-state.json`, `index_*.json`,
 `modified_times.json`) and ran with `MLC_REPOS` only.
 
+> **This section is now the *whole* of single-root back-compat, and must be
+> re-run.** When these results were recorded, `resolve_cache_path()` still fell
+> back to `$MLC_REPOS`, so 12.1–12.4 could have passed on the env var alone.
+> That fallback is gone. They should still pass, but only because
+> `_ensure_local_registered()` finds `$MLC_REPOS/local` in the existing
+> `repos.json` and the constructor derives `cache_path` from it — so a re-run
+> is what actually establishes the claim. 12.4's output now carries
+> `(from the registered local repo; set MLC_CACHE to move it)`, and the new
+> fresh-root warning must **not** fire here (there is a registered `local`).
+
 | # | Case | Expected | Result |
 |---|---|---|---|
-| 12.1 | existing cache entry still found by `mlc find cache` | yes | **PASS** |
-| 12.2 | nothing moved, no new directories | yes | **PASS** |
-| 12.3 | `repos.json` untouched | yes | **PASS** |
-| 12.4 | `mlc list repo` reports cache root == repo root | yes | **PASS** |
+| 12.1 | existing cache entry still found by `mlc find cache` | yes | **RE-RUN** — was **PASS**, but the mechanism changed |
+| 12.2 | nothing moved, no new directories | yes | **RE-RUN** — was **PASS**; the risk is a stray `~/MLC/repos/local` |
+| 12.3 | `repos.json` untouched | yes | **RE-RUN** — was **PASS** |
+| 12.4 | `mlc list repo` reports cache root == repo root | yes, now annotated `(from the registered local repo)` | **RE-RUN** — was **PASS** |
 | 12.5 | the same user later sets `MLC_CACHE` | caches move | **FAIL — D2** |
 | 12.6 | real `~/MLC/repos` unaffected by a read-only command | yes | **PASS** (mtime unchanged) |
 
@@ -405,7 +423,7 @@ actually work — see **N9**.
 | 17.4 | §4.1 `mlc add repo` of a same-uid checkout | **PASS** — checkout wins, package unregistered, shadow line printed |
 | 17.5 | §4.3 shadow announcement on every subsequent run | **PASS** — 3/3 |
 | 17.6 | §9.1 `mlcd detect,os` build context | **PASS** in the normal case — `$MLC_CACHE/local/docker/detect-os_86373`, no stray `local/` under the repo root. **FAIL in the divergent back-compat state — N3** |
-| 17.7 | §12 back-compat, `MLC_REPOS` only, pre-1.4.0 layout | **PASS** — legacy cache entry found, cache root == repo root, `local` entry untouched (`repos.json` gains only the packaged repo, by design) |
+| 17.7 | §12 back-compat, `MLC_REPOS` only, pre-1.4.0 layout | **RE-RUN** — was **PASS** (legacy cache entry found, cache root == repo root, `local` entry untouched; `repos.json` gains only the packaged repo, by design). `resolve_cache_path()` no longer falls back to `$MLC_REPOS`, so this outcome now rests entirely on the registry — see the §12 note |
 | 17.8 | §7.1 index prefix-match | **PASS** (unit-covered; `belongs_to_repo()` uses `path == repo_path or startswith(repo_path + os.sep)`) |
 | 17.9 | `env -u MLC_REPOS -u MLC_CACHE python3 -m pytest tests/ .github/scripts/ -q` | **61 passed, 1 failed.** The single failure is `.github/scripts/test_mlc_access.py::test_find_repo`, which needs `anandhu-eng@mlperf-automations` pre-pulled by CI. **No regression.** ⚠ this invocation *wrote to the developer's real `~/MLC/repos`* — see N7. |
 | 17.10 | same suite with `MLC_REPOS`/`MLC_CACHE` pinned to scratch | **58 passed, 4 failed** — the same 4 `test_mlc_access.py` tests the round-1 report described (`test_find_repo`, `test_cp_script`, `test_add_script`, `test_mv_script`), all needing CI-pulled content. Byte-identical outcome to round 1. |

@@ -219,6 +219,7 @@ python -m pytest tests/
 - Don't call `print()` for user-facing messages — use `logger.info/warning/error`
 - Don't add `.` in flat arg key names — `.` triggers nested dict parsing in `convert_args_to_dictionary()`
 - Don't push directly to `main` — open a PR; use `dev` only for urgent merges without approval
-- Don't hard-code `~/MLC/repos` — use `self.repos_path` (which reads `MLC_REPOS` env var)
+- Don't hard-code `~/MLC/repos` — there are two independent roots. Script content goes under `self.repos_path` (from `MLC_REPOS`); caches, generated scripts and docker/apptainer contexts go under `self.local_cache_path` / `self.cache_path` (from `MLC_CACHE`, or from the registered `local` repo when it is unset).
+- Don't build a cache path out of `self.repos_path` — the two roots differ whenever `MLC_CACHE` is set or `mlc-scripts` is installed, and the result is a plausible-looking directory that no repo is registered under, so nothing errors.
 - Don't edit `index_script.json` or `modified_times.json` by hand — use `mlc reindex`
 - Don't call `ScriptAutomation` directly — always go through `call_script_module_function()`

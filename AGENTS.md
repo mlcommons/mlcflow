@@ -140,13 +140,18 @@ mlcflow/
   README.md
 ```
 
-**Filesystem state managed by mlcflow at runtime:**
+**Filesystem state managed by mlcflow at runtime.** There are *two independent
+roots*, resolved separately in `mlc/action.py`. `MLC_CACHE` moves the cache and
+nothing else; `MLC_REPOS` moves the repo root and nothing else. By default both
+land on `~/MLC/repos`, so the two trees below are interleaved in one directory
+on a plain install.
+
+**Repo root** — `resolve_repos_path()`: `$MLC_REPOS`, else
+`~/MLC/envs/<hash of site-packages>` when `mlc-scripts` is installed, else
+`~/MLC/repos`.
 ```
-~/MLC/repos/                      # controlled by MLC_REPOS env var
+<repo root>/
   repos.json                      # ordered list of registered repo absolute paths
-  local/
-    meta.yaml                     # auto-created on first run
-    cache/                        # all script caches live here
   index_script.json               # tag index for scripts
   index_cache.json                # tag index for caches
   index_experiment.json
@@ -158,6 +163,24 @@ mlcflow/
                                    # mlcflow loads - edits here are invisible
                                    # to it (see "Version drift" above)
 ```
+
+**Cache root** — `resolve_cache_path()`: `$MLC_CACHE`, else `~/MLC/repos`.
+```
+<cache root>/
+  local/                          # the 'local' repo, registered in repos.json
+    meta.yaml                     # auto-created on first run
+    cache/                        # all script caches live here
+    script/                       # scripts from `mlc add script` / `mlc cp script local:...`
+    docker/, apptainer/           # generated build contexts
+```
+
+The env var is not the last word on the cache root. `_ensure_local_registered()`
+keeps an already-registered `local` repo when `MLC_CACHE` is unset, and
+`cache_path` is then derived from *that* path — which is how a pre-1.4
+single-root layout under `$MLC_REPOS` keeps working. Read the active values from
+`mlc list repo`, which prints both roots and why each is what it is; in code use
+`self.local_cache_path` / `self.cache_path`, never a path built from
+`self.repos_path`.
 
 The engine itself (`automation/script/module.py`) is resolved from the
 mlcflow install location (editable checkout or site-packages), not from

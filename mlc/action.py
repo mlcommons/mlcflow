@@ -42,27 +42,30 @@ def resolve_cache_path():
     """Resolve the cache root.
 
     1. $MLC_CACHE when set.
-    2. $MLC_REPOS when *that* is set explicitly. Before the split there was
-       one root, so anyone who pinned MLC_REPOS has their caches under it
-       today. Relocating them silently is exactly the failure this design
-       exists to avoid, so an explicit MLC_REPOS keeps its cache.
-    3. ~/MLC/repos.
+    2. ~/MLC/repos.
 
-    Note what is deliberately absent: the automatically resolved per
-    environment repo root never appears here. If it did, installing
-    mlc-scripts into a fresh environment would relocate every cached dataset
-    and the next benchmark would download all of it again.
+    MLC_CACHE is the only variable that moves the cache. MLC_REPOS names the
+    repo root and nothing else: two roots that are configured independently
+    have to be *read* independently, or the value of one silently depends on
+    a variable that does not name it.
 
-    Defaulting to ~/MLC/repos also means the shared local repo is today's
-    local repo, so nothing on disk has to move.
+    Note what is deliberately absent: the repo root never appears here, in
+    either its explicit or its automatically resolved form. If it did,
+    installing mlc-scripts into a fresh environment would relocate every
+    cached dataset and the next benchmark would download all of it again.
+
+    Existing single-root users are not carried by this function. Setting
+    MLC_REPOS alone used to place the cache under it, and the compatibility
+    that matters is handled one layer up: _ensure_local_registered() keeps an
+    already registered 'local' repo when MLC_CACHE is unset, and the
+    constructor derives cache_path from whatever that resolves to. So a
+    pre-1.4 layout under $MLC_REPOS keeps being used - the registry decides,
+    not the environment. What this default governs is a repo root with no
+    registered local yet, and there the answer is the shared ~/MLC/repos.
     """
     explicit = os.environ.get('MLC_CACHE', '').strip()
     if explicit:
         return os.path.abspath(os.path.expanduser(explicit))
-
-    explicit_repos = os.environ.get('MLC_REPOS', '').strip()
-    if explicit_repos:
-        return os.path.abspath(os.path.expanduser(explicit_repos))
 
     return os.path.join(default_mlc_root(), "repos")
 
@@ -535,6 +538,27 @@ class Action:
             if os.path.abspath(candidate_local) != chosen:
                 logger.debug(
                     f"Keeping the registered local repo at {chosen}; set MLC_CACHE to move it.")
+
+        # MLC_REPOS used to move the cache with it. It no longer does, and the
+        # difference is invisible until a download lands somewhere unexpected -
+        # usually $HOME, which is normally the reason MLC_REPOS was set at all.
+        #
+        # Keyed on the resolved roots disagreeing rather than on "nothing is
+        # registered yet": the constructor writes repos.json with the candidate
+        # in it *before* this runs, so on a genuinely fresh root the candidate
+        # is already registered by the time we get here. An upgrading
+        # single-root user, whose registry keeps the cache next to the repos,
+        # leaves the two equal and hears nothing.
+        if os.environ.get('MLC_REPOS', '').strip() \
+                and not os.environ.get('MLC_CACHE', '').strip() \
+                and os.path.realpath(os.path.dirname(chosen)) != \
+                os.path.realpath(self.repos_path):
+            chosen_cache_root = os.path.dirname(chosen)
+            logger.warning(
+                f"MLC_REPOS is set but MLC_CACHE is not, so only the repo root "
+                f"moved: repos in {self.repos_path}, cache in "
+                f"{chosen_cache_root}. Set MLC_CACHE to place the cache "
+                f"(datasets, build outputs) elsewhere.")
 
         self._create_local_repo(chosen)
 

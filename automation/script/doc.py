@@ -83,7 +83,12 @@ def get_setup_readme(script_repo):
 mkdir /mnt/$USER/MLC
 ln -s /mnt/$USER/MLC $HOME/MLC
 ```
-You can also use the `ENV` variable `MLC_REPOS` to control this location but this will need a set after every system reboot.
+You can also control the two locations separately with `ENV` variables, but these need a set after every system reboot:
+
+- `MLC_CACHE` — where cached datasets, models and build outputs go. This is the one that grows to hundreds of gigabytes, so it is the one to move when the home directory is short on space.
+- `MLC_REPOS` — where script content repositories go. Small, tens of megabytes.
+
+Setting `MLC_REPOS` alone does **not** move the cache.
 
 ## Setup
 

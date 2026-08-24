@@ -103,6 +103,10 @@ jobs:
 
         with tempfile.TemporaryDirectory() as repos_dir:
             os.environ['MLC_REPOS'] = repos_dir
+            # MLC_CACHE no longer follows MLC_REPOS. Without this the fake
+            # cache entries below are written into the real cache root and
+            # outlive this TemporaryDirectory.
+            os.environ['MLC_CACHE'] = repos_dir
 
             action = Action()
             local_cache_dir = action.local_cache_path

@@ -1,4 +1,4 @@
-from .action import Action, PACKAGE_REPO_DIST
+from .action import Action, PACKAGE_REPO_DIST, default_mlc_root
 import os
 import subprocess
 import re
@@ -955,7 +955,7 @@ class RepoAction(Action):
         # active environment, and it cannot be recovered from repos.json -
         # you have to know it before you can find the file to read. Print it.
         print(f"\nMLC_REPOS: {self.repos_path}{self._repos_path_origin()}")
-        print(f"MLC_CACHE: {self.cache_path}")
+        print(f"MLC_CACHE: {self.cache_path}{self._cache_path_origin()}")
 
         print("\nRepositories:")
         print("-------------")
@@ -973,6 +973,31 @@ class RepoAction(Action):
         if getattr(self, 'package_repo_path', None):
             version = getattr(self, 'package_repo_version', None) or 'unknown'
             return f"  (auto: mlc-scripts {version} at {self.package_repo_path})"
+        return "  (default)"
+
+    def _cache_path_origin(self):
+        """Explain why the cache root is what it is.
+
+        The middle case is the one people ask about: MLC_CACHE is unset and
+        yet the cache is not at the default. That happens because the cache
+        root is derived from the registered 'local' repo, not from the
+        environment - which is how a pre-1.4 layout under MLC_REPOS keeps
+        working. Saying so avoids the natural but wrong conclusion that
+        MLC_REPOS is still moving the cache.
+        """
+        if os.environ.get('MLC_CACHE', '').strip():
+            return "  (set by MLC_CACHE)"
+
+        # realpath on both sides, not abspath: cache_path comes back from
+        # Path.resolve() with symlinks already followed, while default_mlc_root()
+        # does a bare expanduser. Any $HOME that traverses a symlink - the norm
+        # on clusters, where /home/<user> points into a shared filesystem - then
+        # makes an untouched default look like a relocated cache.
+        default_cache_path = os.path.join(default_mlc_root(), "repos")
+        if os.path.realpath(self.cache_path) != os.path.realpath(
+                default_cache_path):
+            return "  (from the registered local repo; set MLC_CACHE to move it)"
+
         return "  (default)"
 
     def rm(self, run_args):
