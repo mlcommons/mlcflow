@@ -406,7 +406,8 @@ def validate_meta(data, file_path=""):
                 errors.append(
                     f"{prefix}docker.{dk} has type '{actual}', expected {allowed}")
 
-    # Validate apptainer section (same schema as docker; apptainer overrides docker)
+    # Validate apptainer section (same schema as docker; apptainer overrides
+    # docker)
     apptainer = data.get("apptainer")
     if isinstance(apptainer, dict):
         for ak, av in apptainer.items():
