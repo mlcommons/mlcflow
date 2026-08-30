@@ -441,6 +441,38 @@ Main Script Meta:""")
     mlc apptainer script --tags=detect,os -j
     mlca detect,os -j
 
+    Flags Available (--apptainer_X takes priority over --docker_X for each option):
+
+    1. --apptainer_rebuild / --docker_rebuild:
+       Force rebuild of the Apptainer image even if it already exists.
+
+    2. --apptainer_noregenerate / --docker_noregenerate:
+       Skip regenerating the Apptainer definition file before running.
+
+    3. --apptainer_mounts / --docker_mounts:
+       List of bind mounts to pass to the container (host:container format).
+
+    4. --apptainer_run_cmd_prefix / --docker_run_cmd_prefix:
+       Command prefix to prepend before the mlcr command inside the container.
+
+    5. --apptainer_verbose / --apptainer_v / --docker_verbose / --docker_v:
+       Enable verbose output inside the container.
+
+    6. --apptainer_silent / --apptainer_s / --docker_silent / --docker_s:
+       Enable silent output inside the container.
+
+    7. --apptainer_run_override / --docker_run_override:
+       Force apptainer execution even if 'run' is set to False in script meta.
+
+    All --docker_X options listed above are accepted as defaults when the
+    corresponding --apptainer_X option is not provided. Docker-only options
+    (e.g. --docker_dt, --docker_cache, --docker_shm_size) are not applicable
+    to Apptainer and are ignored.
+
+    Script meta.yaml keys:
+    - ``docker``: base container settings (used by both mlcd and mlca).
+    - ``apptainer``: apptainer-specific overrides; merged over ``docker`` settings.
+
         """
         return self.call_script_module_function("apptainer", run_args)
 

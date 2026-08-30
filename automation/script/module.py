@@ -151,7 +151,7 @@ class ScriptAutomation(Automation):
         for f in ['fake_deps', 'cache']:
             run_state.setdefault(f, False)
 
-        for d in ['input_mapping', 'docker', 'remote_run']:
+        for d in ['input_mapping', 'docker', 'remote_run', 'apptainer']:
             run_state.setdefault(d, {})
 
         for l in ['deps', 'post_deps', 'prehook_deps', 'posthook_deps',
@@ -5768,6 +5768,14 @@ def _apply_conditional_meta_updates(update_meta_if_env, default_env, env, const,
                                'append_lists': True,
                                'append_unique': True})
 
+        if c_meta.get('apptainer', {}):
+            if not run_state.get('apptainer', {}):
+                run_state['apptainer'] = {}
+            utils.merge_dicts({'dict1': run_state['apptainer'],
+                               'dict2': c_meta['apptainer'],
+                               'append_lists': True,
+                               'append_unique': True})
+
         c_add_deps_info = c_meta.get('ad', {})
         if not c_add_deps_info:
             c_add_deps_info = c_meta.get('add_deps', {})
@@ -5974,6 +5982,13 @@ def update_state_from_meta(meta, env, state, const, const_state, run_state, i):
                            'append_unique': True})
         if remote_run_settings.get('deps', []):
             update_deps(remote_run_settings['deps'], add_deps_info, False, env)
+
+    new_apptainer_settings = meta.get('apptainer')
+    if new_apptainer_settings:
+        utils.merge_dicts({'dict1': run_state['apptainer'],
+                           'dict2': new_apptainer_settings,
+                           'append_lists': True,
+                           'append_unique': True})
 
     new_env_keys_from_meta = meta.get('new_env_keys', [])
     if new_env_keys_from_meta:

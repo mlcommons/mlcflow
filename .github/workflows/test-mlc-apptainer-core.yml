@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/test-mlc-apptainer-core.yml'
       - 'mlc/**'
+      - 'automation/**'
       - 'tests/**'
       - 'pyproject.toml'
       - '!**.md'

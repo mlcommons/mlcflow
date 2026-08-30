@@ -86,6 +86,7 @@ TOP_LEVEL_SCHEMA = {
 
     # Docker
     "docker": DICT,        # dict - see DOCKER_SCHEMA
+    "apptainer": DICT,     # dict - apptainer overrides; merges with docker settings
 
     # Output / debugging
     "print_env_at_the_end": DICT,        # dict[str, list[str]]
@@ -164,6 +165,7 @@ VARIATION_ENTRY_SCHEMA = {
     "state": DICT,
     "const": DICT,
     "docker": DICT,
+    "apptainer": DICT,
     "alias": STR,
     "default_version": STR_OR_FLOAT,
     "required_disk_space": INT,
@@ -248,6 +250,7 @@ UPDATE_META_IF_ENV_SCHEMA = {
     "default_env": DICT,
     "default_variations": DICT,
     "docker": DICT,
+    "apptainer": DICT,
     "adr": DICT,
     "ad": DICT,
 }
@@ -402,6 +405,20 @@ def validate_meta(data, file_path=""):
             if actual not in allowed:
                 errors.append(
                     f"{prefix}docker.{dk} has type '{actual}', expected {allowed}")
+
+    # Validate apptainer section (same schema as docker; apptainer overrides docker)
+    apptainer = data.get("apptainer")
+    if isinstance(apptainer, dict):
+        for ak, av in apptainer.items():
+            if ak not in DOCKER_SCHEMA:
+                warnings.append(
+                    f"{prefix}apptainer: unknown key '{ak}'")
+                continue
+            actual = type(av).__name__
+            allowed = DOCKER_SCHEMA[ak]
+            if actual not in allowed:
+                errors.append(
+                    f"{prefix}apptainer.{ak} has type '{actual}', expected {allowed}")
 
     # Validate tests section
     tests = data.get("tests")
