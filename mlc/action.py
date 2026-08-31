@@ -38,36 +38,71 @@ def default_mlc_root():
     return os.path.join(os.path.expanduser("~"), "MLC")
 
 
-def resolve_cache_path():
+def shared_root():
+    """The single directory both roots defaulted to before per-environment
+    resolution, and the value to hand a user who wants that back.
+
+    Named rather than repeated because it now means something - "the shared
+    root", as opposed to a per environment one - and because the orphaned
+    cache notice has to print exactly the path MLC_CACHE should be set to.
+    """
+    return os.path.join(default_mlc_root(), "repos")
+
+
+def resolve_cache_path(package_repo_path):
     """Resolve the cache root.
 
     1. $MLC_CACHE when set.
-    2. ~/MLC/repos.
+    2. ~/MLC/envs/<hash of site-packages> when mlc-scripts is installed in
+       the running interpreter.
+    3. ~/MLC/repos.
 
-    MLC_CACHE is the only variable that moves the cache. MLC_REPOS names the
-    repo root and nothing else: two roots that are configured independently
-    have to be *read* independently, or the value of one silently depends on
-    a variable that does not name it.
+    Structurally identical to resolve_repos_path() and deliberately so: the
+    cache follows the environment for the same reason the repo root does.
+    Script *content* is already per environment, and cache matching is keyed
+    on tags and an optional meta.yaml 'version' (see cache_utils.py
+    prepare_cache_tags / is_cached_entry_valid), never on what the script
+    actually does. So two environments running different mlc-scripts versions
+    against one shared cache silently reuse each other's entries whenever an
+    author forgot to bump 'version' - a stale hit with no error, which is the
+    failure mode that quietly corrupts a submission.
 
-    Note what is deliberately absent: the repo root never appears here, in
-    either its explicit or its automatically resolved form. If it did,
-    installing mlc-scripts into a fresh environment would relocate every
-    cached dataset and the next benchmark would download all of it again.
+    MLC_REPOS is still not read here, in either its explicit or its resolved
+    form. The two roots remain independently configured: MLC_CACHE moves one,
+    MLC_REPOS the other, and neither consults the other's variable. What
+    changed is only that they now share a *default*.
 
-    Existing single-root users are not carried by this function. Setting
-    MLC_REPOS alone used to place the cache under it, and the compatibility
-    that matters is handled one layer up: _ensure_local_registered() keeps an
-    already registered 'local' repo when MLC_CACHE is unset, and the
-    constructor derives cache_path from whatever that resolves to. So a
-    pre-1.4 layout under $MLC_REPOS keeps being used - the registry decides,
-    not the environment. What this default governs is a repo root with no
-    registered local yet, and there the answer is the shared ~/MLC/repos.
+    The cost is real and accepted: a fresh environment starts with an empty
+    cache and re-downloads its datasets, and N environments cost N caches.
+    MLC_CACHE is the documented way to opt back into sharing, and
+    _warn_orphaned_legacy_cache() points at it when a populated cache is
+    about to go unused.
+
+    Existing single-root users are not carried by this function. The
+    compatibility that matters is handled one layer up:
+    _ensure_local_registered() keeps an already registered 'local' repo when
+    MLC_CACHE is unset, and the constructor derives cache_path from whatever
+    that resolves to. So a pre-1.4 layout under $MLC_REPOS keeps being used -
+    the registry decides, not the environment.
+
+    package_repo_path is mandatory on purpose. A default would let a partial
+    revert of the resolution order in Action.__init__ silently restore the
+    shared cache for everyone; without one it is a TypeError.
     """
     explicit = os.environ.get('MLC_CACHE', '').strip()
     if explicit:
         return os.path.abspath(os.path.expanduser(explicit))
 
-    return os.path.join(default_mlc_root(), "repos")
+    if package_repo_path:
+        # abspath before dirname, matching resolve_repos_path: dirname of a
+        # trailing-slash path keeps the last component, which would hash the
+        # package dir here and the site-packages dir there - two different
+        # roots, one of them without a repos.json.
+        site_packages = os.path.dirname(os.path.abspath(package_repo_path))
+        return os.path.join(
+            default_mlc_root(), "envs", environment_key(site_packages))
+
+    return shared_root()
 
 
 def find_package_repo():
@@ -160,7 +195,7 @@ def resolve_repos_path(package_repo_path):
        checkout registered there displaces the packaged copy.
     2. ~/MLC/envs/<hash of site-packages> when mlc-scripts is installed in
        the running interpreter.
-    3. ~/MLC/repos, today's default.
+    3. ~/MLC/repos, the shared default.
     """
     explicit = os.environ.get('MLC_REPOS', '').strip()
     if explicit:
@@ -171,7 +206,7 @@ def resolve_repos_path(package_repo_path):
         return os.path.join(
             default_mlc_root(), "envs", environment_key(site_packages))
 
-    return os.path.join(default_mlc_root(), "repos")
+    return shared_root()
 
 
 # Base class for actions
@@ -185,6 +220,11 @@ class Action:
     local_repo = None
     current_repo_path = None
     repos = []  # list of Repo objects
+    # Set for real in _ensure_local_registered(). A class attribute so a
+    # subclass that never runs __init__ still reads False rather than raising -
+    # but note RepoAction copies vars(parent), which carries instance
+    # attributes only, so readers must still use getattr with a default.
+    cache_path_from_registry = False
 
     # Main access function to simulate a Python interface for CLI
     def access(self, options):
@@ -392,21 +432,25 @@ class Action:
         setup_logging(log_path=os.getcwd(), log_file='.mlc-log.txt')
         self.logger = logger
 
-        # Two roots, resolved on two independent chains. The repo root may
-        # vary per environment; the cache root does not vary with it.
-        self.cache_path = resolve_cache_path()
+        # Two roots, resolved on two independent chains. Both may vary per
+        # environment; what matters is that they vary *independently* -
+        # MLC_CACHE moves one, MLC_REPOS the other, and neither resolver
+        # reads the other's variable. The package lookup comes first because
+        # both chains take it as their middle tier.
         self.package_repo_path, self.package_repo_version = find_package_repo()
         self.repos_path = resolve_repos_path(self.package_repo_path)
+        self.cache_path = resolve_cache_path(self.package_repo_path)
 
         os.makedirs(self.repos_path, exist_ok=True)
 
-        # The local repo always lives under the cache root, never under the
-        # per environment repo root. Cache entries are *items* of this repo -
-        # Action.add() resolves their destination through the registry, not
-        # through a path variable - so this is what makes MLC_CACHE
-        # authoritative. Experiments and scripts from `mlc add script` come
-        # along, which is intended: authored work should not disappear when
-        # you switch environments.
+        # The local repo lives under the *cache* root. Normally that is the
+        # same directory as the repo root, but it is the cache root that
+        # decides, which is what keeps MLC_CACHE authoritative when it points
+        # somewhere the repo root does not. Cache entries are *items* of this
+        # repo - Action.add() resolves their destination through the registry,
+        # not through a path variable. Experiments and scripts from
+        # `mlc add script` come along, which is intended: authored work should
+        # not disappear when you switch environments.
         candidate_local = str(
             Path(os.path.join(self.cache_path, 'local')).expanduser().resolve())
 
@@ -440,7 +484,98 @@ class Action:
         if not os.path.exists(self.local_cache_path):
             os.makedirs(self.local_cache_path, exist_ok=True)
 
+        # Before _sync_package_repo(), so the notice is not buried under its
+        # "Using ... shadowing ..." chatter, and after local_cache_path exists
+        # because the check reads it.
+        self._warn_orphaned_legacy_cache()
+
         self._sync_package_repo()
+
+    @staticmethod
+    def _has_cache_entries(path):
+        """True if path holds at least one cache entry directory.
+
+        scandir with an early exit rather than listdir: a long lived cache
+        holds hundreds of entries and this runs in the constructor of every
+        command.
+        """
+        try:
+            with os.scandir(path) as it:
+                return any(entry.is_dir() for entry in it)
+        except OSError:
+            return False
+
+    def _warn_orphaned_legacy_cache(self):
+        """Say once that a populated shared cache is no longer being used.
+
+        Until the cache root became per environment, installing mlc-scripts
+        moved only the repo root and the cache stayed in ~/MLC/repos - so this
+        directory exists, populated, for essentially every current mlc-scripts
+        user. Now their next command resolves a fresh, empty cache root and
+        would re-download everything with no explanation. Hence the notice.
+
+        It cannot be fixed by preferring the old path instead:
+        _ensure_local_registered() reads the registry of the *active* repo
+        root, and the legacy local is recorded in a different repos.json that
+        this code path never opens. Reading it would re-couple the two roots
+        through a third path. So: warn, and leave the choice to the user.
+
+        Non-destructive by construction. Nothing is moved, copied or deleted,
+        and the old root stays usable as-is - its repos.json and
+        index_cache.json are intact and self-consistent, so the escape hatch
+        needs no migration step. Saying so is the point; a user who thinks
+        data was lost will not trust the suggestion.
+
+        Guards are ordered cheapest-first, so the steady state costs one stat
+        and an already-active environment never reads ~/MLC/repos at all.
+        """
+        if os.environ.get('MLC_CACHE', '').strip():
+            return                      # explicitly chosen; needs no advice
+        if not getattr(self, 'package_repo_path', None):
+            return                      # not an automatic per environment root
+        if getattr(self, 'cache_path_from_registry', False):
+            return                      # the registry chose, not the resolver
+
+        legacy_cache = os.path.join(shared_root(), 'local', 'cache')
+        try:
+            if os.path.realpath(legacy_cache) == os.path.realpath(
+                    self.local_cache_path):
+                return                  # already the same directory
+        except OSError:
+            return
+
+        marker = os.path.join(self.cache_path, '.mlc-legacy-cache-notice')
+        if os.path.exists(marker):
+            return                      # said once already
+
+        # This environment's own cache first: once it has entries the notice is
+        # moot, and checking it first means an active environment does not
+        # touch the legacy path.
+        if self._has_cache_entries(self.local_cache_path):
+            return
+        if not self._has_cache_entries(legacy_cache):
+            return                      # nothing is orphaned
+
+        logger.warning(
+            f"This environment has its own cache root at {self.cache_path}, "
+            f"resolved from the {PACKAGE_REPO_DIST} install at "
+            f"{self.package_repo_path}, and it is empty - while {legacy_cache} "
+            f"still holds cached entries. Nothing has been moved or deleted, "
+            f"but this environment will not reuse them and will download "
+            f"again. To keep using the shared cache, set "
+            f"MLC_CACHE={shared_root()}. Said once per cache root; "
+            f"`mlc list repo` prints the active roots.")
+
+        # A marker, not the emptiness check alone: read-only commands never
+        # populate the cache, so `mlc list repo` would otherwise warn every
+        # time until the user's first real run.
+        try:
+            with open(marker, 'w') as f:
+                json.dump({'legacy_cache': legacy_cache,
+                           'cache_path': self.cache_path}, f, indent=2)
+        except OSError as e:
+            logger.debug(
+                f"Could not write {marker} ({e}); the notice will repeat.")
 
     def _create_local_repo(self, local_repo_path):
         """Create the local repo directory and its meta if absent."""
@@ -531,17 +666,28 @@ class Action:
         registered_locals = [repo.path for repo in self.repos
                              if repo.meta.get('alias') == 'local']
 
+        self.cache_path_from_registry = False
+
         if os.environ.get('MLC_CACHE', '').strip() or not registered_locals:
             chosen = os.path.abspath(candidate_local)
         else:
             chosen = os.path.abspath(registered_locals[0])
             if os.path.abspath(candidate_local) != chosen:
+                # The registry, not the resolver, decided the cache root.
+                # Recorded here rather than re-derived later: __init__
+                # overwrites cache_path from this result, after which no
+                # comparison of paths or environment variables can tell this
+                # case apart from an automatically resolved per environment
+                # root. _cache_path_origin() reads the flag.
+                self.cache_path_from_registry = True
                 logger.debug(
                     f"Keeping the registered local repo at {chosen}; set MLC_CACHE to move it.")
 
-        # MLC_REPOS used to move the cache with it. It no longer does, and the
-        # difference is invisible until a download lands somewhere unexpected -
-        # usually $HOME, which is normally the reason MLC_REPOS was set at all.
+        # Both roots are resolved independently, so setting only MLC_REPOS
+        # leaves the cache wherever *its* chain put it - and with mlc-scripts
+        # installed that is a hashed directory the user never named. Saying
+        # which one went where is the whole point; a download landing
+        # somewhere unexpected is otherwise the first symptom.
         #
         # Keyed on the resolved roots disagreeing rather than on "nothing is
         # registered yet": the constructor writes repos.json with the candidate
@@ -554,11 +700,16 @@ class Action:
                 and os.path.realpath(os.path.dirname(chosen)) != \
                 os.path.realpath(self.repos_path):
             chosen_cache_root = os.path.dirname(chosen)
+            if getattr(self, 'package_repo_path', None):
+                source = (f"resolved from the {PACKAGE_REPO_DIST} install in "
+                          f"this environment")
+            else:
+                source = "the shared default"
             logger.warning(
-                f"MLC_REPOS is set but MLC_CACHE is not, so only the repo root "
-                f"moved: repos in {self.repos_path}, cache in "
-                f"{chosen_cache_root}. Set MLC_CACHE to place the cache "
-                f"(datasets, build outputs) elsewhere.")
+                f"MLC_REPOS is set but MLC_CACHE is not, and the two roots are "
+                f"resolved independently: repos in {self.repos_path}, cache in "
+                f"{chosen_cache_root} ({source}). Set MLC_CACHE to place the "
+                f"cache (datasets, build outputs) yourself.")
 
         self._create_local_repo(chosen)
 

@@ -90,6 +90,14 @@ You can also control the two locations separately with `ENV` variables, but thes
 
 Setting `MLC_REPOS` alone does **not** move the cache.
 
+When `mlc-scripts` is installed, both default to a per-environment directory
+(`$HOME/MLC/envs/<hash>`) instead of `$HOME/MLC/repos`, so each Python environment
+gets its own cache and one environment cannot reuse a stale entry produced by a
+different `mlc-scripts` version. If you would rather share one cache across
+environments — to avoid re-downloading large datasets — set
+`MLC_CACHE=$HOME/MLC/repos` (or any other shared path) in each of them. Run
+`mlc list repo` to see the active roots and why each is what it is.
+
 ## Setup
 
 If you are not on a Python development environment please refer to the [official docs](https://docs.mlcommons.org/mlcflow/install/) for the installation.

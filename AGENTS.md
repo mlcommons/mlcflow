@@ -142,9 +142,11 @@ mlcflow/
 
 **Filesystem state managed by mlcflow at runtime.** There are *two independent
 roots*, resolved separately in `mlc/action.py`. `MLC_CACHE` moves the cache and
-nothing else; `MLC_REPOS` moves the repo root and nothing else. By default both
-land on `~/MLC/repos`, so the two trees below are interleaved in one directory
-on a plain install.
+nothing else; `MLC_REPOS` moves the repo root and nothing else — neither
+resolver reads the other's variable. Below the env vars both fall back to the
+same automatic tier, so on a plain install the two trees below are interleaved
+in one directory: `~/MLC/envs/<hash>` when `mlc-scripts` is installed,
+`~/MLC/repos` when it is not.
 
 **Repo root** — `resolve_repos_path()`: `$MLC_REPOS`, else
 `~/MLC/envs/<hash of site-packages>` when `mlc-scripts` is installed, else
@@ -164,7 +166,16 @@ on a plain install.
                                    # to it (see "Version drift" above)
 ```
 
-**Cache root** — `resolve_cache_path()`: `$MLC_CACHE`, else `~/MLC/repos`.
+**Cache root** — `resolve_cache_path()`: `$MLC_CACHE`, else
+`~/MLC/envs/<hash of site-packages>` when `mlc-scripts` is installed, else
+`~/MLC/repos`. Deliberately symmetric with the repo root: script content is
+already per environment, while cache matching is keyed only on tags and an
+optional `meta.yaml` `version`, so two environments on different `mlc-scripts`
+versions sharing one cache silently reuse each other's entries whenever an
+author forgot to bump `version`. The cost — a fresh environment re-downloads
+its datasets, and N environments cost N caches — is accepted; `MLC_CACHE` is
+the opt-out, and `_warn_orphaned_legacy_cache()` points at it once when a
+populated cache is about to go unused.
 ```
 <cache root>/
   local/                          # the 'local' repo, registered in repos.json
@@ -177,9 +188,14 @@ on a plain install.
 The env var is not the last word on the cache root. `_ensure_local_registered()`
 keeps an already-registered `local` repo when `MLC_CACHE` is unset, and
 `cache_path` is then derived from *that* path — which is how a pre-1.4
-single-root layout under `$MLC_REPOS` keeps working. Read the active values from
-`mlc list repo`, which prints both roots and why each is what it is; in code use
-`self.local_cache_path` / `self.cache_path`, never a path built from
+single-root layout under `$MLC_REPOS` keeps working, and it overrides the
+per-environment tier too. When that happens the method records
+`cache_path_from_registry`, because `__init__` overwrites `cache_path` from the
+result and afterwards no comparison of paths or env vars can tell a
+registry-preserved root from an automatically resolved one —
+`_cache_path_origin()` reads the flag rather than guessing. Read the active
+values from `mlc list repo`, which prints both roots and why each is what it is;
+in code use `self.local_cache_path` / `self.cache_path`, never a path built from
 `self.repos_path`.
 
 The engine itself (`automation/script/module.py`) is resolved from the

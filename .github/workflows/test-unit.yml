@@ -8,6 +8,10 @@ on:
     branches: [ "main", "dev" ]
     paths:
       - 'mlc/**'
+      # The bundled engine is covered by tests/ too - cache path rewriting and
+      # the host/container path mapping in particular - so a change here has to
+      # run them.
+      - 'automation/**'
       - 'tests/**'
       - '.github/workflows/test-unit.yml'
       - 'pyproject.toml'
@@ -15,6 +19,10 @@ on:
     branches: [ "main", "dev" ]
     paths:
       - 'mlc/**'
+      # The bundled engine is covered by tests/ too - cache path rewriting and
+      # the host/container path mapping in particular - so a change here has to
+      # run them.
+      - 'automation/**'
       - 'tests/**'
       - '.github/workflows/test-unit.yml'
       - 'pyproject.toml'

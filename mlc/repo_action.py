@@ -1,4 +1,4 @@
-from .action import Action, PACKAGE_REPO_DIST, default_mlc_root
+from .action import Action, PACKAGE_REPO_DIST
 import os
 import subprocess
 import re
@@ -978,25 +978,29 @@ class RepoAction(Action):
     def _cache_path_origin(self):
         """Explain why the cache root is what it is.
 
-        The middle case is the one people ask about: MLC_CACHE is unset and
-        yet the cache is not at the default. That happens because the cache
-        root is derived from the registered 'local' repo, not from the
-        environment - which is how a pre-1.4 layout under MLC_REPOS keeps
-        working. Saying so avoids the natural but wrong conclusion that
-        MLC_REPOS is still moving the cache.
+        Four answers, and the order is load-bearing. The registry can override
+        the resolved value - Action.__init__ re-derives cache_path from the
+        local repo that _ensure_local_registered() settled on - so "was it
+        overridden?" has to be asked before "how was it resolved?". Ask them
+        the other way round and a pre-1.4 layout kept alive by the registry
+        gets reported as a per-environment root it is not in.
+
+        The old comparison against ~/MLC/repos is gone. It was a proxy for the
+        override, and per-environment resolution broke the proxy: a fresh per
+        environment cache also differs from ~/MLC/repos, so an ordinary
+        packaged install was reported as coming from the registry. The flag is
+        exact, which incidentally retires the symlinked-$HOME fragility that
+        comparison needed a paragraph to defend.
         """
         if os.environ.get('MLC_CACHE', '').strip():
             return "  (set by MLC_CACHE)"
 
-        # realpath on both sides, not abspath: cache_path comes back from
-        # Path.resolve() with symlinks already followed, while default_mlc_root()
-        # does a bare expanduser. Any $HOME that traverses a symlink - the norm
-        # on clusters, where /home/<user> points into a shared filesystem - then
-        # makes an untouched default look like a relocated cache.
-        default_cache_path = os.path.join(default_mlc_root(), "repos")
-        if os.path.realpath(self.cache_path) != os.path.realpath(
-                default_cache_path):
+        if getattr(self, 'cache_path_from_registry', False):
             return "  (from the registered local repo; set MLC_CACHE to move it)"
+
+        if getattr(self, 'package_repo_path', None):
+            version = getattr(self, 'package_repo_version', None) or 'unknown'
+            return f"  (auto: mlc-scripts {version} at {self.package_repo_path})"
 
         return "  (default)"
 

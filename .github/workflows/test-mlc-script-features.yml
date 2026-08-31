@@ -103,9 +103,10 @@ jobs:
 
         with tempfile.TemporaryDirectory() as repos_dir:
             os.environ['MLC_REPOS'] = repos_dir
-            # MLC_CACHE no longer follows MLC_REPOS. Without this the fake
-            # cache entries below are written into the real cache root and
-            # outlive this TemporaryDirectory.
+            # MLC_CACHE does not follow MLC_REPOS, and when mlc-scripts is
+            # installed it defaults to a per-environment root instead. Without
+            # this the fake cache entries below are written into the real cache
+            # root and outlive this TemporaryDirectory.
             os.environ['MLC_CACHE'] = repos_dir
 
             action = Action()

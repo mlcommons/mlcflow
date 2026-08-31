@@ -257,6 +257,14 @@ deactivate
 - **Automation Repository**: `~/MLC/repos/mlcommons@mlperf-automations/`
 - **MLC Cache**: `~/MLC/repos/`
 
+If `mlc-scripts` is installed in the environment, both the automation
+repositories and the cache live under a per-environment directory
+(`~/MLC/envs/<hash>/`) instead of `~/MLC/repos/`, so each Python environment
+keeps its own. Run `mlc list repo` to print the active locations. To share one
+cache across environments and avoid re-downloading large datasets, set
+`MLC_CACHE` to the same path in each — for example `export
+MLC_CACHE=$HOME/MLC/repos`.
+
 If the requested virtual environment directory already exists but was created
 for a different platform or Python minor version, the installer will keep the
 existing directory untouched and create or reuse a compatible sibling such as
