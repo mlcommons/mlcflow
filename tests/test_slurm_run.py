@@ -510,6 +510,84 @@ class TestRemoteRunIsPath(unittest.TestCase):
         finally:
             os.unlink(local_path)
 
+    def test_env_keys_to_copy_via_run_input(self):
+        """When env_keys_to_copy is set in remote_run meta, and env is empty
+        (as it is when called directly via mlcrr), the path must be resolved
+        from run_input via input_mapping and the file must still be copied."""
+        from unittest.mock import patch, MagicMock
+        from script.remote_run import remote_run
+
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            local_path = tmp.name
+        try:
+            meta = {
+                'tags': ['my', 'script'],
+                'alias': 'my-script',
+                'uid': '0' * 16,
+                'input_mapping': {'myinput': 'MLC_MY_FILE'},
+            }
+            mock_self = MagicMock()
+            mock_self._select_script.return_value = {
+                'return': 0,
+                'script': MagicMock(meta=meta, path='/fake/path')
+            }
+            mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+                'return': 0}
+            # Simulate mlcrr: env is empty (not pre-populated by full run pipeline)
+            mock_self.run_state = {'remote_run': {'env_keys_to_copy': ['MLC_MY_FILE']}}
+            mock_self.env = {}
+            mock_self.state = {}
+            mock_self.logger = MagicMock()
+
+            captured_access_input = {}
+
+            def fake_access(input_dict):
+                captured_access_input.update(input_dict)
+                return {'return': 0}
+
+            mock_self.action_object = MagicMock()
+            mock_self.action_object.access.side_effect = fake_access
+
+            regenerate_calls = []
+
+            def fake_regenerate(i_arg):
+                regenerate_calls.append(i_arg)
+                return {'return': 0, 'run_cmd_string': 'mlcr my,script'}
+
+            with patch('script.remote_run.call_remote_run_prepare',
+                       return_value={'return': 0, 'files_to_copy': [], 'remote_env': {}}), \
+                    patch('script.remote_run.regenerate_script_cmd',
+                          side_effect=fake_regenerate), \
+                    patch('script.remote_run._get_local_installer', return_value='/bin/true'), \
+                    patch('script.remote_run.build_venv_activation_command',
+                          return_value='true'), \
+                    patch('script.remote_run.prune_input',
+                          return_value={'return': 0, 'new_input': {
+                              'tags': 'my,script',
+                              'mlc_run_cmd': 'mlcrr my,script',
+                              'myinput': local_path,
+                          }}):
+                args = {
+                    'tags': 'my,script',
+                    'mlc_run_cmd': 'mlcrr my,script',
+                    'myinput': local_path,
+                    'env': {},
+                }
+                result = remote_run(mock_self, args)
+
+            self.assertEqual(result['return'], 0)
+            files_to_copy = captured_access_input.get('files_to_copy', [])
+            self.assertIn(local_path, files_to_copy,
+                          "env_keys_to_copy file must be queued for transfer via run_input fallback")
+            # run_input key must be replaced with the remote path
+            self.assertTrue(regenerate_calls)
+            run_cmd = regenerate_calls[0]['run_cmd']
+            remote_expected = 'mlc-remote-artifacts/' + os.path.basename(local_path)
+            self.assertEqual(run_cmd.get('myinput'), remote_expected,
+                             "Input mapped to env_keys_to_copy must point to remote copy directory")
+        finally:
+            os.unlink(local_path)
+
 
 # ---------------------------------------------------------------------------
 # slurm_run.regenerate_script_cmd — slurm_action → mlc command mapping

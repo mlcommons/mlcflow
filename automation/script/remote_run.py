@@ -217,15 +217,31 @@ def remote_run(self_module, i):
     input_mapping = meta.get('input_mapping', {})
     input_description = meta.get('input_description', {})
 
+    # Reverse map: env_var -> input key (from input_mapping)
+    env_to_input_key = {v: k for k, v in input_mapping.items()}
+
     for key in env_keys_to_copy:
+        local_path = None
+
+        # First try env dict (populated when running through the full pipeline)
         if key in env and os.path.exists(env[key]):
+            local_path = env[key]
+        else:
+            # When called directly via mlcrr, env may not be populated yet.
+            # Fall back to run_input via input_mapping (input_key -> env_key).
+            input_key = env_to_input_key.get(key)
+            if input_key and input_key in run_input and os.path.exists(
+                    str(run_input[input_key])):
+                local_path = str(run_input[input_key])
+
+        if local_path:
             # the files_to_copy list contains the path to files in host
-            files_to_copy.append(env[key])
+            files_to_copy.append(local_path)
             # Use forward slashes for remote path (Unix/Linux servers)
             remote_env[key] = remote_copy_directory_for_cmd + "/" + \
-                os.path.basename(
-                env[key])  # if host path is /home/user/file.txt, remote path will be mlc-remote-artifacts/file.txt
+                os.path.basename(local_path)
 
+            # Update run_input for any input that maps to this env key
             for k, value in input_mapping.items():
                 if value == key and k in run_input:
                     run_input[k] = remote_env[key]
@@ -233,12 +249,15 @@ def remote_run(self_module, i):
     # Handle inputs marked with is_path: true in input_description.
     # These inputs contain local paths that must be copied to the remote
     # machine and replaced with the corresponding remote path in run_input.
+    # This covers inputs that have no corresponding env_keys_to_copy entry.
+    already_queued = set(files_to_copy)
     for key, desc in input_description.items():
         if str(desc.get('is_path', '')).lower() in ['1', 'yes', 'on', 'true']:
             if key in run_input:
                 local_path = str(run_input[key])
-                if os.path.exists(local_path):
+                if os.path.exists(local_path) and local_path not in already_queued:
                     files_to_copy.append(local_path)
+                    already_queued.add(local_path)
                     run_input[key] = remote_copy_directory_for_cmd + \
                         "/" + os.path.basename(local_path)
 
