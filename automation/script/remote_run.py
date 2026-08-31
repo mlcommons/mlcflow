@@ -215,6 +215,7 @@ def remote_run(self_module, i):
 
     env_keys_to_copy = remote_run_settings.get('env_keys_to_copy', [])
     input_mapping = meta.get('input_mapping', {})
+    input_description = meta.get('input_description', {})
 
     for key in env_keys_to_copy:
         if key in env and os.path.exists(env[key]):
@@ -228,6 +229,18 @@ def remote_run(self_module, i):
             for k, value in input_mapping.items():
                 if value == key and k in run_input:
                     run_input[k] = remote_env[key]
+
+    # Handle inputs marked with is_path: true in input_description.
+    # These inputs contain local paths that must be copied to the remote
+    # machine and replaced with the corresponding remote path in run_input.
+    for key, desc in input_description.items():
+        if str(desc.get('is_path', '')).lower() in ['1', 'yes', 'on', 'true']:
+            if key in run_input:
+                local_path = str(run_input[key])
+                if os.path.exists(local_path):
+                    files_to_copy.append(local_path)
+                    run_input[key] = remote_copy_directory_for_cmd + \
+                        "/" + os.path.basename(local_path)
 
     i_copy = copy.deepcopy(i)
     i_copy['run_cmd'] = run_input

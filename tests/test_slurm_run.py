@@ -378,6 +378,140 @@ class TestRemoteRunIsolation(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# remote_run: is_path input handling — files must be copied to remote
+# ---------------------------------------------------------------------------
+class TestRemoteRunIsPath(unittest.TestCase):
+    """Verify that inputs marked is_path:true are copied to the remote host."""
+
+    def _invoke_remote_run_with_is_path(self, local_path, is_path_value='true',
+                                        remote_copy_directory='mlc-remote-artifacts'):
+        """
+        Run a mocked remote_run where the script declares one input with
+        is_path set and that input points to *local_path*.
+
+        Returns (result, captured_access_input, regenerate_call_args).
+        regenerate_call_args is the ``i`` argument passed to regenerate_script_cmd.
+        """
+        from unittest.mock import patch, MagicMock, call
+        from script.remote_run import remote_run
+
+        meta = {
+            'tags': ['detect', 'os'],
+            'alias': 'detect-os',
+            'uid': '0' * 16,
+            'input_description': {
+                'myinput': {'is_path': is_path_value}
+            },
+        }
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(meta=meta, path='/fake/path')
+        }
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.run_state = {'remote_run': {}}
+        mock_self.env = {}
+        mock_self.state = {}
+        mock_self.logger = MagicMock()
+
+        captured_access_input = {}
+
+        def fake_access(input_dict):
+            captured_access_input.update(input_dict)
+            return {'return': 0}
+
+        mock_self.action_object = MagicMock()
+        mock_self.action_object.access.side_effect = fake_access
+
+        regenerate_calls = []
+
+        def fake_regenerate(i_arg):
+            regenerate_calls.append(i_arg)
+            return {'return': 0, 'run_cmd_string': 'mlcr detect,os'}
+
+        with patch('script.remote_run.call_remote_run_prepare',
+                   return_value={'return': 0, 'files_to_copy': [], 'remote_env': {}}), \
+                patch('script.remote_run.regenerate_script_cmd',
+                      side_effect=fake_regenerate), \
+                patch('script.remote_run._get_local_installer', return_value='/bin/true'), \
+                patch('script.remote_run.build_venv_activation_command',
+                      return_value='true'), \
+                patch('script.remote_run.prune_input',
+                      return_value={'return': 0, 'new_input': {
+                          'tags': 'detect,os',
+                          'mlc_run_cmd': 'mlcr detect,os',
+                          'myinput': local_path,
+                      }}):
+            args = {
+                'tags': 'detect,os',
+                'mlc_run_cmd': 'mlcr detect,os',
+                'myinput': local_path,
+                'env': {},
+                'remote_copy_directory': remote_copy_directory,
+            }
+            result = remote_run(mock_self, args)
+
+        return result, captured_access_input, regenerate_calls
+
+    def test_is_path_file_added_to_files_to_copy(self):
+        """When an input has is_path:true and points to an existing file, it
+        must be added to files_to_copy so it is transferred to the remote."""
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            local_path = tmp.name
+        try:
+            result, captured, _ = self._invoke_remote_run_with_is_path(local_path)
+            self.assertEqual(result['return'], 0)
+            files_to_copy = captured.get('files_to_copy', [])
+            self.assertIn(local_path, files_to_copy,
+                          "Local is_path file must be queued for transfer to remote")
+        finally:
+            os.unlink(local_path)
+
+    def test_is_path_run_input_replaced_with_remote_path(self):
+        """When an input has is_path:true, run_input[key] must be replaced
+        with the remote copy-directory path before rebuilding the command."""
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            local_path = tmp.name
+        try:
+            result, _, regenerate_calls = self._invoke_remote_run_with_is_path(
+                local_path, remote_copy_directory='mlc-remote-artifacts')
+            self.assertEqual(result['return'], 0)
+            self.assertTrue(regenerate_calls, "regenerate_script_cmd must be called")
+            run_cmd = regenerate_calls[0]['run_cmd']
+            remote_expected = 'mlc-remote-artifacts/' + os.path.basename(local_path)
+            self.assertEqual(run_cmd.get('myinput'), remote_expected,
+                             "is_path input must point to remote copy directory")
+        finally:
+            os.unlink(local_path)
+
+    def test_is_path_nonexistent_path_not_copied(self):
+        """If the is_path value does not exist on disk, it must not be added
+        to files_to_copy (no crash, no spurious transfer attempt)."""
+        nonexistent = '/does/not/exist/file.txt'
+        result, captured, _ = self._invoke_remote_run_with_is_path(nonexistent)
+        self.assertEqual(result['return'], 0)
+        files_to_copy = captured.get('files_to_copy', [])
+        self.assertNotIn(nonexistent, files_to_copy,
+                         "Non-existent is_path value must not be added to files_to_copy")
+
+    def test_is_path_false_not_copied(self):
+        """If is_path is false (or absent), the input must not trigger a copy."""
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            local_path = tmp.name
+        try:
+            result, captured, _ = self._invoke_remote_run_with_is_path(
+                local_path, is_path_value='false')
+            self.assertEqual(result['return'], 0)
+            files_to_copy = captured.get('files_to_copy', [])
+            self.assertNotIn(local_path, files_to_copy,
+                             "Input with is_path:false must not be copied")
+        finally:
+            os.unlink(local_path)
+
+
+# ---------------------------------------------------------------------------
 # slurm_run.regenerate_script_cmd — slurm_action → mlc command mapping
 # ---------------------------------------------------------------------------
 class TestSlurmRunCmdGeneration(unittest.TestCase):
