@@ -222,7 +222,8 @@ def remote_run(self_module, i):
     # update_env_from_input_mapping.  Apply it here so env_keys_to_copy can
     # find the mapped env values (including is_path-expanded absolute paths).
     from script.module import update_env_from_input_mapping
-    update_env_from_input_mapping(env, run_input, input_mapping, input_description)
+    update_env_from_input_mapping(
+        env, run_input, input_mapping, input_description)
 
     for key in env_keys_to_copy:
         if key in env and os.path.exists(env[key]):
@@ -246,7 +247,8 @@ def remote_run(self_module, i):
         if str(desc.get('is_path', '')).lower() in ['1', 'yes', 'on', 'true']:
             if key in run_input:
                 local_path = str(run_input[key])
-                if os.path.exists(local_path) and local_path not in already_queued:
+                if os.path.exists(
+                        local_path) and local_path not in already_queued:
                     files_to_copy.append(local_path)
                     already_queued.add(local_path)
                     run_input[key] = remote_copy_directory_for_cmd + \

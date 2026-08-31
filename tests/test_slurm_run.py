@@ -461,7 +461,8 @@ class TestRemoteRunIsPath(unittest.TestCase):
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             local_path = tmp.name
         try:
-            result, captured, _ = self._invoke_remote_run_with_is_path(local_path)
+            result, captured, _ = self._invoke_remote_run_with_is_path(
+                local_path)
             self.assertEqual(result['return'], 0)
             files_to_copy = captured.get('files_to_copy', [])
             self.assertIn(local_path, files_to_copy,
@@ -478,9 +479,12 @@ class TestRemoteRunIsPath(unittest.TestCase):
             result, _, regenerate_calls = self._invoke_remote_run_with_is_path(
                 local_path, remote_copy_directory='mlc-remote-artifacts')
             self.assertEqual(result['return'], 0)
-            self.assertTrue(regenerate_calls, "regenerate_script_cmd must be called")
+            self.assertTrue(
+                regenerate_calls,
+                "regenerate_script_cmd must be called")
             run_cmd = regenerate_calls[0]['run_cmd']
-            remote_expected = 'mlc-remote-artifacts/' + os.path.basename(local_path)
+            remote_expected = 'mlc-remote-artifacts/' + \
+                os.path.basename(local_path)
             self.assertEqual(run_cmd.get('myinput'), remote_expected,
                              "is_path input must point to remote copy directory")
         finally:
@@ -534,8 +538,11 @@ class TestRemoteRunIsPath(unittest.TestCase):
             }
             mock_self.update_run_state_for_selected_script_and_variations.return_value = {
                 'return': 0}
-            # Simulate mlcrr: env is empty (not pre-populated by full run pipeline)
-            mock_self.run_state = {'remote_run': {'env_keys_to_copy': ['MLC_MY_FILE']}}
+            # Simulate mlcrr: env is empty (not pre-populated by full run
+            # pipeline)
+            mock_self.run_state = {
+                'remote_run': {
+                    'env_keys_to_copy': ['MLC_MY_FILE']}}
             mock_self.env = {}
             mock_self.state = {}
             mock_self.logger = MagicMock()
@@ -583,7 +590,8 @@ class TestRemoteRunIsPath(unittest.TestCase):
             # run_input key must be replaced with the remote path
             self.assertTrue(regenerate_calls)
             run_cmd = regenerate_calls[0]['run_cmd']
-            remote_expected = 'mlc-remote-artifacts/' + os.path.basename(local_path)
+            remote_expected = 'mlc-remote-artifacts/' + \
+                os.path.basename(local_path)
             self.assertEqual(run_cmd.get('myinput'), remote_expected,
                              "Input mapped to env_keys_to_copy must point to remote copy directory")
         finally:
