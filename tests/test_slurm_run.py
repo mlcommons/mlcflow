@@ -512,8 +512,9 @@ class TestRemoteRunIsPath(unittest.TestCase):
 
     def test_env_keys_to_copy_via_run_input(self):
         """When env_keys_to_copy is set in remote_run meta, and env is empty
-        (as it is when called directly via mlcrr), the path must be resolved
-        from run_input via input_mapping and the file must still be copied."""
+        (as it is when called directly via mlcrr because run() is not invoked),
+        update_env_from_input_mapping must be called to populate env from
+        run_input, so env_keys_to_copy can find and copy the file."""
         from unittest.mock import patch, MagicMock
         from script.remote_run import remote_run
 
