@@ -709,6 +709,11 @@ class RepoAction(Action):
             repo = list_repos[0]
             repo_path = repo.path
 
+            if Action._is_pip_sourced_repo(repo):
+                return {
+                    'return': 1,
+                    'error': f"""Repo '{repo.meta.get('alias')}' is sourced from an installed pip package, not a git clone - there is nothing to remove from ~/MLC/repos for it, and its files must not be deleted directly (that would corrupt the pip installation outside of pip's own bookkeeping). Run `pip uninstall {repo.meta.get('alias')}` instead; it will then stop being discovered automatically."""}
+
         else:
             repo = run_args['repo']
             if os.path.exists(repo):
