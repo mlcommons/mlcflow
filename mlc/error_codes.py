@@ -42,6 +42,9 @@ class WarningCode(Enum):
     NON_INTERACTIVE_ENV = (1004, "Non interactive environment detected")
     ELEVATED_PERMISSION_NEEDED = (1005, "Elevated permission needed")
     EMPTY_TARGET = (1006, "The specified target is empty")
+    PACKAGE_MANAGED_TARGET = (
+        1007,
+        "The target belongs to a pip-installed package and was left untouched")
 
     def __init__(self, code, description):
         self.code = code

@@ -72,6 +72,9 @@ Examples of `add` action for `repo` target could be found inside the GitHub acti
 
 If the repository already exists locally in MLC repos directory, it fetches the latest changes if there are no uncommited modifications(does not include untracked files/folders). The `pull` action could be also used to checkout to a particular branch or release tag with flags `--checkout` and `--tag`.
 
+!!! note "Where the clone lands"
+    The transcripts below show `~/MLC/repos/`, which is the default when only mlcflow is installed. If `mlc-scripts` is installed in the environment, the repo root is a per-environment directory instead — the clone goes to `~/MLC/envs/<hash>/mlcommons@mlperf-automations`, and `$MLC_REPOS` overrides both. Run `mlc list repo` to print the active roots. A pulled clone also takes precedence over the packaged `mlc-scripts` copy, which shares its UID.
+
 **Example Command**
 
 ```bash
@@ -170,5 +173,24 @@ mlc rm repo mlcommons@mlperf-automations
         [2025-02-19 17:01:59,581 main.py:1144 INFO] - Path: /home/anandhu/MLC/repos/mlcommons@mlperf-automations has been removed.
     ```
 </details>
+
+### A pip-installed `mlc-scripts` cannot be removed this way
+
+If the repo you name resolves to an installed `mlc-scripts` package rather than a clone, the command warns and leaves it alone. Nothing is deleted, unregistered or de-indexed — that directory belongs to pip, and `mlc-scripts` would be re-registered on the next command anyway. `-f` does not override it.
+
+The exit status stays `0`: the request was not invalid, it just has nothing to do. Scripts that need to tell "declined" from "removed" should look for warning code `1007` (`PACKAGE_MANAGED_TARGET`) in the result's `warnings` list rather than checking the exit code.
+
+```bash
+$ mlc rm repo mlcommons@mlperf-automations
+[WARNING] /venv/lib/python3.12/site-packages/mlc_scripts belongs to the installed mlc-scripts at
+          /venv/lib/python3.12/site-packages/mlc_scripts, which is managed by pip. It has NOT been
+          deleted, unregistered or de-indexed. To stop using it, run `pip uninstall mlc-scripts`;
+          to override it with your own copy, run `mlc pull repo <repo>` - an explicit checkout
+          takes precedence over the packaged one.
+$ echo $?
+0
+```
+
+To actually stop using it, either `pip uninstall mlc-scripts`, or `mlc pull repo <repo>` — a pulled checkout shares the packaged copy's UID, which unregisters the packaged one and puts your clone in charge. A clone pulled that way *is* removable with `mlc rm repo`, and removing it hands control back to the packaged copy.
 
 An example of the `rm` action for the `repo` target can be found in the GitHub Actions workflow [here](https://github.com/mlcommons/mlcflow/blob/d0269b47021d709e0ffa7fe0db8c79635bfd9dff/.github/workflows/test-mlc-core-actions.yaml).

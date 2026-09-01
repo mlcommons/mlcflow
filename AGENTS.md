@@ -202,6 +202,38 @@ The engine itself (`automation/script/module.py`) is resolved from the
 mlcflow install location (editable checkout or site-packages), not from
 `~/MLC/repos/`.
 
+### The packaged repo is read-only to mlcflow
+
+`_sync_package_repo()` registers the installed `mlc-scripts` as an ordinary
+repo, so it turns up in `find()`, in the index, and in every search result —
+including the ones that feed writes and deletes. It is not ordinary: **pip owns
+that tree.** Anything mlcflow puts there is lost on the next upgrade, and
+anything it deletes corrupts the install with no record pip can see.
+
+Three enforcement points, all keyed on `Action._packaged_path()`, which matches
+by **path containment, never by alias or uid** — a pulled checkout carries the
+same uid and usually the same alias, and removing *that* is a normal operation:
+
+| Operation | Behaviour |
+|---|---|
+| `mlc add script <name>` | destination rewritten to `local:` (`ScriptAction.add()`) |
+| `mlc cp <src> <pkg>:<name>` | warns, then writes (`Action.cp()`) |
+| `mlc rm repo <packaged>` | warns, nothing unregistered or de-indexed |
+| `mlc rm script <packaged>` | warns, nothing deleted |
+
+The two `rm` paths share `_refuse_packaged_removal()`, which logs the warning
+and returns `{'return': 0, 'warnings': [...]}`. **Exit status stays 0** — the
+request was not malformed, the tree simply is not ours to modify, and failing
+would break callers that remove a repo defensively. Because an exit code then
+cannot distinguish "declined" from "removed", the warning also carries
+`WarningCode.PACKAGE_MANAGED_TARGET` (1007); check `warnings` for it rather
+than the exit status.
+
+`-f` does not override: force exists to skip confirmation prompts, not to
+authorise writing into another package manager's tree. Cache items never need
+the guard — they resolve under the `local` repo, which lives under the cache
+root. `experiment` items are deliberately not guarded yet.
+
 ---
 
 ## CLI dispatch — full reference

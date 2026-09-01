@@ -972,7 +972,7 @@ class RepoAction(Action):
             return "  (set by MLC_REPOS)"
         if getattr(self, 'package_repo_path', None):
             version = getattr(self, 'package_repo_version', None) or 'unknown'
-            return f"  (auto: mlc-scripts {version} at {self.package_repo_path})"
+            return f"  (auto: {PACKAGE_REPO_DIST} {version} at {self.package_repo_path})"
         return "  (default)"
 
     def _cache_path_origin(self):
@@ -1000,7 +1000,7 @@ class RepoAction(Action):
 
         if getattr(self, 'package_repo_path', None):
             version = getattr(self, 'package_repo_version', None) or 'unknown'
-            return f"  (auto: mlc-scripts {version} at {self.package_repo_path})"
+            return f"  (auto: {PACKAGE_REPO_DIST} {version} at {self.package_repo_path})"
 
         return "  (default)"
 
@@ -1029,6 +1029,13 @@ class RepoAction(Action):
       [2025-02-19 17:01:59,581 main.py:1385 INFO] - Checking whether the repo was registered in repos.json
       [2025-02-19 17:01:59,581 main.py:1134 INFO] - Unregistering the repo in path /home/anandhu/MLC/repos/mlcommons@mlperf-automations
       [2025-02-19 17:01:59,581 main.py:1144 INFO] - Path: /home/anandhu/MLC/repos/mlcommons@mlperf-automations has been removed.
+
+    A repo that comes from a pip-installed mlc-scripts cannot be removed this way: that directory belongs to pip,
+    so the command warns and leaves it alone - nothing is deleted, unregistered or de-indexed. The exit status
+    stays 0, and the warning is also returned as code 1007 (`PACKAGE_MANAGED_TARGET`) in the result's `warnings`
+    list for callers that need to tell "declined" from "removed". To stop using the packaged copy, run
+    `pip uninstall mlc-scripts`; to override it with your own, run `mlc pull repo <repo>` - an explicit checkout
+    takes precedence over the packaged one. `-f` does not override this.
 
         """
         if not run_args['repo']:
@@ -1059,16 +1066,20 @@ class RepoAction(Action):
 
         repos_file_path = os.path.join(self.repos_path, 'repos.json')
 
-        # Discovery runs at the start of every command, so removing the
-        # packaged repo only lasts until the next one. Say so rather than
-        # letting it look like the removal silently failed.
-        pkg_path = getattr(self, 'package_repo_path', None)
-        if pkg_path and os.path.abspath(
-                repo_path) == os.path.abspath(pkg_path):
-            logger.warning(
-                f"{repo_path} belongs to the installed {PACKAGE_REPO_DIST} and is re-registered at the start of "
-                f"every command. To stop using it, `pip uninstall {PACKAGE_REPO_DIST}`, or pull a checkout of the "
-                f"same repo - an explicit `mlc pull repo` takes precedence over the packaged copy.")
+        # Decline before anything is touched. rm_repo() would not have deleted
+        # the folder anyway - site-packages is not the repo root, so it takes
+        # the unregister-only branch - but it *did* unregister the repo and
+        # strip its index entries, both of which _sync_package_repo() undoes on
+        # the next command. Real mutations, zero net effect, no explanation.
+        # Now nothing changes and the reason is stated.
+        #
+        # Ahead of both branches that resolve repo_path, so an alias, a uid and
+        # an absolute path aimed at site-packages are all covered. `-f` does not
+        # override: force skips confirmation prompts, it does not authorise
+        # writing into another package manager's tree.
+        pkg_path = self._packaged_path(repo_path)
+        if pkg_path:
+            return self._refuse_packaged_removal(repo_path, pkg_path)
 
         force_remove = True if run_args.get('f') else False
         index = Action.get_index(self)

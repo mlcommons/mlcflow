@@ -505,6 +505,63 @@ class Action:
         except OSError:
             return False
 
+    def _packaged_path(self, path):
+        """The installed mlc-scripts directory when path lies inside it.
+
+        Returns None otherwise, so callers can write `if self._packaged_path(p)`.
+
+        pip owns that tree. Anything deleted under it corrupts the install with
+        no record pip can see, and comes back on the next --force-reinstall.
+        Writing there is already redirected (ScriptAction.add) and warned about
+        (Action.cp); refusing to delete is the other half of the same rule.
+
+        Matched by path, not by alias or uid. A pulled checkout of the same repo
+        carries the same uid and usually the same alias, and removing *that* is
+        a normal operation - identity matching would block it.
+
+        realpath on both sides because a venv can be reached through a symlink
+        and macOS resolves /tmp to /private/tmp. The os.sep suffix keeps a
+        sibling whose name merely starts the same way - mlc_scripts_extra -
+        outside the guard.
+        """
+        pkg_path = getattr(self, 'package_repo_path', None)
+        if not pkg_path:
+            return None
+
+        pkg_real = os.path.realpath(pkg_path)
+        target = os.path.realpath(path)
+        if target == pkg_real or target.startswith(pkg_real + os.sep):
+            return pkg_path     # the declared path reads better in messages
+        return None
+
+    def _refuse_packaged_removal(self, path, pkg_path):
+        """Say the target is pip's and return success, having changed nothing.
+
+        Returns a complete action result, so the repo and script call sites
+        produce identical output and the wording lives in one place for the
+        docs to quote.
+
+        Exit status stays 0 on purpose. Nothing was wrong with the request -
+        the answer is that this tree is not ours to modify - and failing would
+        break any caller that removes a repo defensively. The cost is that an
+        exit code alone cannot distinguish "refused" from "removed", so the
+        warning is also returned as a machine-readable code: callers that need
+        to tell them apart look for PACKAGE_MANAGED_TARGET in 'warnings'
+        rather than at the exit status. Same shape as the EMPTY_TARGET
+        warnings rm() already returns for its other no-op paths.
+        """
+        message = (
+            f"{path} belongs to the installed {PACKAGE_REPO_DIST} at {pkg_path}, which is "
+            f"managed by pip. It has NOT been deleted, unregistered or de-indexed. To stop "
+            f"using it, run `pip uninstall {PACKAGE_REPO_DIST}`; to override it with your own "
+            f"copy, run `mlc pull repo <repo>` - an explicit checkout takes precedence over "
+            f"the packaged one.")
+        logger.warning(message)
+        return {
+            'return': 0,
+            'warnings': [{'code': WarningCode.PACKAGE_MANAGED_TARGET.code,
+                          'description': message}]}
+
     def _warn_orphaned_legacy_cache(self):
         """Say once that a populated shared cache is no longer being used.
 
@@ -925,6 +982,15 @@ class Action:
         """
         Removes an item from the repository.
 
+        A script that lives in a pip-installed mlc-scripts cannot be removed:
+        that directory belongs to pip, so the command warns and deletes
+        nothing. The exit status stays 0; the warning is also returned as code
+        1007 (`PACKAGE_MANAGED_TARGET`) in `warnings`. If the query matches a
+        packaged script alongside local ones, none of them are removed -
+        re-target with a `<repo>:` prefix. To stop using the packaged copy
+        entirely, run `pip uninstall mlc-scripts`, or `mlc pull repo <repo>` to
+        override it with a checkout you control.
+
         Args:
             i (dict): Input dictionary with the following keys:
                 - item_repo (tuple): Repository alias and UID (default: local repo).
@@ -975,6 +1041,21 @@ class Action:
         res = self.search(inp)
         if res['return'] > 0:
             return res
+
+        # Refuse the whole command before any prompt and before any rmtree.
+        # Scripts resolve out of an installed mlc-scripts whenever no checkout
+        # is registered, and the loop below deletes as it iterates - a guard
+        # inside it would already have destroyed the earlier matches, and a
+        # guard after the multi-match prompt would ask the user to confirm a
+        # removal that cannot happen. A tags query spanning a local script and
+        # a packaged one therefore removes neither; the warning names the
+        # offending path so it can be re-targeted with a `<repo>:` prefix.
+        if target_name == "script":
+            for result in res['list']:
+                pkg_path = self._packaged_path(result.path)
+                if pkg_path:
+                    return self._refuse_packaged_removal(
+                        result.path, pkg_path)
 
         if len(res['list']) == 0:
             # Do not error out if fetch_all is used
@@ -1253,9 +1334,14 @@ class Action:
         # defaults to the *source* repo, which for a packaged install is
         # site-packages - the case that has already produced stray scripts in
         # working trees.
-        pkg_path = getattr(self, 'package_repo_path', None)
-        if pkg_path and os.path.abspath(
-                target_repo_path) == os.path.abspath(pkg_path):
+        #
+        # Still only a warning: cp writes rather than deletes, and
+        # ScriptAction.add() already redirects the common path to `local:`.
+        # Sharing _packaged_path() with the rm guards keeps one definition of
+        # "inside the packaged repo", and its containment test also catches a
+        # destination pointed below the package root, which the exact-equality
+        # comparison this replaces missed.
+        if self._packaged_path(target_repo_path):
             logger.warning(
                 f"{target_repo_path} belongs to the installed {PACKAGE_REPO_DIST}. Anything written there is "
                 f"lost on the next upgrade or uninstall - prefix the destination with `local:` to keep it.")

@@ -43,8 +43,8 @@ relocates every cached dataset.
 | 1.2 | `MLC_REPOS` only, no package | repo = `$MLC_REPOS`, cache = `~/MLC/repos` | **RE-RUN** — passed under the old both-roots rule |
 | 1.3 | `MLC_CACHE` only, no package | cache = `$MLC_CACHE`, repo = `~/MLC/repos` | **PASS** |
 | 1.4 | both set, no package | independent | **PASS** |
-| 1.5 | no vars, package installed | cache = `~/MLC/repos`, repo = `~/MLC/envs/<12hex>` | **PASS** |
-| 1.6 | `MLC_REPOS` set, package installed | repo = `$MLC_REPOS`, cache = `~/MLC/repos` | **RE-RUN** — passed under the old both-roots rule |
+| 1.5 | no vars, package installed | both roots = `~/MLC/envs/<12hex>` | **RE-RUN** — recorded when the cache stayed at `~/MLC/repos`; the cache root is now per-environment too |
+| 1.6 | `MLC_REPOS` set, package installed | repo = `$MLC_REPOS`, cache = `~/MLC/envs/<12hex>` | **RE-RUN** — passed under the old both-roots rule, and the expectation itself has since changed |
 | 1.7 | `MLC_CACHE` only, package installed | cache = `$MLC_CACHE`, repo = `~/MLC/envs/<hash>` | **PASS** |
 | 1.8 | empty-string / whitespace-only env vars | treated as unset (`.strip()`) | **PASS** |
 | 1.9 | relative `MLC_REPOS` | resolved to abspath once, at `Action.__init__` | **PASS** |
@@ -1522,3 +1522,85 @@ for `.github/scripts/` (N7).
 
 **Release sequencing:** publish mlcflow 1.4.0 to PyPI *before* mlc-scripts,
 or `pip install mlc-scripts` fails on the `mlcflow>=1.4.0` pin.
+
+---
+
+## Round 6 — `mlc rm` must not touch the pip-managed tree
+
+`_sync_package_repo()` registers the installed `mlc-scripts` as an ordinary
+repo, so it appears in `find()`, in the index and in every search result — the
+same results that feed `mlc rm`. Two consequences were found by tracing, then
+both reproduced:
+
+| Before | Observed on the pre-change code |
+|---|---|
+| `mlc rm script <packaged>` | **deleted the script out of `site-packages`** after one y/n prompt. `Action.rm()`'s `shutil.rmtree()` had no packaged-repo guard at all. |
+| `mlc rm repo <packaged>` | stripped the index and unregistered the repo — real mutations that `_sync_package_repo()` undoes on the next command — and reported success with no explanation. |
+
+Reproduced by stashing `mlc/action.py` + `mlc/repo_action.py` and re-running
+`tests/test_packaged_repo_guard.py`: 5 of 8 fail, with
+`packaged_script_exists: False` (script really gone) and
+`repos_json_unchanged: False` (repo really unregistered) in the JSON payloads.
+
+### Fix
+
+One helper, `Action._packaged_path()`, matching by **path containment** —
+`realpath` on both sides, `+ os.sep` boundary — never by alias or uid, because a
+pulled checkout shares both with the packaged copy and must stay removable.
+Three call sites: `RepoAction.rm()` (ahead of the index strip), a pre-flight in
+`Action.rm()` for `script` targets (ahead of the multi-match prompt *and* the
+delete loop), and the pre-existing `Action.cp()` warning folded onto the same
+helper.
+
+Both `rm` paths go through `_refuse_packaged_removal()`, which logs the warning
+and returns `{'return': 0, 'warnings': [...]}`. **Exit status stays 0** — the
+request is not malformed, the tree simply is not ours to modify, and failing
+would break callers that remove a repo defensively. Because an exit code then
+cannot distinguish "declined" from "removed", the warning carries the new
+`WarningCode.PACKAGE_MANAGED_TARGET` (1007), which is what the tests and any
+scripted caller check.
+
+### Cases — `tests/test_packaged_repo_guard.py`
+
+All eight run in a child process with `HOME` redirected and
+`find_package_repo()` patched before `Action()`, so the per-environment roots,
+`_sync_package_repo()` registration and `access()` dispatch are all real.
+
+| # | Case | Expected | Result |
+|---|---|---|---|
+| 6.1 | `rm repo <packaged alias>` | declined: `return 0` + exactly one 1007 warning, logged *and* in `warnings`; dir, `meta.yaml` and scripts intact; `repos.json` and `index_script.json` byte-identical; package still registered | **PASS** |
+| 6.2 | same with `-f` | still declined — force skips prompts, it does not authorise writes into pip's tree | **PASS** |
+| 6.3 | `rm repo <absolute path to site-packages>` | declined — the guard sits after both `repo_path` resolution branches | **PASS** |
+| 6.4 | `rm repo <alias>` where a checkout under the repo root shares the packaged alias **and** uid, package unregistered (the post-`mlc pull repo` state) | checkout **deleted**, **no** 1007 warning, package untouched — the decisive path-vs-identity case | **PASS** |
+| 6.5 | `rm repo` on a sibling `site-packages/mlc_scripts_extra` | no 1007 warning — proves the `os.sep` boundary; a bare `startswith` would have declined it | **PASS** |
+| 6.6 | `rm script <packaged>` | declined, script still on disk | **PASS** |
+| 6.7 | `rm script <local>` | still deleted, no 1007 warning, packaged script untouched | **PASS** |
+| 6.8 | `rm script --tags=` matching one local **and** one packaged | declined, **neither** deleted — a guard inside the delete loop would already have destroyed the local one | **PASS** |
+
+Because a decline now returns 0 like a real removal, the "still removable" rows
+(6.4, 6.5, 6.7) assert the **absence** of the 1007 warning via
+`_assert_not_refused()`. Checking `return == 0` alone would let a guard that
+declined everything pass all three.
+
+Suite: 68 tests, 66 pass. The 2 failures are both in the untracked
+`tests/test_add_script_destination.py` and are **pre-existing** — verified by
+re-running them with `mlc/` stashed, same 2 failures. That file expects a
+conditional redirect plus a `Creating it in the local repo instead` notice;
+`ScriptAction.add()` redirects unconditionally and logs nothing.
+
+### Not covered, by decision
+
+`mlc rm experiment` has the same unguarded `rmtree` and is reachable only if a
+packaged repo ships an `experiment/` tree — one line to add
+(`target_name in ("script", "experiment")`) if wanted. `cache` items never need
+it: they resolve under the `local` repo, which lives under the cache root.
+
+### Exit status deliberately unchanged
+
+`mlc rm repo` / `mlc rm script` still exit 0 in every case, so no existing
+caller changes behaviour. Verified anyway: this repo's CI installs only `.`,
+never `mlc-scripts` (`test-mlc-core-actions.yaml:42`), so `find_package_repo()`
+returns `(None, None)`, `_packaged_path()` short-circuits and the guard is inert
+across all of its `mlc rm repo ... -f` / `mlc rm script ... -f` steps. And
+mlperf-automations has **zero** `mlc rm repo` / `mlc rm script` calls across its
+47 workflow files. No companion PR needed.
