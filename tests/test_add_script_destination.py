@@ -164,7 +164,8 @@ class AddScriptDestinationTest(unittest.TestCase):
 
     # ------------------------------------------- the bare-name redirect
 
-    def test_a_bare_name_authors_into_local_when_the_template_is_packaged(self):
+    def test_a_bare_name_authors_into_local_when_the_template_is_packaged(
+            self):
         result, content = self._run("probe-packaged", as_package=True)
 
         self.assertTrue(result["in_local"],
