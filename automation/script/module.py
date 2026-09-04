@@ -163,6 +163,40 @@ class ScriptAutomation(Automation):
 
     #################################################################
 
+    # Attributes that hold the state of a single top level `run` call. `run`
+    # falls back to them whenever the caller does not pass the corresponding
+    # key, so anything left behind by one run bleeds into the next one made
+    # through the same automation instance.
+    PER_RUN_STATE_KEYS = (
+        'env',
+        'state',
+        'const',
+        'const_state',
+        'add_deps_recursive',
+        'recursion_spaces',
+        'remembered_selections',
+        'run_state',
+        'deps',
+    )
+
+    def snapshot_run_state(self):
+        """Deep copy the per-run state so it can be restored later."""
+
+        import copy
+
+        return {key: copy.deepcopy(getattr(self, key))
+                for key in self.PER_RUN_STATE_KEYS}
+
+    def restore_run_state(self, snapshot):
+        """Reset the per-run state to a previously taken snapshot."""
+
+        import copy
+
+        for key, value in snapshot.items():
+            setattr(self, key, copy.deepcopy(value))
+
+    #################################################################
+
     def run(self, i):
         """
         Run MLC script
@@ -2848,6 +2882,14 @@ class ScriptAutomation(Automation):
                 test_input_id = i.get('test_input_id')
                 run_inputs = i.get("run_inputs", test_config.get(
                     'run_inputs', [{"docker_os": "ubuntu", "docker_os_version": "22.04"}]))
+
+                # Every test variation is an independent top level run, so
+                # each one has to start from the state this automation object
+                # was built with. Otherwise, for example, the
+                # `add_deps_recursive` contributed by the `_r2-downloader`
+                # variation survives into the `_rclone` run and both end up
+                # selected for the same variation group.
+                pristine_run_state = self.snapshot_run_state()
                 if test_input_index:
                     index_plus = False
                     try:
@@ -2932,6 +2974,7 @@ class ScriptAutomation(Automation):
                             ii['docker_image_name'] = alias
 
                     for variation_tags in run_variations:
+                        self.restore_run_state(pristine_run_state)
                         run_tags = f"{tags_string},{variation_tags}"
                         ii['tags'] = run_tags
                         if i_env:
