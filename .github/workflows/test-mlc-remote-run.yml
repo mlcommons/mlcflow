@@ -9,6 +9,8 @@ on:
     paths:
       - '.github/workflows/test-mlc-remote-run.yml'
       - 'mlc/**'
+      - 'automation/script/remote_run.py'
+      - 'automation/script/provision.py'
       - 'docs/install/**'
       - '!**.md'
 
@@ -69,3 +71,79 @@ jobs:
     - name: Test 4 - remote-experiment help (smoke test)
       run: |
         mlcre --help | grep -q "remote-experiment"
+
+    # ------------------------------------------------------------------
+    # Remote provisioning: what the node installs before it runs.
+    #
+    # localhost is a real test here, not a stand-in: what is under test is
+    # what lands in the *remote* virtualenv (~/mlcflow), which is a separate
+    # environment from the runner's python even on the same machine.
+    # ------------------------------------------------------------------
+
+    - name: Test 5 - contradictory pins are refused before connecting
+      run: |
+        if mlcrr detect-os \
+             --remote_host=localhost \
+             --remote_ssh_key_file=~/.ssh/id_ed25519 \
+             --remote_skip_host_verify=yes \
+             --remote_mlc_scripts=1.2.0a4 \
+             --remote_mlcflow=1.4.0a3 2>err.txt; then
+          echo "expected the run to be refused"; cat err.txt; exit 1
+        fi
+        grep -q "remote_mlcflow" err.txt
+
+    - name: Test 6 - a pinned version reaches the remote virtualenv
+      run: |
+        mlcrr detect-os \
+          --remote_host=localhost \
+          --remote_ssh_key_file=~/.ssh/id_ed25519 \
+          --remote_skip_host_verify=yes \
+          --remote_mlc_scripts=1.2.0a2
+        ~/mlcflow/bin/python -m pip show mlc-scripts | tee pinned.txt
+        grep -qx "Version: 1.2.0a2" pinned.txt
+
+    - name: Test 7 - re-pinning moves an existing remote virtualenv
+      # The venv is reused between runs, so a pin that only applies to a
+      # fresh node is a pin that usually does nothing.
+      run: |
+        mlcrr detect-os \
+          --remote_host=localhost \
+          --remote_ssh_key_file=~/.ssh/id_ed25519 \
+          --remote_skip_host_verify=yes \
+          --remote_mlc_scripts=1.2.0a4
+        ~/mlcflow/bin/python -m pip show mlc-scripts | tee repinned.txt
+        grep -qx "Version: 1.2.0a4" repinned.txt
+
+    - name: Test 8 - a repo ref is pulled on the remote
+      run: |
+        mlcrr detect-os \
+          --remote_host=localhost \
+          --remote_ssh_key_file=~/.ssh/id_ed25519 \
+          --remote_skip_host_verify=yes \
+          --remote_python_venv=mlcflow-repo \
+          --remote_repo_ref=dev
+
+    - name: Test 9 - a ref that does not exist fails the run
+      # Proves the bootstrap guard: without it the pull fails, the script
+      # runs anyway on whatever content was already there, and the run
+      # reports success.
+      run: |
+        if mlcrr detect-os \
+             --remote_host=localhost \
+             --remote_ssh_key_file=~/.ssh/id_ed25519 \
+             --remote_skip_host_verify=yes \
+             --remote_python_venv=mlcflow-repo \
+             --remote_repo_ref=no-such-ref-exists; then
+          echo "a failed provisioning step did not fail the run"; exit 1
+        fi
+
+    - name: Test 10 - mirror sends what this machine is running
+      run: |
+        HEAD_COMMIT=$(git -C ~/MLC/repos/mlcommons@mlperf-automations rev-parse HEAD)
+        echo "head is at $HEAD_COMMIT"
+        mlcrr detect-os \
+          --remote_host=localhost \
+          --remote_ssh_key_file=~/.ssh/id_ed25519 \
+          --remote_skip_host_verify=yes \
+          --remote_python_venv=mlcflow-mirror \
+          --remote_provision=mirror

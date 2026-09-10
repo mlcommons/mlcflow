@@ -31,12 +31,16 @@ nav:
       - Script Action:
         - targets/script/index.md
         - targets/script/execution-flow.md
+        - targets/script/remote-run-flow.md
         - targets/script/meta.md
         - targets/script/docker.md
         - targets/script/test.md
     - Cache:
       - Cache Action:
         - targets/cache/index.md
+  - Design notes:
+    - design/per-environment-roots.md
+    - design/remote-provisioning.md
 
 markdown_extensions:
   - pymdownx.tasklist:

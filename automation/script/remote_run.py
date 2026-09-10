@@ -9,6 +9,7 @@ import time
 import copy
 from datetime import datetime
 from script.script_utils import *
+from script import provision
 import platform
 
 
@@ -117,6 +118,16 @@ def remote_run(self_module, i):
     # str and would otherwise still pull.
     if is_true(i.get('remote_pull_mlc_repos', False)):
         run_cmds.append("mlc pull repo")
+
+    # What the remote should install so it runs the same code we do. Resolves
+    # to nothing at all unless the caller asked for something, which keeps an
+    # unconfigured run byte-for-byte what it was.
+    r = provision.resolve(
+        i, action_object=getattr(self_module, 'action_object', None),
+        script_path=script_path)
+    if r['return'] > 0:
+        return r
+    run_cmds.extend(r['cmds'])
 
     env_keys_to_copy = remote_run_settings.get('env_keys_to_copy', [])
     input_mapping = meta.get('input_mapping', {})

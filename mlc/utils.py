@@ -17,12 +17,14 @@ logger = logging.getLogger("mlc")
 
 
 def get_repo_version(repo_path):
-    """Resolve the git version of a single repo checkout.
+    """Resolve the version of a single repo, however it was installed.
 
-    Returns ``{source, commit, branch, dirty}`` (``source='git'``), or a
-    ``git_commit_hash.txt`` fallback for pip installs (``source='commit_file'``),
-    or an empty dict ``{}`` when neither is available (callers should treat an
-    empty result as "version unknown"). Computed fresh (no caching).
+    Returns ``{source, commit, branch, dirty}``, resolved in order from
+    ``.git`` (``source='git'``), a packaged install's ``.mlc-provenance.json``
+    (``source='package'``, and additionally carries ``version``), or a
+    ``git_commit_hash.txt`` fallback (``source='commit_file'``). Returns an
+    empty dict ``{}`` when none is available (callers should treat an empty
+    result as "version unknown"). Computed fresh (no caching).
 
     Used by ``main._get_repo_hashes`` (the on-error hash display) and by scripts
     that stamp their output with the producing repo's version.
@@ -47,6 +49,30 @@ def get_repo_version(repo_path):
             logger.debug(
                 "get_repo_version: git failed for %s (%s); trying fallback",
                 repo_path, e)
+    # The mlc-scripts wheel ships neither .git nor git_commit_hash.txt - it
+    # ships .mlc-provenance.json, written at build time. Without this branch a
+    # packaged install reports "version unknown", so every consumer that
+    # compares versions across machines (multi-node system info, most
+    # visibly) silently has nothing to compare.
+    provenance_file = os.path.join(repo_path, ".mlc-provenance.json")
+    if os.path.isfile(provenance_file):
+        try:
+            with open(provenance_file) as f:
+                provenance = json.load(f)
+        except (OSError, ValueError) as e:
+            logger.debug(
+                "get_repo_version: could not read %s (%s); trying fallback",
+                provenance_file, e)
+            provenance = None
+        if isinstance(provenance, dict):
+            commit = (provenance.get("commit") or "").strip()
+            version = (provenance.get("version") or "").strip()
+            # A provenance file with neither field identifies nothing; fall
+            # through rather than return a result that only looks populated.
+            if commit or version:
+                return {"source": "package", "commit": commit,
+                        "version": version, "branch": "", "dirty": False}
+
     hash_file = os.path.join(repo_path, "git_commit_hash.txt")
     if os.path.isfile(hash_file):
         try:
