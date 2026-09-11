@@ -491,15 +491,27 @@ On a node that already has a venv they get whatever is in it. `mlc2` had
 `mlcflow 1.2.3` from May and reused it. The drift is real but its direction
 is the opposite of what was documented, and pinning matters more, not less.
 
-### B12c. `mlc-scripts==1.2.0a4` does not exist  *(proven)*
+### B12c. Package mode's payoff was unverifiable at the time  *(corrected)*
 
-PyPI has `mlc-scripts` up to `1.1.0` and `mlcflow` up to `1.3.6`; there is no
-`1.4.0a3` and no `1.2.0a4`. The version in the proposal is hypothetical, and
-the published `mlc-scripts` wheels carry no importable script content — that
-is the unreleased `ship-scripts-in-wheel` work. So package mode is proven
-mechanically (the pin lands, re-pinning moves) but its payoff, "the wheel
-carries the scripts so the `dev` fallback stops firing", cannot be shown
-until such a wheel is published.
+**This entry was wrong when first written and is kept, corrected, because the
+way it went wrong is the lesson.** It claimed `mlc-scripts==1.2.0a4` did not
+exist on PyPI. It did. The check was `pip index versions`, which hides
+prereleases unless `--pre` is passed, so an alpha that was there read as
+absent. It also claimed published `mlc-scripts` wheels "carry no importable
+script content" — true of `1.1.0`, which is what was actually inspected, and
+false of `1.2.0a4`, which carries 2044 script entries and a
+`.mlc-provenance.json`.
+
+What was genuinely true: at that moment no *correct* packaged wheel existed.
+Every wheel built by CI, `1.2.0a4` included, misreported its own commit,
+because `python -m build` builds the wheel from an unpacked sdist with no
+`.git` and the frozen `git_commit_hash.txt` dated from 2025-02-09. That is
+fixed (`SdistWithResolvedCommit`), and `mlc-scripts 1.2.0a5` is the first
+published wheel whose provenance names the commit it was built from.
+
+So the payoff — "the wheel carries the scripts, so the `dev` fallback stops
+firing" — is now testable for the first time, and is item **T1** below.
+
 
 ### B12d. The multi-node script forced remotes to use `$HOME`  *(fixed)*
 
@@ -508,13 +520,37 @@ until such a wheel is published.
 every node was pinned to `~/mlcflow` and `~/MLC` with no way to say
 otherwise. Added to the same pass-through map.
 
-### B12e. Two remote paths remain hard-coded  *(read)*
+### B12e. Where the remote writes is not under the caller's control  *(read — first description was wrong)*
 
-`detect-host-system-details` writes `~/system-info.json`, and the multi-node
-script hard-codes the remote output directory `/tmp/mlperf-system-info-single-node`
-(`customize.py`, the `out_dir_path` passed to `remote_run`). Neither honours
-any placement input, so a run always writes to those two locations on every
-node. Worth an input of its own.
+**Correction.** This entry originally said `detect-host-system-details` writes
+`~/system-info.json`. It does not. That script is a pure consumer: it reads the
+JSON named by `MLC_PLATFORM_DETAILS_FILE_PATH` and writes only `tmp-run.out`
+in the working directory, which its own `clean_files:` removes.
+
+The file is written by **`get-platform-details`**, and it is not hard-coded
+either. `customize.py` defaults the directory to `os.getcwd()` and the name to
+`system-info.json`, and the script already exposes `out_dir_path` /
+`out_file_name` in its `input_mapping`. Two things combine to make it look
+hard-coded:
+
+1. **Nothing forwards those inputs.** `get-mlperf-single-node-system-info`
+   depends on `get,platform-details` with no `env:` block, so the default wins
+   on every path through the multi-node script.
+2. **`os.getcwd()` on a remote is the ssh login directory**, i.e. the remote
+   user's home. This is the same root cause as B12a, where the bare venv name
+   `mlcflow` resolved against the login dir — one cause, two symptoms, and the
+   venv half is fixed while this half is not.
+
+So a remote run deposits `system-info.json` in the remote user's home, and a
+*local* run deposits it in whatever directory `mlcr` was invoked from.
+
+Genuinely hard-coded, separately: the multi-node script passes the literal
+`/tmp/mlperf-system-info-single-node` as `out_dir_path` to `remote_run`
+(`customize.py`), with no input to override it.
+
+Two fixes, both small: forward `out_dir_path` down the
+multi-node → single-node → platform-details chain, and give the remote output
+directory an input instead of a literal.
 
 ## C. To be fixed
 
@@ -534,3 +570,209 @@ C1 was the one to do before anything ships: it silently defeated a documented
 flag, and it is the same class of failure as the `MLC_REPOS`-only pinning that
 made `test_thread_safety` write into a real home cache. It is now done and
 verified end to end on a real remote node. C2-C7 remain open.
+
+---
+
+# D. Test plan for `automation/`
+
+Both packages are now published — `mlcflow 1.4.0a4` and `mlc-scripts 1.2.0a5`,
+the latter being the first wheel that carries scripts *and* reports its own
+commit correctly. That unblocks a set of checks that could not be run before.
+
+Ordered by what we learn per unit of effort. **T1-T6 need the `mlc2` node;
+T7-T16 need nothing but this machine.**
+
+## D.1 On real hardware (`mlc2`)
+
+| # | What we are testing | Why it is worth a node | Never run before? |
+|---|---|---|---|
+| T1 | Package mode's actual payoff: with `--remote_mlc_scripts=1.2.0a5`, the remote must **not** fall back to cloning `mperf-automations@dev`. Assert on the remote that no `dev` clone appeared and that the scripts came from site-packages | This is the entire reason `ship-scripts-in-wheel` exists. B12c above could not test it; now it can | yes |
+| T2 | **Acceptance test from the plan**: packaged head at `1.2.0a5`, `--remote_provision=mirror`, two nodes → `"mlc_scripts_version": {"consistent": true}` | The one line that exercises provenance + mirror detection + the inserted command + the workers honouring it, all at once | yes |
+| T3 | Mirror's **success** path. B12 tested only its refusal (dirty head). Needs a clean checkout — use the packaged head from T2, and separately a clean git head | The refusal path is proven; the path people will actually use is not | yes |
+| T4 | Isolated run leaves **nothing** behind: venv, MLC roots, output files, and whether `~/.cache/pip` still grows. Then a second isolated run in the same base dir, to show they do not collide | We told the user "by the next remote run it is all gone". The venv and cache halves are proven; the claim as a whole is not | partly |
+| T5 | `--remote_copy_back_mlc_cache` under isolation returns a **non-empty** cache. C1 proved the cache lands where the copy-back looks; it did not prove the copy-back then carries content | Half of C1's verification is still inferred | partly |
+| T6 | The non-isolated `--remote_mlc_scripts` footgun: confirm it really does pip-install into whatever venv sits in the operator's login dir, with no warning. Then decide — warn, or require an explicit venv | B12a fixed this *under isolation*. Non-isolated is the default, and is still silently destructive | no (observed, not decided) |
+
+## D.2 No hardware needed
+
+| # | Item | Register ref |
+|---|---|---|
+| T7 | End-to-end `mlc run script` against genuinely packaged content, now that a real packaged wheel exists | B10 |
+| T8 | `import mlc` creates no directories and writes no registry | B6 |
+| T9 | Index purge stays scoped to repos this instance scanned; `remove_repo_from_index` matches exactly (`foo` must not match `foo1`) | B4, B5 |
+| T10 | meta `git:` wins over an on-disk `.git` | B7 |
+| T11 | `repo` pull/add/rm against a non-git registered repo — all three rows | B1, B2, B3 |
+| T12 | uid-tie precedence in `register_repo` (only the auto-pull half is covered today) | B9 |
+| T13 | Reproduce A7 concretely: `MLC_CACHE=/usr/local/share/mlc` breaks `get_host_path()` because `local` is matched by first occurrence. Fix is C6 | A7, C6 |
+| T14 | Air-gapped head: `--remote_no_internet` with no route out raises an uncaught `URLError` instead of a message. Fix is C3 (ship the installer in the wheel) | A4, C3 |
+| T15 | Whether sibling-environment cache duplication costs enough to warrant a warning | B13 |
+| T16 | Whether `experiment` writes into a packaged tree | B14 |
+
+## D.3 Explicitly out of scope for this pass
+
+- `mlc add cache <name>` crashing with a `TypeError` — pre-existing on `main`,
+  unrelated to these roots, wants its own issue.
+- C5 (`get_container_path()`) — needs a companion mperf-automations PR.
+- C7 (double mlcflow install in package mode) — needs an installer flag, low
+  value; T1 will tell us what it actually costs.
+
+---
+
+# E. Test results (run 2026-09-11)
+
+Head node: this machine (macOS), `pip install mlc-scripts==1.2.0a5` into a
+clean venv — so a genuinely *packaged* head for the first time. Remote:
+`mlc2` (Linux, Python 3.12). Everything the tooling controls was kept under
+`/data/common/anandhu`; the two exceptions are recorded in E.3.
+
+## E.1 Results
+
+| # | Verdict | What actually happened |
+|---|---|---|
+| T1 | **pass** | Package mode's payoff, proven on hardware. `--remote_mlc_scripts=1.2.0a5` left `repos.json` holding only `local` and `site-packages/mlc_scripts`, **no `mperf-automations` clone anywhere**, 379 scripts served from the wheel. The `dev` fallback did not fire. B12c's open question is answered |
+| T2 | **pass** | **The acceptance test.** Packaged head, `--remote_provision=mirror`, two nodes → `"consistent": true`, `source: package`, `version: 1.2.0a5`, `commit: fc879976…`, `dirty: false`, both nodes identical |
+| T3 | **pass** (packaged head) | Mirror's success path. The git-head variant is still unrun; repo mode was proven on hardware in B12 |
+| T4 | **fail** | An isolated run does **not** leave nothing. See E.2 / A9 |
+| T5 | **mixed** | The cache arrives — 8 files including `mlc-cached-state.json` and `meta.json`, so C1's copy-back carries real content. But the run **exits non-zero** on a macOS head. See A10 |
+| T6 | confirmed | The footgun is live in the default path. `remote_mlc_python_venv = i.get('remote_python_venv') or 'mlcflow'`; the isolated branch is the only thing that replaces that bare name. Not re-run on hardware — a real run would pip-install into the operator's own `~/mlcflow`, which is exactly the damage being described |
+| T7 | **pass** | `mlcr detect,os` against genuinely packaged content: `Registered mlc-scripts 1.2.0a5 from …/site-packages/mlc_scripts`, no clone, script cached normally |
+| T8 | **pass** | `import mlc` created no directories and wrote no registry |
+| T9-T12 | **pass** | 15 new tests in `tests/test_repo_registry_behaviours.py`. The code was right in every case; nothing would have noticed if it stopped being. The separator check was mutation-verified — reverting it to a bare `startswith` fails exactly the sibling test |
+| T13 | **bug confirmed** | Worse than A7 described. See A8 |
+| T14 | **bug confirmed** | The published wheel ships no installer, so `_get_local_installer()` always downloads, uncaught. Plus a second defect. See A11 |
+| T15 | not run | |
+| T16 | **blocked** | By the pre-existing `add` crash, which is broader than recorded. See E.4 |
+
+Sysinfo scenarios exercised by the same runs:
+
+| # | Verdict | Detail |
+|---|---|---|
+| S3 | pass | `_exclude_current_node` collected remotes only, node ids from 0 |
+| S4 | pass | The same host listed twice collapsed to **one** node type with `number_of_nodes: 2` |
+| S5 / S7 | pass | An unreachable host is fatal: *"Could not collect system information from 1 of 2 nodes"*, and **no partial aggregate file is written** |
+| S10 | pass | Deliberate skew — head `1.2.0a5`/`fc879976`, both nodes pinned `1.2.0a4`/`bee75506` → `consistent: false`, every identity named. C2 proven on hardware |
+| S12 | pass | An explicit `remote_python_venv` was honoured on every node |
+
+## E.2 New discrepancies found
+
+### A8. The `local` first-occurrence match mis-mounts, it does not merely mis-parse  *(proven)*
+
+A7 recorded this as a path-matching flaw. Measured, it is worse, and the two
+call sites fail in different directions:
+
+| Cache root | `get_host_path` returns | Should be |
+|---|---|---|
+| `/home/u/MLC/repos` | `…/local/cache/abc123` | correct |
+| `/usr/local/share/mlc` | `/usr/local/share/mlc` | `…/local/cache/abc123` |
+| `/data/local/mlc` | `/data/local/mlc/local` | `…/local/cache/abc123` |
+
+The middle row is the dangerous one: a docker run would mount the **entire
+cache root** instead of the single entry asked for. `get_container_path` is
+worse still, returning `/home/mlcuser/MLC/repos/local/share/mlc` — three
+components assembled from the wrong offset, pointing at nothing.
+
+`cache_utils.fix_cache_paths` fails the opposite way. Its
+`path_parts[idx+1] == "cache"` guard notices the mismatch and gives up, so
+stale cache paths are silently never rewritten.
+
+Recorded as five tests in `tests/test_cache_root_path_matching.py`, three
+marked `expectedFailure`. They describe what C6 should produce and turn into
+unexpected successes when it lands.
+
+### A9. `--remote_isolated` leaves the staged cache in the remote's home  *(proven)*
+
+After an isolated run with `--remote_copy_back_mlc_cache`, the isolated dir
+was correctly removed by the trap (`isolated dirs left: 0`) and `~/mlcflow`
+was untouched (mtime identical to the B12a baseline, so that fix holds). But
+`$HOME` gained a new entry:
+
+```
+~/mlc-remote-artifacts/local/cache/detect-os_46a741ef/   (8 files, 48K)
+```
+
+That is `remote_copy_directory`, which sits **outside** the isolated dir by
+design — the comment at `remote_run.py:165` explains why: rsync targets have
+to exist before the payload that creates the isolated dir runs. The
+consequence was not thought through. Under isolation the cache is staged
+*out* of the trap-protected directory into the operator's home, and nothing
+ever removes it. So an isolated run copies its own contents somewhere
+permanent.
+
+This is the same shape as B12e, and the third thing now known to escape
+isolation: the venv (fixed), `system-info.json` (B12e), and now the staging
+directory.
+
+### A10. Cache copy-back fails the run on a macOS head  *(proven)*
+
+macOS ships `openrsync` ("rsync version 2.6.9 compatible"). `-avz` implies
+`-p`, and openrsync cannot set permissions on the destination:
+
+```
+rsync: error: cache: fchmodat (1) 1: Operation not permitted
+```
+
+**The data arrives** — all 8 cache files were present and correct at the
+destination. Only the exit status is wrong, and `remote_run.py:432` turns it
+into a failed run. Any macOS head node using `--remote_copy_back_mlc_cache`
+therefore sees a hard failure on a transfer that succeeded.
+
+### A11. The two installer fetches use different branches  *(proven)*
+
+`--remote_no_internet` takes the local-installer path, which falls back to
+downloading from `INSTALLER_URL` (`remote_run.py:621`) — branch **`dev`**.
+The ordinary path curls the installer at `remote_run.py:228` — branch
+**`main`**. So the mode intended for constrained environments silently pulls
+the *less* stable installer. Nothing documents this and it looks accidental.
+
+Confirmed in the same pass: the published `mlcflow 1.4.0a4` wheel contains no
+`docs/install/mlcflow_unix_installer.sh` anywhere, so `_get_local_installer()`
+never finds a local copy and always downloads. With no route out it raises an
+uncaught `URLError` — this is A4, now proven against a real published wheel
+rather than inferred. C3 fixes both halves.
+
+## E.3 Files written outside `/data/common/anandhu`
+
+Both unavoidable without fixing B12e first, and both already carried this
+content from the previous session rather than the user's own data:
+
+- `mlc2:~/system-info.json` — written by `get-platform-details` into the ssh
+  login dir on every node, every run.
+- `mlc2:/tmp/mlperf-system-info-single-node/*.json` — the literal the
+  multi-node script passes as `out_dir_path`.
+
+New this session, and not previously recorded anywhere:
+
+- `mlc2:~/mlc-remote-artifacts/` — see A9.
+
+## E.4 `mlc add` is broader than recorded
+
+The register says *"`mlc add cache <name>` crashes"*. Measured against a clean
+`mlcflow 1.3.6` from PyPI, with no branch changes present:
+
+| command | result |
+|---|---|
+| `mlc add cache <name>` | `TypeError` |
+| `mlc add cache --item=… --tags=…` | `TypeError` |
+| `mlc add experiment <name>` | `TypeError` |
+| `mlc add script <name>` | works |
+| `mlc add repo <path>` | works |
+
+So two whole target/action pairs are unusable from the CLI in **every**
+spelling, not one target in one spelling. The API path is fine —
+`test_thread_safety` drives `action.add({"target_name": "cache", …})`
+successfully — so the gap is that `main.py` never sets `target_name`
+(`action.py:951`). Still pre-existing and still out of scope, but it blocks
+T16 outright: an experiment cannot be created from the CLI to test whether it
+writes into a packaged tree.
+
+## E.5 Also observed
+
+- **The multi-node script cannot be invoked the way its sibling can.** It
+  declares a single tag, `get-mlperf-multi-node-system-info`, where
+  `get-mlperf-single-node-system-info` declares four (`get`, `mlperf`,
+  `single-node`, `system-info`). So `mlcr get,mlperf,multi-node,system-info`
+  fails with *"no scripts were found"* and only the full hyphenated alias
+  works. Worth aligning.
+- **Package mode upgrades mlcflow on the worker, as documented.** The run log
+  shows `Uninstalling mlcflow-1.3.6 … Successfully installed mlcflow-1.4.0a4`.
+  The risk register called this out; it is real and it is silent.
