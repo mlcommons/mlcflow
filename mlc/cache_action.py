@@ -4,6 +4,7 @@ import json
 import time
 from . import utils
 from .logger import logger
+from filelock import FileLock, Timeout
 
 
 class CacheAction(Action):
@@ -23,8 +24,8 @@ class CacheAction(Action):
 
     def __init__(self, parent=None):
         # super().__init__(parent)
-        self.parent = parent
         self.__dict__.update(vars(parent))
+        self.parent = parent
 
     def search(self, i):
         """
@@ -135,25 +136,64 @@ class CacheAction(Action):
         updated_count = 0
 
         for item in res['list']:
-            tags = item.meta.get("tags", [])
-            if 'tmp' in tags:
-                continue
-
-            tags.append('tmp')
-            item.meta["tags"] = tags
             meta_yaml_path = os.path.join(item.path, "meta.yaml")
             meta_json_path = os.path.join(item.path, "meta.json")
+            lock_file = os.path.join(item.path, ".lock")
+            tag_added = False
 
-            if os.path.exists(meta_yaml_path):
-                save_result = utils.save_yaml(meta_yaml_path, meta=item.meta)
-            else:
-                save_result = utils.save_json(meta_json_path, meta=item.meta)
+            try:
+                with FileLock(lock_file, timeout=60):
+                    # Re-read meta from disk inside the lock to avoid stale reads
+                    # from the earlier self.search() call.
+                    if os.path.exists(meta_yaml_path):
+                        current_meta = utils.read_yaml(meta_yaml_path)
+                        if not current_meta:
+                            return {
+                                'return': 1,
+                                'error': f"Could not read meta for {item.path}"
+                            }
+                        use_yaml = True
+                    elif os.path.exists(meta_json_path):
+                        current_meta = utils.read_json(meta_json_path)
+                        if not current_meta:
+                            return {
+                                'return': 1,
+                                'error': f"Could not read meta for {item.path}"
+                            }
+                        use_yaml = False
+                    else:
+                        logger.warning(
+                            f"No meta file found for {item.path}, skipping")
+                        continue
 
-            if save_result['return'] > 0:
-                return save_result
+                    tags = current_meta.get("tags", [])
+                    if 'tmp' in tags:
+                        continue
 
-            self.get_index().update(item.meta, "cache", item.path, item.repo)
-            updated_count += 1
+                    tags.append('tmp')
+                    current_meta["tags"] = tags
+
+                    if use_yaml:
+                        save_result = utils.save_yaml(
+                            meta_yaml_path, meta=current_meta)
+                    else:
+                        save_result = utils.save_json(
+                            meta_json_path, meta=current_meta)
+
+                    if save_result['return'] > 0:
+                        return save_result
+
+                    item.meta = current_meta
+                    tag_added = True
+            except Timeout:
+                return {
+                    'return': 1,
+                    'error': f"Could not acquire lock for {item.path} within 60 seconds"
+                }
+
+            if tag_added:
+                self.get_index().update(item.meta, "cache", item.path, item.repo)
+                updated_count += 1
 
         logger.info(f"Marked {updated_count} cache item(s) as tmp")
 
@@ -229,36 +269,64 @@ Cache Meta:""")
 
     def prune(self, args):
         """
-    ####################################################################################################################
+    ################################################################################
     Target: Cache
     Action: Prune
-    ####################################################################################################################
+    ################################################################################
 
-    Prune all expired cached items
+    Prune expired cached items. Supports optional filtering by tags.
 
-    Example Command:
+    Syntax:
 
     mlc prune cache
+    mlc prune cache --tags=<tags>
+
+    Example Commands:
+
+    mlc prune cache
+    mlc prune cache --tags=get,dataset
 
         """
         self.action_type = "cache"
-        # to fetch the details of all the caches generated
         run_args = {"fetch_all": True}
+        tags = args.get('tags')
+        if tags:
+            run_args['tags'] = tags
 
-        res = self.search(run_args)
+        # Use parent.search to bypass expiration filtering in self.search,
+        # so we can find the expired entries ourselves
+        run_args['target_name'] = "cache"
+        res = self.parent.search(run_args)
         if res['return'] > 0:
             return res
 
+        expired = []
         for item in res['list']:
             expiration_time = item.meta.get('cache_expiration')
             if expiration_time is not None and expiration_time < time.time():
-                ii = {}
-                ii['f'] = True
-                ii['item'] = item.meta.get('uid')
-                if ii['item']:
-                    self.rm(ii)
+                expired.append(item)
 
-        return {'return': 0}
+        if not expired:
+            logger.info("No expired cache entries found.")
+            return {'return': 0}
+
+        logger.info(f"Found {len(expired)} expired cache entries:")
+        for item in expired:
+            item_tags = ','.join(item.meta.get('tags', []))
+            logger.info(
+                f"  {item.meta.get('uid', '?')} [{item_tags}] -> {item.path}")
+
+        removed = 0
+        for item in expired:
+            uid = item.meta.get('uid')
+            if uid:
+                ii = {'f': True, 'item': uid, 'target_name': 'cache'}
+                r = self.rm(ii)
+                if r.get('return', 0) == 0:
+                    removed += 1
+
+        logger.info(f"Pruned {removed} expired cache entries.")
+        return {'return': 0, 'pruned': removed}
 
     def list(self, args):
         """

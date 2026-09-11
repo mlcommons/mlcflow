@@ -454,6 +454,38 @@ Main Script Meta:""")
     mlc apptainer script --tags=detect,os -j
     mlca detect,os -j
 
+    Flags Available (--apptainer_X takes priority over --docker_X for each option):
+
+    1. --apptainer_rebuild / --docker_rebuild:
+       Force rebuild of the Apptainer image even if it already exists.
+
+    2. --apptainer_noregenerate / --docker_noregenerate:
+       Skip regenerating the Apptainer definition file before running.
+
+    3. --apptainer_mounts / --docker_mounts:
+       List of bind mounts to pass to the container (host:container format).
+
+    4. --apptainer_run_cmd_prefix / --docker_run_cmd_prefix:
+       Command prefix to prepend before the mlcr command inside the container.
+
+    5. --apptainer_verbose / --apptainer_v / --docker_verbose / --docker_v:
+       Enable verbose output inside the container.
+
+    6. --apptainer_silent / --apptainer_s / --docker_silent / --docker_s:
+       Enable silent output inside the container.
+
+    7. --apptainer_run_override / --docker_run_override:
+       Force apptainer execution even if 'run' is set to False in script meta.
+
+    All --docker_X options listed above are accepted as defaults when the
+    corresponding --apptainer_X option is not provided. Docker-only options
+    (e.g. --docker_dt, --docker_cache, --docker_shm_size) are not applicable
+    to Apptainer and are ignored.
+
+    Script meta.yaml keys:
+    - ``docker``: base container settings (used by both mlcd and mlca).
+    - ``apptainer``: apptainer-specific overrides; merged over ``docker`` settings.
+
         """
         return self.call_script_module_function("apptainer", run_args)
 
@@ -493,6 +525,16 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    15. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -504,10 +546,10 @@ Main Script Meta:""")
 
     def run(self, run_args):
         """
-    ####################################################################################################################
+    ################################################################################
     Target: Script
     Action: Run
-    ####################################################################################################################
+    ################################################################################
 
     The `run` action executes a script from an MLC repository.
 
@@ -521,11 +563,81 @@ Main Script Meta:""")
     1. -j: Displays the output in JSON format.
     2. Instead of using `mlc run script --tags=`, you can simply use `mlcr`.
     3. *<Individual script inputs>: The `mlcr` command can accept additional inputs defined in the script's `input_mappings` metadata.
+    4. --mlc_isolate: Run in an isolated temporary directory with a fresh MLC_REPOS.
+    5. --mlc_isolate_dir: Base directory for isolation (default: system temp dir).
+    6. --mlc_isolate_clean: Auto-remove the isolated directory after the run.
 
         """
         if not run_args.get('tags') and not run_args.get('details'):
             return self.call_script_module_function("help", run_args)
+
+        if str(run_args.get('mlc_isolate', '')
+               ).lower() in ('true', 'yes', '1'):
+            return self._run_isolated(run_args)
+
         return self.call_script_module_function("run", run_args)
+
+    def _run_isolated(self, run_args):
+        """Run a script in an isolated temporary directory with a fresh MLC_REPOS."""
+        import tempfile
+        import uuid
+        import shutil
+
+        isolate_dir = run_args.get('mlc_isolate_dir', '')
+        isolate_clean = str(
+            run_args.get(
+                'mlc_isolate_clean',
+                '')).lower() in (
+            'true',
+            'yes',
+            '1')
+        uid = uuid.uuid4().hex[:16]
+
+        if isolate_dir:
+            base = os.path.abspath(isolate_dir)
+            if not os.path.isdir(base):
+                return {'return': 1,
+                        'error': f'mlc_isolate_dir does not exist: {base}'}
+            tmp_dir = os.path.join(base, f'mlcflow-isolated-{uid}')
+        else:
+            tmp_dir = os.path.join(
+                tempfile.gettempdir(),
+                f'mlcflow-isolated-{uid}')
+
+        os.makedirs(tmp_dir, exist_ok=True)
+        logger.info(f"Isolated run directory: {tmp_dir}")
+
+        orig_dir = os.getcwd()
+        orig_repos = os.environ.get('MLC_REPOS')
+        original_state = dict(self.__dict__)
+
+        try:
+            os.chdir(tmp_dir)
+            os.environ['MLC_REPOS'] = os.path.join(tmp_dir, 'MLC')
+
+            # Re-initialize parent with new MLC_REPOS so index/repos are fresh
+            from .action import Action
+            new_parent = Action()
+            self.__dict__.update(vars(new_parent))
+            self.parent = new_parent
+
+            result = self.call_script_module_function("run", run_args)
+        finally:
+            self.__dict__.clear()
+            self.__dict__.update(original_state)
+            os.chdir(orig_dir)
+            if orig_repos is not None:
+                os.environ['MLC_REPOS'] = orig_repos
+            elif 'MLC_REPOS' in os.environ:
+                del os.environ['MLC_REPOS']
+
+            if isolate_clean:
+                logger.info(f"Cleaning up isolated directory: {tmp_dir}")
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            else:
+                logger.info(f"Isolated run artifacts preserved at: {tmp_dir}")
+
+        return result
 
     def test(self, run_args):
         """
@@ -675,6 +787,16 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    15. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -718,6 +840,16 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    15. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -789,6 +921,16 @@ Main Script Meta:""")
         Commands to run on the node before the main script
     25. --slurm_post_run_cmds:
         Commands to run on the node after the main script
+    26. --slurm_mlcflow_upgrade:
+        Upgrade mlcflow on the SLURM node before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    27. --slurm_no_internet:
+        Use a locally available installer on the SLURM node (incompatible with --slurm_mlcflow_upgrade)
+    28. --slurm_isolated:
+        Run in an isolated temporary workspace on the node, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --slurm_python_venv, the venv is recreated for each run.
+    29. --slurm_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 

@@ -50,11 +50,23 @@ def slurm_run(self_module, i, slurm_action='run'):
     slurm_exclusive = i.get('slurm_exclusive', False)
     slurm_export = i.get('slurm_export', 'ALL')
     slurm_srun_extra_args = i.get('slurm_srun_extra_args', '')
-    slurm_python_venv = i.get('slurm_python_venv', 'mlcflow')
+    slurm_python_venv = i.get('slurm_python_venv') or 'mlcflow'
     slurm_pull_mlc_repos = i.get('slurm_pull_mlc_repos', False)
     slurm_pre_run_cmds = i.get('slurm_pre_run_cmds', [])
     slurm_post_run_cmds = i.get('slurm_post_run_cmds', [])
     slurm_no_internet = is_true(i.get('slurm_no_internet', False))
+    slurm_mlcflow_upgrade = is_true(i.get('slurm_mlcflow_upgrade', False))
+    slurm_copy_back_mlc_cache = is_true(
+        i.get('slurm_copy_back_mlc_cache', False))
+    slurm_copy_back_mlc_cache_path = i.get(
+        'slurm_copy_back_mlc_cache_path', '')
+    if slurm_mlcflow_upgrade and slurm_no_internet:
+        return {
+            'return': 1,
+            'error': '--slurm_mlcflow_upgrade cannot be combined with --slurm_no_internet: the SLURM node has no network access to upgrade mlcflow.'
+        }
+    slurm_isolated = is_true(i.get('slurm_isolated', False))
+    slurm_isolated_base_dir = i.get('slurm_isolated_base_dir', '')
 
     # Normalize str → list so a single command string doesn't get iterated
     # char-by-char
@@ -141,16 +153,45 @@ def slurm_run(self_module, i, slurm_action='run'):
     # Build the commands to run inside srun
     run_cmds = []
 
+    if slurm_isolated:
+        if slurm_isolated_base_dir:
+            safe_slurm_isolated_base_dir = (
+                str(slurm_isolated_base_dir)
+                .replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace('$', '\\$')
+                .replace('`', '\\`')
+            )
+            run_cmds.extend([
+                f'MLC_ISOLATED_TMP_BASE_DIR="{safe_slurm_isolated_base_dir}"',
+                '[ -d "$MLC_ISOLATED_TMP_BASE_DIR" ] || exit 1',
+                'MLC_ISOLATED_TMP_DIR="$(mktemp -d -p "$MLC_ISOLATED_TMP_BASE_DIR" mlcflow-isolated.XXXXXX)" || exit 1',
+            ])
+        else:
+            run_cmds.append('MLC_ISOLATED_TMP_DIR="$(mktemp -d)" || exit 1')
+        run_cmds.extend([
+            '[ -n "$MLC_ISOLATED_TMP_DIR" ] && [ -d "$MLC_ISOLATED_TMP_DIR" ] || exit 1',
+            'cd "$MLC_ISOLATED_TMP_DIR" || exit 1',
+            # Both roots -- see the note in remote_run.py's isolated
+            # preamble. MLC_REPOS alone does not move the cache.
+            'export MLC_REPOS="$PWD/MLC"',
+            'export MLC_CACHE="$PWD/MLC"',
+            'trap "rm -rf \\"$MLC_REPOS\\" \\"$MLC_ISOLATED_TMP_DIR\\"" EXIT INT TERM HUP'
+        ])
+
     # Bootstrap mlcflow on the node
-    quoted_venv = shlex.quote(slurm_python_venv)
     if slurm_no_internet:
-        # Use installer from local mlcflow repo or pre-downloaded copy
+        # --slurm_no_internet selects the local-installer path; network-requiring
+        # operations like --slurm_mlcflow_upgrade are already blocked by the
+        # guard above.
         installer_path = _get_local_installer()
-        run_cmds.append(f'bash {shlex.quote(installer_path)} --yes --venv-dir {quoted_venv}')
-    else:
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {quoted_venv}')
-    run_cmds.append(f'. {quoted_venv}/bin/activate')
+            f'bash {shlex.quote(installer_path)} --yes --venv-dir {shlex.quote(slurm_python_venv)}')
+    else:
+        upgrade_flag = ' --upgrade' if slurm_mlcflow_upgrade else ''
+        run_cmds.append(
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/main/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(slurm_python_venv)}{upgrade_flag}')
+    run_cmds.append(build_venv_activation_command(slurm_python_venv))
 
     if is_true(slurm_pull_mlc_repos):
         run_cmds.append('mlc pull repo')
@@ -163,6 +204,33 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     # Post-run commands
     run_cmds.extend(slurm_post_run_cmds)
+
+    # Copy MLC cache back to a persistent location if requested.
+    # For isolated mode the cache lives in a temp dir that is cleaned up on
+    # EXIT; the copy must therefore happen inside srun, after the script but
+    # before the trap fires.  For non-isolated mode the SLURM nodes share the
+    # filesystem so a copy is only performed when an explicit target path is
+    # given.
+    if slurm_copy_back_mlc_cache:
+        local_cache = slurm_copy_back_mlc_cache_path or get_local_mlc_cache_path(
+            self_module)
+        safe_local_cache = (
+            str(local_cache)
+            .replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('$', '\\$')
+            .replace('`', '\\`')
+        )
+        if slurm_isolated:
+            run_cmds.append(
+                f'mkdir -p "{safe_local_cache}" && '
+                f'rsync -a "$MLC_REPOS/local/cache/" "{safe_local_cache}/"'
+            )
+        elif slurm_copy_back_mlc_cache_path:
+            run_cmds.append(
+                f'mkdir -p "{safe_local_cache}" && '
+                f'rsync -a ~/MLC/repos/local/cache/ "{safe_local_cache}/"'
+            )
 
     # Join all commands with && so failure stops execution
     combined_cmd = ' && '.join(run_cmds)
@@ -303,7 +371,10 @@ def _get_local_installer():
 
     # Check if the installer exists in the local mlcflow package
     local_installer = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        os.path.dirname(
+            os.path.dirname(
+                os.path.dirname(
+                    os.path.abspath(__file__)))),
         'docs', 'install', 'mlcflow_unix_installer.sh')
     if os.path.isfile(local_installer):
         return local_installer

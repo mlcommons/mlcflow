@@ -236,8 +236,13 @@ class Index:
                         data = yaml.safe_load(f) or {}
                 elif os.path.isfile(json_path):
                     config_path = json_path
-                    with open(config_path, "r") as f:
-                        data = json.load(f) or {}
+                    try:
+                        with open(config_path, "r") as f:
+                            data = json.load(f) or {}
+                    except (json.JSONDecodeError, IOError) as e:
+                        logger.warning(
+                            f"Skipping {config_path}: could not read meta ({e})")
+                        continue
                 else:
                     # No config file found, remove from index if exists
                     delete_flag = False

@@ -1,8 +1,12 @@
+import base64
+import json
 import os
 import importlib
 import subprocess
 import sys
 import ast
+import shlex
+import uuid
 from script.cache_utils import *
 
 
@@ -28,6 +32,55 @@ def get_variation_and_script_tags(tags_string):
                 script_tags.append(t)
     return {'return': 0, 'script_tags': script_tags,
             'variation_tags': variation_tags}
+
+
+def build_venv_activation_command(venv_dir):
+    requested_venv = venv_dir or 'mlcflow'
+    activation_script = f'/tmp/.mlcflow-activate-{uuid.uuid4().hex}'
+    python_code = (
+        "from pathlib import Path; import platform, shlex, sys; "
+        f"requested={json.dumps(requested_venv)}; "
+        f"wrapper={json.dumps(activation_script)}; "
+        'candidate=f"{requested}_{platform.machine()}_py'
+        '{sys.version_info[0]}.{sys.version_info[1]}"; '
+        'path=candidate if Path(candidate, "bin", "activate").is_file() '
+        'else requested; '
+        'ap=Path(path) / "bin" / "activate"; '
+        'activate=shlex.quote(str(ap)); '
+        'print("[ -f " + activate + " ] || { echo No compatible mlcflow venv found.'
+        ' Tried: " + str(ap) + " >&2; exit 1; }"); '
+        'print(". " + activate); '
+        'print("rm -f " + shlex.quote(wrapper))'
+    )
+    # Base64-encode the python code and pass it as sys.argv[1] so that the
+    # generated command contains neither single quotes nor backslash-double-quote
+    # sequences.  The remote-run-commands customize.py escapes single quotes
+    # with replace("'", "'\''") and then wraps the whole joined command string
+    # with shlex.quote().  Any single quote produced by a naive
+    # shlex.quote(python_code) call would be double-escaped by that two-step
+    # process, causing "unexpected EOF while looking for matching `''".
+    # Passing the base64 payload as a positional argument avoids all quoting
+    # issues: base64 uses only [A-Za-z0-9+/=] (shell-safe without any quotes),
+    # and the python3 -c "..." string uses double quotes with no special chars.
+    encoded = base64.b64encode(python_code.encode()).decode()
+    exec_cmd = (
+        f'python3 -c "import base64,sys;exec(base64.b64decode(sys.argv[1]).decode())"'
+        f' {encoded}'
+    )
+    # activation_script is /tmp/.mlcflow-activate-<32 hex chars>; only
+    # [/tmp.-a-f0-9] characters, all shell-safe without quoting.  We
+    # intentionally do NOT use shlex.quote() here: shlex.quote() would add
+    # single-quote delimiters, which customize.py's replace("'", "'\''") +
+    # shlex.quote() double-escaping would then mangle.
+    return f'{exec_cmd} > {activation_script} && . {activation_script}'
+
+
+def get_local_mlc_cache_path(self_module):
+    repos_path = getattr(
+        getattr(self_module, 'action_object', None), 'repos_path', '')
+    if not isinstance(repos_path, str) or not repos_path:
+        repos_path = os.path.join(os.path.expanduser("~"), "MLC", "repos")
+    return os.path.join(repos_path, 'local', 'cache')
 
 
 def select_script_and_cache(

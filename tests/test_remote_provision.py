@@ -392,12 +392,6 @@ class TestPackagedProvenance(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # The whole bootstrap, as remote_run() actually assembles it
 # ---------------------------------------------------------------------------
-INSTALLER_LINE = (
-    'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/'
-    'refs/heads/dev/docs/install/mlcflow_unix_installer.sh '
-    '| bash -s -- --yes --venv-dir mlcflow')
-
-
 class TestRemoteRunBootstrap(unittest.TestCase):
     """Assert on the command list remote_run() hands to the ssh layer."""
 
@@ -433,22 +427,33 @@ class TestRemoteRunBootstrap(unittest.TestCase):
         called = mock_self.action_object.access.call_args[0][0]
         return result, called['run_cmds']
 
-    def test_the_default_bootstrap_is_exactly_what_it_was(self):
-        """The regression guard for the opt-in promise. Three commands:
-        install, activate, run - and nothing else."""
+    # These assert the *shape* of the bootstrap, not its literal commands.
+    # The installer line and the venv activation belong to remote_run.py and
+    # change independently (the activation now carries a fresh uuid per call,
+    # so two invocations are not even equal to each other). What must hold is
+    # that an unconfigured run adds nothing, and a configured one adds exactly
+    # one command in exactly one place.
+
+    def test_an_unconfigured_run_adds_nothing_to_the_bootstrap(self):
+        """The regression guard for the opt-in promise."""
         result, cmds = self._bootstrap()
         self.assertEqual(result['return'], 0)
-        self.assertEqual(cmds[0], INSTALLER_LINE)
-        self.assertEqual(cmds[1], '. mlcflow/bin/activate')
-        self.assertEqual(len(cmds), 3)
-        self.assertTrue(cmds[2].startswith('mlcr'))
+        self.assertEqual(len(cmds), 3, cmds)
+        self.assertIn('mlcflow_unix_installer.sh', cmds[0])
+        self.assertTrue(cmds[-1].startswith('mlcr'))
+        joined = ' '.join(cmds)
+        for provisioning in ('mlc-scripts', 'mlc pull repo',
+                             'MLC_PROVISION_FAILED'):
+            self.assertNotIn(provisioning, joined)
 
-    def test_provisioning_lands_after_activation_and_before_the_script(self):
+    def test_a_pin_inserts_one_command_between_activation_and_the_script(self):
+        _, base = self._bootstrap()
         _, cmds = self._bootstrap(remote_mlc_scripts='1.2.0a4')
-        self.assertEqual(len(cmds), 4)
-        self.assertEqual(cmds[1], '. mlcflow/bin/activate')
+        self.assertEqual(len(cmds), len(base) + 1)
+        self.assertEqual(cmds[0], base[0], "installer line changed")
+        self.assertEqual(cmds[-1], base[-1], "script command changed")
         self.assertIn('pip install "mlc-scripts==1.2.0a4"', cmds[2])
-        self.assertTrue(cmds[3].startswith('mlcr'))
+        self.assertTrue(cmds[-1].startswith('mlcr'))
 
     def test_the_new_flags_do_not_reach_the_remote_command(self):
         """prune_input strips remote_* keys; if that ever changes, the worker

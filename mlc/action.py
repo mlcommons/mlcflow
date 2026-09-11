@@ -458,10 +458,17 @@ class Action:
         if not os.path.exists(repo_json_path):
             self._create_local_repo(candidate_local)
             try:
-                with open(repo_json_path, 'w') as f:
+                # 'x' rather than 'w': two processes can reach this branch at
+                # once, and the loser must not overwrite the registry the
+                # winner just wrote. Kept from main's thread-safety work; the
+                # RootNotWritableError below is this branch's, and answers a
+                # different question - the root is not writable at all.
+                with open(repo_json_path, 'x') as f:
                     json.dump([candidate_local], f, indent=2)
                 logger.info(
                     f"Created repos.json in {self.repos_path} and initialised with local cache folder path: {candidate_local}")
+            except FileExistsError:
+                pass
             except OSError as e:
                 raise RootNotWritableError(
                     f"Could not create {repo_json_path} ({e}). "
@@ -1087,18 +1094,19 @@ class Action:
             item_meta = result.meta
 
             if os.path.exists(item_path):
-                if force_remove == True:
-                    shutil.rmtree(item_path)
-                else:
+                if force_remove != True:
                     user_choice = input(
                         f"Confirm to delete {target_name} item: {item_path}? (yes/no): ").strip().lower()
                     if user_choice not in ['yes', 'y']:
                         continue
-                    else:
-                        shutil.rmtree(item_path)
 
-                logger.info(
-                    f"{target_name} item: {item_path} has been successfully removed")
+                try:
+                    shutil.rmtree(item_path)
+                    logger.info(
+                        f"{target_name} item: {item_path} has been successfully removed")
+                except FileNotFoundError:
+                    logger.warning(
+                        f"{item_path} was already removed by another process.")
 
             self.get_index().rm(item_meta, target_name, item_path)
 

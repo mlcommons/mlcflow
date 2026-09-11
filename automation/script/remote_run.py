@@ -1,5 +1,7 @@
 from collections import defaultdict
 import os
+import shlex
+import uuid
 import mlc.utils as utils
 from mlc import utils
 from utils import *
@@ -37,6 +39,18 @@ def remote_run(self_module, i):
     remote_action = i.get('remote_action', 'run')
     remote_shell = i.get('remote_shell', '')
     remote_no_internet = is_true(i.get('remote_no_internet', False))
+    remote_mlcflow_upgrade = is_true(i.get('remote_mlcflow_upgrade', False))
+    remote_copy_back_mlc_cache = is_true(
+        i.get('remote_copy_back_mlc_cache', False))
+    remote_copy_back_mlc_cache_path = i.get(
+        'remote_copy_back_mlc_cache_path', '')
+    if remote_mlcflow_upgrade and remote_no_internet:
+        return {
+            'return': 1,
+            'error': '--remote_mlcflow_upgrade cannot be combined with --remote_no_internet: the remote node has no network access to upgrade mlcflow.'
+        }
+    remote_isolated = is_true(i.get('remote_isolated', False))
+    remote_isolated_base_dir = i.get('remote_isolated_base_dir', '')
 
     prune_result = prune_input(
         {'input': i, 'extra_keys_starts_with': ['remote_']})
@@ -95,24 +109,128 @@ def remote_run(self_module, i):
     }
 
     run_cmds = []
-    remote_mlc_python_venv = i.get('remote_python_venv', 'mlcflow')
+    remote_mlc_python_venv = i.get('remote_python_venv') or 'mlcflow'
+    run_cmds_start_index = 0
+    remote_copy_directory = i.get(
+        "remote_copy_directory",
+        "mlc-remote-artifacts")
+
+    remote_copy_directory_for_cmd = remote_copy_directory
+
+    # For isolated mode, generate a unique temp dir path in Python rather than
+    # using shell constructs like $(mktemp -d).  Shell variable references such
+    # as $PWD, $(mktemp -d) and $MLC_ISOLATED_TMP_DIR inside run_cmds end up
+    # stored in env['MLC_SSH_CMD'], which convert_env_to_script wraps in
+    # double-quotes (export MLC_SSH_CMD="...").  When bash sources that env
+    # file, double-quote context expands $PWD and $(mktemp -d) locally and
+    # resolves $MLC_ISOLATED_TMP_DIR to empty, causing [ -n "" ] to fail.
+    # Using a Python-generated literal path avoids all unintended local
+    # expansion.
+    _remote_tmp_dir = ''
+    if remote_isolated:
+        if remote_no_internet:
+            return {
+                'return': 1,
+                'error': '--remote_isolated is incompatible with --remote_no_internet: '
+                         'each isolated run re-installs mlcflow into a fresh venv, '
+                         'which requires network access on the target host.'
+            }
+        _uid = uuid.uuid4().hex[:16]
+        if remote_isolated_base_dir:
+            # Escape shell metacharacters so the value is safe to embed inside
+            # double-quoted shell strings (same escaping as slurm_run.py).
+            _safe_base = (
+                str(remote_isolated_base_dir)
+                .replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace('$', '\\$')
+                .replace('`', '\\`')
+                .rstrip('/')
+            )
+            _remote_tmp_dir = f'{_safe_base}/mlcflow-isolated-{_uid}'
+        else:
+            _safe_base = ''
+            _remote_tmp_dir = f'/tmp/mlcflow-isolated-{_uid}'
+        # The venv has to be named explicitly here, because this path
+        # deliberately does not cd into the isolated dir (see below) and the
+        # default venv argument is the bare relative name 'mlcflow' -- which
+        # the installer resolves against the ssh login directory, i.e. the
+        # remote user's home. Left alone, an isolated run reuses (and
+        # --remote_mlc_scripts pip-installs into) whatever venv already sits
+        # there, which is the opposite of isolation and is what the
+        # --remote_no_internet error above already claims we do not do.
+        # slurm_run gets this for free because it does cd. An explicit
+        # --remote_python_venv still wins.
+        if not i.get('remote_python_venv'):
+            remote_mlc_python_venv = f'{_remote_tmp_dir}/venv'
+        # Do NOT change remote_copy_directory_for_cmd here.  Files are rsynced
+        # to the relative (home-dir-relative) copy_directory BEFORE the remote
+        # command payload runs — which is the payload that creates the isolated
+        # dir via mkdir.  Pointing copy_directory at the isolated path would
+        # mean rsync tries to write to a directory that does not yet exist.
+        # Artifact paths stay relative/unchanged; only MLC_REPOS is redirected
+        # to the isolated temp dir so that MLC state is contained and cleaned
+        # up.
+        preamble = [
+            f'MLC_ISOLATED_TMP_DIR="{_remote_tmp_dir}"',
+        ]
+        if remote_isolated_base_dir:
+            # Require that the base directory already exists (consistent with
+            # slurm_isolated_base_dir behaviour) so a typo is a hard error
+            # rather than creating an unexpected directory tree.
+            preamble.append(
+                f'[ -d "{_safe_base}" ] || {{ echo "remote_isolated_base_dir does not exist: {_safe_base}" >&2; exit 1; }}')
+        preamble.extend([
+            f'mkdir -p "{_remote_tmp_dir}" || exit 1',
+            f'chmod 700 "{_remote_tmp_dir}"',
+            f'[ -d "{_remote_tmp_dir}" ] || exit 1',
+            # Both roots, not just MLC_REPOS. The two are resolved
+            # independently, so exporting MLC_REPOS alone leaves the cache in
+            # the remote's real home: it outlives the trap below, and the
+            # copy-back reads {_remote_tmp_dir}/MLC/local/cache, which would
+            # be empty. Pointing MLC_CACHE at the same dir puts the local repo
+            # (and so the cache) exactly where the copy-back looks for it.
+            f'export MLC_REPOS="{_remote_tmp_dir}/MLC"',
+            f'export MLC_CACHE="{_remote_tmp_dir}/MLC"',
+            f'trap "rm -rf {_remote_tmp_dir}" EXIT INT TERM HUP',
+        ])
+        run_cmds.extend(preamble)
+        run_cmds_start_index = len(run_cmds)
 
     # Determine if the local system is Windows to adjust command formatting
     is_windows = platform.system() == 'Windows'
+
+    # Export user-specified environment variables on the remote shell early,
+    # before the installer runs (e.g. LC_ALL for locale, PATH for brew).
+    # Usage: --remote_env.LC_ALL=C.UTF-8
+    # --remote_env.PATH='$PATH:/opt/homebrew/bin'
+    user_remote_env = i.get('remote_env', {})
+    if isinstance(user_remote_env, dict):
+        for key, value in user_remote_env.items():
+            run_cmds.append(f'export {key}={value}')
 
     # Note: The remote activation command uses Unix syntax because we're SSHing into a (likely) Unix server
     # Even if we're running from Windows locally, the remote commands execute
     # on the remote server
     if remote_no_internet:
-        # Download installer locally and copy it to the remote machine
+        # --remote_no_internet selects the local-installer path; network-requiring
+        # operations like --remote_mlcflow_upgrade are already blocked by the
+        # guard above.
         installer_local_path = _get_local_installer()
         files_to_copy.append(installer_local_path)
-        remote_installer = "mlc-remote-artifacts/" + os.path.basename(installer_local_path)
-        run_cmds.append(f'bash {remote_installer} --yes --venv-dir {remote_mlc_python_venv}')
-    else:
+        remote_installer = remote_copy_directory_for_cmd + "/" + \
+            os.path.basename(installer_local_path)
         run_cmds.append(
-            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/dev/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {remote_mlc_python_venv}')
-    run_cmds.append(f". {remote_mlc_python_venv}/bin/activate")
+            f'bash "{remote_installer}" --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}')
+    else:
+        upgrade_flag = ' --upgrade' if remote_mlcflow_upgrade else ''
+        run_cmds.append(
+            f'curl -sSL https://raw.githubusercontent.com/mlcommons/mlcflow/refs/heads/main/docs/install/mlcflow_unix_installer.sh | bash -s -- --yes --venv-dir {shlex.quote(remote_mlc_python_venv)}{upgrade_flag}')
+    run_cmds.append(build_venv_activation_command(remote_mlc_python_venv))
+    # First point at which `mlc` is on PATH. Commands that need the CLI
+    # itself - registering copied repos, below - are inserted here rather
+    # than at run_cmds_start_index, which sits before the installer.
+    run_cmds_after_venv = len(run_cmds)
     # is_true() rather than a bare truthiness check: this arrives from the CLI
     # as a string, so '--remote_pull_mlc_repos=no' is a non-empty (truthy)
     # str and would otherwise still pull.
@@ -137,7 +255,7 @@ def remote_run(self_module, i):
             # the files_to_copy list contains the path to files in host
             files_to_copy.append(env[key])
             # Use forward slashes for remote path (Unix/Linux servers)
-            remote_env[key] = "mlc-remote-artifacts/" + \
+            remote_env[key] = remote_copy_directory_for_cmd + "/" + \
                 os.path.basename(
                 env[key])  # if host path is /home/user/file.txt, remote path will be mlc-remote-artifacts/file.txt
 
@@ -147,6 +265,11 @@ def remote_run(self_module, i):
 
     i_copy = copy.deepcopy(i)
     i_copy['run_cmd'] = run_input
+    # Avoid passing through the full original command line when rebuilding the
+    # nested remote command. It can contain shell-quoted arguments (for example
+    # quoted SSH key paths) that lead to invalid nested quoting in the SSH
+    # wrapper.
+    i_copy['run_cmd'].pop('mlc_run_cmd', None)
 
     r = regenerate_script_cmd(i_copy)
     if r['return'] > 0:
@@ -165,6 +288,13 @@ def remote_run(self_module, i):
 
     remote_pre_run_cmds = i.get('remote_pre_run_cmds', [])
     remote_post_run_cmds = i.get('remote_post_run_cmds', [])
+    if isinstance(remote_post_run_cmds, str):
+        remote_post_run_cmds = [
+            remote_post_run_cmds] if remote_post_run_cmds else []
+    elif remote_post_run_cmds is None:
+        remote_post_run_cmds = []
+    else:
+        remote_post_run_cmds = list(remote_post_run_cmds)
 
     # Insert pre_run_cmds into run_cmds (after install+activate) so they
     # execute with mlcflow available, rather than passing them separately
@@ -181,11 +311,11 @@ def remote_run(self_module, i):
             remote_inputs[key] = i[f"remote_{key}"]
 
     if files_to_copy:
-        remote_copy_directory = i.get(
-            "remote_copy_directory",
-            "mlc-remote-artifacts")
         remote_inputs['files_to_copy'] = files_to_copy
-        remote_inputs['copy_directory'] = remote_copy_directory
+        # In isolated mode the SCP target must match the absolute path the
+        # commands reference; in normal mode use the (possibly relative)
+        # copy_directory as before.
+        remote_inputs['copy_directory'] = remote_copy_directory_for_cmd
 
     # For repo copying, add a separate copy with MLC/repos target
     if i.get('remote_copy_mlc_repos', False):
@@ -237,16 +367,45 @@ def remote_run(self_module, i):
             remote_inputs['files_to_copy'] = remote_inputs.get(
                 'files_to_copy', []) + repo_files
             remote_mlc_repos_path = i.get("remote_mlc_repos_path", "MLC/repos")
-            remote_inputs['copy_directory'] = remote_mlc_repos_path
+            # In isolated mode the repos are still rsynced to the relative
+            # path (home-dir-relative), the same as non-isolated. The isolated
+            # dir is not created until the command payload runs, so pointing
+            # copy_directory at a path inside it would fail at rsync time.
+            remote_mlc_repos_path_for_cmd = remote_mlc_repos_path
+            remote_inputs['copy_directory'] = remote_mlc_repos_path_for_cmd
             # Register each copied repo on the remote instead of symlinking
             # into $MLC_REPOS. The remote resolves its own repo root from its
-            # own interpreter - a path derived from this machine's
-            # site-packages means nothing over there, and $MLC_REPOS is not
-            # normally exported in the remote shell at all.
-            run_cmds.insert(0,
-                            f'for d in "{remote_mlc_repos_path}"/*/ ; do '
+            # own interpreter, so a path derived from this machine's
+            # site-packages means nothing over there. Registering also does
+            # the right thing under --remote_isolated, where MLC_REPOS points
+            # at the throwaway dir.
+            run_cmds.insert(run_cmds_after_venv,
+                            f'for d in "{remote_mlc_repos_path_for_cmd}"/*/ ; do '
                             f'[ -d "$d" ] && mlc add repo "$(realpath "${{d%/}}")" >/dev/null 2>&1 || true ; '
                             f'done')
+
+    if remote_copy_back_mlc_cache:
+        if remote_isolated:
+            remote_cache_path = f'{_remote_tmp_dir}/MLC/local/cache'
+            staged_remote_cache_path = str(
+                PurePosixPath(remote_copy_directory_for_cmd) / 'local' / 'cache')
+            staged_remote_cache_parent = str(
+                PurePosixPath(remote_copy_directory_for_cmd) / 'local')
+            remote_post_run_cmds.append(
+                f'rm -rf {shlex.quote(staged_remote_cache_path)} && '
+                f'mkdir -p {shlex.quote(staged_remote_cache_parent)} && '
+                f'if [ -d {shlex.quote(remote_cache_path)} ]; then '
+                f'cp -a {shlex.quote(remote_cache_path)} {shlex.quote(staged_remote_cache_path)}; '
+                f'else mkdir -p {shlex.quote(staged_remote_cache_path)}; fi'
+            )
+            remote_cache_path = staged_remote_cache_path
+        else:
+            remote_cache_path = '~/MLC/repos/local/cache'
+        files_to_copy_back.append(remote_cache_path)
+        if remote_copy_back_mlc_cache_path:
+            path_to_copy_back_files = remote_copy_back_mlc_cache_path
+        elif not path_to_copy_back_files:
+            path_to_copy_back_files = get_local_mlc_cache_path(self_module)
 
     if files_to_copy_back:
         remote_inputs['files_to_copy_back'] = files_to_copy_back
@@ -472,7 +631,10 @@ def _get_local_installer():
 
     # Check if the installer exists in the local mlcflow package
     local_installer = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        os.path.dirname(
+            os.path.dirname(
+                os.path.dirname(
+                    os.path.abspath(__file__)))),
         'docs', 'install', 'mlcflow_unix_installer.sh')
     if os.path.isfile(local_installer):
         return local_installer
