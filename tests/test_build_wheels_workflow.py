@@ -36,6 +36,10 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
 
     def test_release_step_is_safe_to_rerun_for_existing_tag(self):
         release_step = self.steps_by_name["Create GitHub Release"]
+        publish_step = next(
+            step for step in self.steps
+            if step.get("name") == "Publish to PyPI"
+        )
 
         self.assertIn(
             'gh release view "$RELEASE_REF_NAME"',
@@ -44,6 +48,7 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
             'gh release upload "$RELEASE_REF_NAME" dist/* --clobber',
             release_step["run"],
         )
+        self.assertEqual(publish_step["with"]["skip-existing"], "true")
 
     def test_checkout_uses_app_token_for_protected_branch_pushes(self):
         token_step = self.steps_by_name["Generate GitHub App token"]
@@ -67,6 +72,9 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
 
         self.assertIn(
             "printf '%s\\n' \"${new_version}\" > VERSION",
+            run_script)
+        self.assertIn(
+            "Reusing unreleased VERSION ${new_version} from main.",
             run_script)
         self.assertIn(
             "git commit -m \"Bump VERSION to ${new_version}\"",

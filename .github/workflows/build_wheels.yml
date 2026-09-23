@@ -107,9 +107,17 @@ jobs:
             exit 1
           fi
 
-          new_version="$(python3 .github/scripts/release_version.py \
-            --current-version-file VERSION \
-            --requested-version "${REQUESTED_VERSION}")"
+          current_version="$(cat VERSION)"
+          current_release_tag="v${current_version}"
+
+          if [ -z "${REQUESTED_VERSION}" ] && ! git ls-remote --exit-code --tags origin "refs/tags/${current_release_tag}" >/dev/null 2>&1; then
+            new_version="${current_version}"
+            echo "Reusing unreleased VERSION ${new_version} from main."
+          else
+            new_version="$(python3 .github/scripts/release_version.py \
+              --current-version-file VERSION \
+              --requested-version "${REQUESTED_VERSION}")"
+          fi
           release_tag="v${new_version}"
 
           if git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null 2>&1; then
@@ -213,6 +221,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           verify-metadata: true
+          skip-existing: true
           packages-dir: dist
           repository-url: https://upload.pypi.org/legacy/
           verbose: true
