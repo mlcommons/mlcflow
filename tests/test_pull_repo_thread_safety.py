@@ -280,12 +280,19 @@ class PullRepoPartialCloneTest(_RepoActionTestBase):
                         {'uid': utils.get_new_uid()['uid'],
                          'alias': 'example@test-repo'}, f)
                 return subprocess.CompletedProcess(cmd, 0, "", "")
-            if 'rev-parse' in cmd:
+            # Modelled on real git against a clone killed mid-transfer: its
+            # .git is a well-formed repository with no refs and an unborn
+            # HEAD. Only a directory carrying our HEAD_OK marker has a HEAD.
+            if '--git-dir' in cmd:
+                git_dir = cmd[cmd.index('--git-dir') + 1]
+                if 'for-each-ref' in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, "", "")
+                head_ok = os.path.exists(os.path.join(git_dir, 'HEAD_OK'))
+                return subprocess.CompletedProcess(
+                    cmd, 0 if head_ok else 1, "", "")
+            if '--show-toplevel' in cmd:
                 target = cmd[cmd.index('-C') + 1]
-                # Only a directory carrying our HEAD marker is "healthy";
-                # anything else is definitively not a repository, so the
-                # caller is allowed to remove it.
-                if os.path.exists(os.path.join(target, '.git', 'HEAD_OK')):
+                if os.path.isdir(os.path.join(target, '.git')):
                     return subprocess.CompletedProcess(
                         cmd, 0, target + "\n", "")
                 return subprocess.CompletedProcess(
@@ -301,9 +308,11 @@ class PullRepoPartialCloneTest(_RepoActionTestBase):
         repo_url = "https://github.com/example/test-repo.git"
         repo_path = os.path.join(self.repos_path, "example@test-repo")
 
-        # The wreckage an interrupted clone leaves: a .git, but no HEAD.
-        os.makedirs(os.path.join(repo_path, '.git'), exist_ok=True)
-        poison_marker = os.path.join(repo_path, 'left-over-from-interruption')
+        # The wreckage an interrupted clone leaves: a .git holding a partial
+        # pack but no refs or HEAD, and nothing else in the work tree.
+        pack_dir = os.path.join(repo_path, '.git', 'objects', 'pack')
+        os.makedirs(pack_dir, exist_ok=True)
+        poison_marker = os.path.join(pack_dir, 'tmp_pack_interrupted')
         with open(poison_marker, 'w') as f:
             f.write('x')
 
@@ -472,11 +481,35 @@ class GitRepoStateTest(unittest.TestCase):
         self._git('init', '-q', cwd=valid)
         self._git('commit', '-q', '--allow-empty', '-m', 'x', cwd=valid)
 
-        # A freshly cloned *empty* repo has an unborn HEAD but is perfectly
-        # usable -- `rev-parse HEAD` would wrongly reject it.
-        empty = os.path.join(base, 'empty')
-        os.makedirs(empty)
-        self._git('init', '-q', cwd=empty)
+        # What a clone killed mid-transfer leaves: a well-formed .git with an
+        # origin, no refs, an unborn HEAD, and an empty work tree.
+        killed = os.path.join(base, 'killed')
+        os.makedirs(killed)
+        self._git('init', '-q', cwd=killed)
+        self._git('remote', 'add', 'origin',
+                  'https://github.com/example/test-repo.git', cwd=killed)
+
+        # An unborn HEAD alone is not enough to delete: this repo has work in
+        # its tree -- `rev-parse HEAD` would wrongly reject it as well.
+        unborn_with_work = os.path.join(base, 'unborn_with_work')
+        os.makedirs(unborn_with_work)
+        self._git('init', '-q', cwd=unborn_with_work)
+        with open(os.path.join(unborn_with_work, 'draft.txt'), 'w') as f:
+            f.write('x')
+
+        # A checkout whose tree is empty but which has history is not an
+        # interrupted clone either.
+        committed_empty_tree = os.path.join(base, 'committed_empty_tree')
+        os.makedirs(committed_empty_tree)
+        self._git('init', '-q', cwd=committed_empty_tree)
+        self._git('commit', '-q', '--allow-empty', '-m', 'x',
+                  cwd=committed_empty_tree)
+
+        # A copy of a repo without its .git, e.g. unpacked from a tarball.
+        copy_without_git = os.path.join(base, 'copy_without_git')
+        os.makedirs(copy_without_git)
+        with open(os.path.join(copy_without_git, 'meta.yaml'), 'w') as f:
+            f.write('alias: example@test-repo\n')
 
         half = os.path.join(base, 'half', '.git')
         os.makedirs(half)
@@ -505,7 +538,10 @@ class GitRepoStateTest(unittest.TestCase):
         cases = [
             (valid, RepoAction.GIT_STATE_VALID),
             (linked, RepoAction.GIT_STATE_VALID),
-            (empty, RepoAction.GIT_STATE_VALID),
+            (killed, RepoAction.GIT_STATE_ABANDONED_CLONE),
+            (unborn_with_work, RepoAction.GIT_STATE_VALID),
+            (committed_empty_tree, RepoAction.GIT_STATE_VALID),
+            (copy_without_git, RepoAction.GIT_STATE_INVALID),
             (os.path.dirname(half), RepoAction.GIT_STATE_INVALID),
             (plain, RepoAction.GIT_STATE_INVALID),
             (nested, RepoAction.GIT_STATE_INVALID),
@@ -564,6 +600,97 @@ class PullRepoDestructiveGuardTest(_RepoActionTestBase):
             msg="pull_repo deleted a checkout it could not classify")
 
 
+class PullRepoKeepsNonCheckoutsTest(_RepoActionTestBase):
+    """pull_repo may delete an interrupted clone and nothing else.
+
+    Runs real git for the classification, since the danger being guarded
+    against is git's real answer on these directories.
+    """
+
+    REPO_URL = "https://github.com/example/test-repo.git"
+
+    def setUp(self):
+        super().setUp()
+        self.repo_path = os.path.join(self.repos_path, "example@test-repo")
+        os.makedirs(self.repo_path)
+        self.clone_calls = []
+        real_run = subprocess.run
+
+        def fake(cmd, *args, **kwargs):
+            if isinstance(cmd, (list, tuple)) and 'clone' in cmd:
+                self.clone_calls.append(cmd)
+                os.makedirs(os.path.join(cmd[-1], '.git'))
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            if isinstance(cmd, (list, tuple)) and 'pull' in cmd:
+                # Never reach the network; a failed pull is the harmless
+                # outcome the old code had for these directories.
+                raise subprocess.CalledProcessError(1, cmd)
+            # Everything else -- the classification probes -- is real git.
+            return real_run(cmd, *args, **kwargs)
+
+        patcher = patch('mlc.repo_action.subprocess.run', side_effect=fake)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _git(self, *args):
+        subprocess.run(
+            ['git', '-c', 'user.name=test', '-c', 'user.email=test@example.com']
+            + list(args), cwd=self.repo_path, check=True, capture_output=True)
+
+    def _write(self, rel_path, content="user work"):
+        path = os.path.join(self.repo_path, rel_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def _assert_refused_and_kept(self, *kept_paths):
+        result = self._make_repo_action().pull_repo(self.REPO_URL)
+        self.assertEqual(result.get('return'), 1, msg=str(result))
+        self.assertIn("will not delete it", result.get('error', ''))
+        self.assertEqual(self.clone_calls, [],
+                         msg="pull_repo re-cloned over the directory")
+        for path in kept_paths:
+            self.assertTrue(os.path.exists(path),
+                            msg=f"pull_repo deleted {path}")
+
+    def test_copy_without_git_is_kept(self):
+        """A repo copied or unpacked without .git (Docker, offline setups)."""
+        self._assert_refused_and_kept(
+            self._write('meta.yaml', 'alias: example@test-repo\n'),
+            self._write('script/run.py'))
+
+    def test_corrupted_git_dir_is_kept(self):
+        self._write('.git/garbage', 'not a repository')
+        self._assert_refused_and_kept(self._write('local-edits.py'))
+
+    def test_non_git_dir_inside_another_checkout_is_kept(self):
+        """MLC_REPOS inside a checkout: git -C answers for the enclosing
+        repo, which must not make the directory look deletable."""
+        subprocess.run(['git', 'init', '-q', self.temp_dir.name], check=True,
+                       capture_output=True)
+        self._assert_refused_and_kept(self._write('meta.yaml'))
+
+    def test_interrupted_clone_with_files_in_tree_is_kept(self):
+        """Killed during checkout rather than transfer: files are already in
+        the tree, so it cannot be told apart from a user's work."""
+        self._git('init', '-q')
+        self._git('remote', 'add', 'origin', self.REPO_URL)
+        path = self._write('meta.yaml')
+        result = self._make_repo_action().pull_repo(self.REPO_URL)
+        self.assertEqual(self.clone_calls, [], msg=str(result))
+        self.assertTrue(os.path.exists(path))
+
+    def test_real_interrupted_clone_is_recloned(self):
+        """The one case that is removed: .git with no refs, an unborn HEAD
+        and nothing else in the tree -- what a killed `git clone` leaves."""
+        self._git('init', '-q')
+        self._git('remote', 'add', 'origin', self.REPO_URL)
+        self._make_repo_action().pull_repo(self.REPO_URL)
+        self.assertEqual(len(self.clone_calls), 1,
+                         msg="the interrupted clone should have been re-cloned")
+
+
 class PullRepoTimeoutSemanticsTest(_RepoActionTestBase):
     """Timing out must not be reported as success when work was skipped."""
 
@@ -582,9 +709,11 @@ class PullRepoTimeoutSemanticsTest(_RepoActionTestBase):
 
         def fake_run(cmd, *a, **kw):
             if (isinstance(cmd, (list, tuple)) and cmd
-                    and cmd[0] == 'git' and 'rev-parse' in cmd):
+                    and cmd[0] == 'git' and '--show-toplevel' in cmd):
                 target = cmd[cmd.index('-C') + 1]
                 return subprocess.CompletedProcess(cmd, 0, target + "\n", "")
+            # Everything else succeeds, so HEAD resolves and the checkout is
+            # not mistaken for an abandoned clone.
             return subprocess.CompletedProcess(cmd, 0, "", "")
 
         previous_timeout = os.environ.get("MLC_REPO_LOCK_TIMEOUT")
