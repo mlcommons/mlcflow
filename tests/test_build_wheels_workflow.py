@@ -56,7 +56,9 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
             step for step in self.steps if step.get("uses", "").startswith("actions/checkout@")
         )
 
-        self.assertEqual(token_step["uses"], "actions/create-github-app-token@v1")
+        self.assertEqual(
+            token_step["uses"],
+            "actions/create-github-app-token@v1")
         self.assertEqual(
             token_step["with"]["app-id"],
             "${{ secrets.MLC_AUTOMATIONS_APP_ID }}",
@@ -96,7 +98,8 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
             run_script)
         self.assertLess(
             run_script.index("git push origin HEAD:main"),
-            run_script.index("git tag \"${release_tag}\" \"${release_commit}\""),
+            run_script.index(
+                "git tag \"${release_tag}\" \"${release_commit}\""),
         )
         self.assertIn(
             'echo "RELEASE_REF_TYPE=tag" >> "$GITHUB_ENV"',
