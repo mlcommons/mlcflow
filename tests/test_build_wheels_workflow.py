@@ -44,6 +44,27 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
             release_step["run"],
         )
 
+    def test_prepare_release_from_main_keeps_release_state_for_later_steps(self):
+        prepare_step = self.steps_by_name["Prepare release from main"]
+
+        self.assertIn("printf '%s\\n' \"${new_version}\" > VERSION", prepare_step["run"])
+        self.assertIn("git commit -m \"Bump VERSION to ${new_version}\"", prepare_step["run"])
+        self.assertIn("git tag \"${release_tag}\"", prepare_step["run"])
+        self.assertIn("git push origin \"${release_tag}\"", prepare_step["run"])
+        self.assertIn('echo "RELEASE_COMMIT=${release_commit}" >> "$GITHUB_ENV"', prepare_step["run"])
+        self.assertIn('echo "RELEASE_REF_TYPE=tag" >> "$GITHUB_ENV"', prepare_step["run"])
+        self.assertIn('echo "RELEASE_REF_NAME=${release_tag}" >> "$GITHUB_ENV"', prepare_step["run"])
+
+    def test_successful_manual_release_updates_main_after_publish(self):
+        finalize_step = self.steps_by_name["Update main to released VERSION"]
+
+        self.assertIn('git fetch origin main', finalize_step["run"])
+        self.assertIn('git push origin "${RELEASE_COMMIT}:main"', finalize_step["run"])
+        self.assertIn(
+            "The release tag was published, but the VERSION bump commit was not pushed to main.",
+            finalize_step["run"],
+        )
+
     def test_workflow_serializes_release_runs(self):
         concurrency = self.workflow["concurrency"]
 
