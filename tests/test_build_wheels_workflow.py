@@ -71,10 +71,10 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
         run_script = prepare_step["run"]
 
         self.assertIn(
-            "A previous attempt already created ${current_release_tag} from main.",
+            "A previous attempt already created ${release_tag} from main.",
             run_script)
         self.assertIn(
-            "Re-run this workflow against tag ${current_release_tag}, or dispatch from main with an explicit version override to cut a different release.",
+            "Re-run this workflow against tag ${release_tag}, or dispatch from main with an explicit version override to cut a different release.",
             run_script)
         self.assertIn(
             "printf '%s\\n' \"${new_version}\" > VERSION",
