@@ -34,7 +34,8 @@ concurrency:
 jobs:
   build_wheels:
     # A manual release pushes its tag with the App token, which starts this
-    # workflow again; that run would rebuild and re-upload the same release.
+    # workflow again; that run would rebuild and re-upload the same release. The
+    # below check ensures that does not happen
     if: >-
       github.repository_owner == 'mlcommons'
       && !(github.event_name == 'push' && github.actor == 'mlc-automations[bot]')
