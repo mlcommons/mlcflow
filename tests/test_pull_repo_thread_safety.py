@@ -450,7 +450,10 @@ class GitRepoStateTest(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
 
     def _git(self, *args, cwd=None):
-        return subprocess.run(['git'] + list(args), cwd=cwd,
+        # CI runners have no git identity configured, so `git commit` would
+        # exit 128; supply one inline rather than touching global config.
+        identity = ['-c', 'user.name=test', '-c', 'user.email=test@example.com']
+        return subprocess.run(['git'] + identity + list(args), cwd=cwd,
                               capture_output=True, text=True, check=True)
 
     def test_real_git_classification(self):
