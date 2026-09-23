@@ -1,0 +1,14 @@
+This directory contains the MLC script automation engine.
+
+It was originally developed as part of the CM (Collective Mind) Script
+automations and moved into this repository from
+https://github.com/mlcommons/mlperf-automations.
+
+Grigori Fursin, the cTuning foundation and OctoML donated that project to
+MLCommons® to benefit everyone.
+
+Copyright (c) 2021-2026 MLCommons®
+Copyright (c) 2014-2021 cTuning foundation
+
+Licensed under the Apache License, Version 2.0 — see ../LICENSE.md, which
+applies to this directory as it does to the rest of the repository.

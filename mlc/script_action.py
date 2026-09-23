@@ -7,6 +7,7 @@ import json
 import inspect
 from .index import Index
 from . import utils
+from .error_codes import get_error_guidance
 from .logger import logger
 
 
@@ -25,8 +26,9 @@ class ScriptAction(Action):
     6.  Copy(cp)
     7.  Run
     8.  Docker
-    9.  Test
-    10. Experiment
+    9.  Apptainer
+    10. Test
+    11. Experiment
 
     Scripts in MLCFlow can be identified using different methods:
 
@@ -227,22 +229,42 @@ Main Script Meta:""")
 
         return module
 
+    def _content_repo_registered(self):
+        # automation/ ships bundled with mlcflow, so find_target_folder()
+        # always succeeds regardless of whether any script *content* repo
+        # (mlcommons@mlperf-automations or a fork/custom clone of it) is
+        # registered. "engine missing" is no longer a reliable signal that
+        # content needs pulling. Don't hardcode a specific repo alias here —
+        # forks (e.g. gateoverflow@mlperf-automations) are valid too — check
+        # generically for any repo with actual script content instead, same
+        # as find_target_folder() does for the (now-bundled) automation/
+        # folder, just one level up at <repo>/script/ instead of
+        # <repo>/automation/script/.
+        for repo in self.repos:
+            script_dir = os.path.join(repo.path, 'script')
+            if os.path.isdir(script_dir) and os.listdir(script_dir):
+                return True
+        return False
+
     def call_script_module_function(self, function_name, run_args):
         self.action_type = "script"
         repos_folder = self.repos_path
 
         # Import script submodule
         script_path = self.find_target_folder("script")
-        if not script_path:
+        if not script_path or not self._content_repo_registered():
             logger.warning(
-                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository...")
+                "Script automation not found. Automatically pulling mlcommons@mlperf-automations repository..."
+                if not script_path else
+                "No script content repo registered. Automatically pulling mlcommons@mlperf-automations...")
 
             # Use the access method to pull the required repository
             result = self.access({
                 "automation": "repo",
                 "action": "pull",
                 "repo": "mlcommons@mlperf-automations",
-                "branch": "dev"
+                "branch": "dev",
+                "fast_forward_only": True
             })
 
             if result['return'] == 0:
@@ -251,7 +273,7 @@ Main Script Meta:""")
 
                 # Try to find the script path again after pulling
                 script_path = self.find_target_folder("script")
-                if not script_path:
+                if not script_path or not self._content_repo_registered():
                     return {
                         'return': 1, 'error': f"""Script automation still not found after pulling mlcommons@mlperf-automations --branch=dev."""}
             else:
@@ -278,33 +300,17 @@ Main Script Meta:""")
                     self, module_path)
 
             try:
-                if function_name == "run":
-                    result = automation_instance.run(
-                        run_args)  # Pass args to the run method
-                elif function_name == "docker":
-                    result = automation_instance.docker(
-                        run_args)  # Pass args to the run method
-                elif function_name == "test":
-                    result = automation_instance.test(
-                        run_args)  # Pass args to the run method
-                elif function_name == "experiment":
-                    result = automation_instance.experiment(
-                        run_args)  # Pass args to the experiment method
-                elif function_name == "remote_run":
-                    result = automation_instance.remote_run(
-                        run_args)  # Pass args to the experiment method
-                elif function_name == "help":
-                    result = automation_instance.help(
-                        run_args)  # Pass args to the help method
-                elif function_name == "doc":
-                    result = automation_instance.doc(
-                        run_args)  # Pass args to the doc method
-                elif function_name == "lint":
-                    result = automation_instance.lint(
-                        run_args)  # Pass args to the lint method
-                else:
+                method = getattr(automation_instance, function_name, None)
+                if method is None:
                     return {
-                        'return': 1, 'error': f'Function {function_name} is not supported'}
+                        'return': 1,
+                        'error': (
+                            f"Action '{function_name}' is not supported by the loaded "
+                            f"automation engine at '{module_path}'. "
+                            "You may need a newer version of mlcflow."
+                        )
+                    }
+                result = method(run_args)
             except ScriptExecutionError:
                 raise
             except Exception as exc:
@@ -319,6 +325,8 @@ Main Script Meta:""")
 
             if result['return'] > 0:
                 error = result.get('error', "")
+                error_guidance = get_error_guidance(
+                    result.get('error_code', result.get('return')), error)
                 _name_match = re.search(r'name\s*=\s*([^,)]+)', error)
                 _script_name = _name_match.group(1).strip() if _name_match else run_args.get(
                     'tags', run_args.get('details'))
@@ -338,7 +346,10 @@ Main Script Meta:""")
                 raise ScriptExecutionError(
                     f"Script {function_name} execution failed in {module_path}. \nError : {error}",
                     script_name=_script_name, repo_alias=_repo_alias, module_path=module_path,
-                    run_args=run_args, version_info_file=_version_info_file)
+                    run_args=run_args, version_info_file=_version_info_file,
+                    error_code=error_guidance.get(
+                        'error_code') if error_guidance else None,
+                    error_guidance=error_guidance)
 
             if str(run_args.get("mlc_output")).lower() in [
                     "on", "true", "yes", "1"]:
@@ -408,6 +419,65 @@ Main Script Meta:""")
 
     docker.__doc__ = docker_run.__doc__
 
+    def apptainer(self, run_args):
+        return self.apptainer_run(run_args)
+
+    def apptainer_run(self, run_args):
+        """
+    ####################################################################################################################
+    Target: Script
+    Action: Apptainer
+    ####################################################################################################################
+
+    The `apptainer` action runs scripts inside an Apptainer containerized environment.
+
+    An MLCFlow script can be executed inside Apptainer using either of the following syntaxes:
+
+    1. Apptainer Run: mlc apptainer run --tags=<script tags> <run flags>
+    2. Apptainer Script: mlc apptainer script --tags=<script tags> <run flags>
+
+    Example Command:
+
+    mlc apptainer script --tags=detect,os -j
+    mlca detect,os -j
+
+    Flags Available (--apptainer_X takes priority over --docker_X for each option):
+
+    1. --apptainer_rebuild / --docker_rebuild:
+       Force rebuild of the Apptainer image even if it already exists.
+
+    2. --apptainer_noregenerate / --docker_noregenerate:
+       Skip regenerating the Apptainer definition file before running.
+
+    3. --apptainer_mounts / --docker_mounts:
+       List of bind mounts to pass to the container (host:container format).
+
+    4. --apptainer_run_cmd_prefix / --docker_run_cmd_prefix:
+       Command prefix to prepend before the mlcr command inside the container.
+
+    5. --apptainer_verbose / --apptainer_v / --docker_verbose / --docker_v:
+       Enable verbose output inside the container.
+
+    6. --apptainer_silent / --apptainer_s / --docker_silent / --docker_s:
+       Enable silent output inside the container.
+
+    7. --apptainer_run_override / --docker_run_override:
+       Force apptainer execution even if 'run' is set to False in script meta.
+
+    All --docker_X options listed above are accepted as defaults when the
+    corresponding --apptainer_X option is not provided. Docker-only options
+    (e.g. --docker_dt, --docker_cache, --docker_shm_size) are not applicable
+    to Apptainer and are ignored.
+
+    Script meta.yaml keys:
+    - ``docker``: base container settings (used by both mlcd and mlca).
+    - ``apptainer``: apptainer-specific overrides; merged over ``docker`` settings.
+
+        """
+        return self.call_script_module_function("apptainer", run_args)
+
+    apptainer.__doc__ = apptainer_run.__doc__
+
     def remote_run(self, run_args):
         """
     ####################################################################################################################
@@ -442,6 +512,16 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    15. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -453,10 +533,10 @@ Main Script Meta:""")
 
     def run(self, run_args):
         """
-    ####################################################################################################################
+    ################################################################################
     Target: Script
     Action: Run
-    ####################################################################################################################
+    ################################################################################
 
     The `run` action executes a script from an MLC repository.
 
@@ -470,11 +550,81 @@ Main Script Meta:""")
     1. -j: Displays the output in JSON format.
     2. Instead of using `mlc run script --tags=`, you can simply use `mlcr`.
     3. *<Individual script inputs>: The `mlcr` command can accept additional inputs defined in the script's `input_mappings` metadata.
+    4. --mlc_isolate: Run in an isolated temporary directory with a fresh MLC_REPOS.
+    5. --mlc_isolate_dir: Base directory for isolation (default: system temp dir).
+    6. --mlc_isolate_clean: Auto-remove the isolated directory after the run.
 
         """
         if not run_args.get('tags') and not run_args.get('details'):
             return self.call_script_module_function("help", run_args)
+
+        if str(run_args.get('mlc_isolate', '')
+               ).lower() in ('true', 'yes', '1'):
+            return self._run_isolated(run_args)
+
         return self.call_script_module_function("run", run_args)
+
+    def _run_isolated(self, run_args):
+        """Run a script in an isolated temporary directory with a fresh MLC_REPOS."""
+        import tempfile
+        import uuid
+        import shutil
+
+        isolate_dir = run_args.get('mlc_isolate_dir', '')
+        isolate_clean = str(
+            run_args.get(
+                'mlc_isolate_clean',
+                '')).lower() in (
+            'true',
+            'yes',
+            '1')
+        uid = uuid.uuid4().hex[:16]
+
+        if isolate_dir:
+            base = os.path.abspath(isolate_dir)
+            if not os.path.isdir(base):
+                return {'return': 1,
+                        'error': f'mlc_isolate_dir does not exist: {base}'}
+            tmp_dir = os.path.join(base, f'mlcflow-isolated-{uid}')
+        else:
+            tmp_dir = os.path.join(
+                tempfile.gettempdir(),
+                f'mlcflow-isolated-{uid}')
+
+        os.makedirs(tmp_dir, exist_ok=True)
+        logger.info(f"Isolated run directory: {tmp_dir}")
+
+        orig_dir = os.getcwd()
+        orig_repos = os.environ.get('MLC_REPOS')
+        original_state = dict(self.__dict__)
+
+        try:
+            os.chdir(tmp_dir)
+            os.environ['MLC_REPOS'] = os.path.join(tmp_dir, 'MLC')
+
+            # Re-initialize parent with new MLC_REPOS so index/repos are fresh
+            from .action import Action
+            new_parent = Action()
+            self.__dict__.update(vars(new_parent))
+            self.parent = new_parent
+
+            result = self.call_script_module_function("run", run_args)
+        finally:
+            self.__dict__.clear()
+            self.__dict__.update(original_state)
+            os.chdir(orig_dir)
+            if orig_repos is not None:
+                os.environ['MLC_REPOS'] = orig_repos
+            elif 'MLC_REPOS' in os.environ:
+                del os.environ['MLC_REPOS']
+
+            if isolate_clean:
+                logger.info(f"Cleaning up isolated directory: {tmp_dir}")
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            else:
+                logger.info(f"Isolated run artifacts preserved at: {tmp_dir}")
+
+        return result
 
     def test(self, run_args):
         """
@@ -624,6 +774,16 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    15. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -667,6 +827,16 @@ Main Script Meta:""")
         Commands to run on the remote machine before the main script
     11. --remote_client_refresh:
         Refresh the SSH client connection
+    12. --remote_mlcflow_upgrade:
+        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    13. --remote_no_internet:
+        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
+    14. --remote_isolated:
+        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --remote_python_venv, the venv is recreated for each run.
+    15. --remote_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
 
     Example Command:
 
@@ -677,13 +847,189 @@ Main Script Meta:""")
         run_args["remote_action"] = "docker"
         return self.call_script_module_function("remote_run", run_args)
 
+    def slurm_run(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-run
+    ################################################################################
+
+    The `slurm-run` action runs an MLC script on a SLURM cluster node via srun.
+
+    Flags Available:
+
+    1. --slurm_partition:
+        SLURM partition to submit to
+    2. --slurm_nodes:
+        Number of nodes (default: 1)
+    3. --slurm_ntasks:
+        Number of tasks (default: 1)
+    4. --slurm_ntasks_per_node:
+        Number of tasks per node
+    5. --slurm_cpus_per_task:
+        Number of CPUs per task
+    6. --slurm_gpus:
+        Total number of GPUs
+    7. --slurm_gpus_per_node:
+        Number of GPUs per node
+    8. --slurm_gpus_per_task:
+        Number of GPUs per task
+    9. --slurm_mem:
+        Total memory (e.g., 16G)
+    10. --slurm_mem_per_cpu:
+        Memory per CPU (e.g., 4G)
+    11. --slurm_mem_per_gpu:
+        Memory per GPU (e.g., 8G)
+    12. --slurm_time:
+        Time limit (e.g., 01:00:00)
+    13. --slurm_job_name:
+        Job name
+    14. --slurm_output:
+        Output file pattern (e.g., slurm-%j.out)
+    15. --slurm_error:
+        Error file pattern (e.g., slurm-%j.err)
+    16. --slurm_account:
+        Account to charge
+    17. --slurm_qos:
+        Quality of service
+    18. --slurm_constraint:
+        Node feature constraint
+    19. --slurm_exclusive:
+        Request exclusive node access (default: False)
+    20. --slurm_export:
+        Environment export mode (default: ALL)
+    21. --slurm_srun_extra_args:
+        Additional arguments to pass directly to srun
+    22. --slurm_python_venv:
+        Python virtual environment name on the node (default: mlcflow)
+    23. --slurm_pull_mlc_repos:
+        Pull MLC repos on the node before running
+    24. --slurm_pre_run_cmds:
+        Commands to run on the node before the main script
+    25. --slurm_post_run_cmds:
+        Commands to run on the node after the main script
+    26. --slurm_mlcflow_upgrade:
+        Upgrade mlcflow on the SLURM node before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
+    27. --slurm_no_internet:
+        Use a locally available installer on the SLURM node (incompatible with --slurm_mlcflow_upgrade)
+    28. --slurm_isolated:
+        Run in an isolated temporary workspace on the node, set MLC_REPOS to
+        that workspace, and clean it up on exit/signals. With the default
+        relative --slurm_python_venv, the venv is recreated for each run.
+    29. --slurm_isolated_base_dir:
+        Base directory for creating the isolated temporary workspace (optional).
+
+    Example Command:
+
+    mlc slurm-run script --tags=detect,os
+    mlcsr detect,os --slurm_partition=gpu --slurm_gpus=1 --slurm_time=01:00:00
+
+        """
+        return self.call_script_module_function("slurm_run", run_args)
+
+    def slurm_docker(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-docker
+    ################################################################################
+
+    The `slurm-docker` action runs an MLC docker script on a SLURM cluster node
+    via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-docker script --tags=detect,os
+    mlcsd detect,os --slurm_partition=gpu --slurm_gpus=1
+
+        """
+        return self.call_script_module_function("slurm_docker", run_args)
+
+    def slurm_apptainer(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-apptainer
+    ################################################################################
+
+    The `slurm-apptainer` action runs an MLC apptainer script on a SLURM cluster
+    node via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-apptainer script --tags=detect,os
+    mlcsa detect,os --slurm_partition=gpu --slurm_gpus=1
+
+        """
+        return self.call_script_module_function("slurm_apptainer", run_args)
+
+    def slurm_experiment(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: slurm-experiment
+    ################################################################################
+
+    The `slurm-experiment` action runs an MLC experiment on a SLURM cluster node
+    via srun.  Accepts the same --slurm_* flags as slurm-run.
+
+    Example Command:
+
+    mlc slurm-experiment script --tags=detect,os
+    mlcse detect,os --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function("slurm_experiment", run_args)
+
+    def remote_slurm(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: remote-slurm
+    ################################################################################
+
+    The `remote-slurm` action connects to a remote machine via SSH and runs an
+    MLC slurm-run script there.  Accepts all --remote_* flags from remote-run as
+    well as all --slurm_* flags from slurm-run.
+
+    Example Command:
+
+    mlc remote-slurm script --tags=detect,os --remote_host=mycluster.example.com
+    mlcrs detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function("remote_slurm", run_args)
+
+    def remote_slurm_experiment(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: remote-slurm-experiment
+    ################################################################################
+
+    The `remote-slurm-experiment` action connects to a remote machine via SSH
+    and runs an MLC slurm-experiment script there.  Accepts all --remote_* flags
+    from remote-run as well as all --slurm_* flags from slurm-run.
+
+    Example Command:
+
+    mlc remote-slurm-experiment script --tags=detect,os --remote_host=mycluster.example.com
+    mlcres detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function(
+            "remote_slurm_experiment", run_args)
+
 
 class ScriptExecutionError(Exception):
     def __init__(self, message, script_name=None, repo_alias=None,
-                 module_path=None, run_args=None, version_info_file=None):
+                 module_path=None, run_args=None, version_info_file=None,
+                 error_code=None, error_guidance=None):
         super().__init__(message)
         self.script_name = script_name
         self.repo_alias = repo_alias
         self.module_path = module_path
         self.run_args = run_args or {}
         self.version_info_file = version_info_file
+        self.error_code = error_code
+        self.error_guidance = error_guidance

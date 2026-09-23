@@ -2,32 +2,39 @@ name: AI PR Review (Incremental)
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened]
 
 permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   ai-review:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # Gated on a protected environment: the run pauses until a required
+    # reviewer approves it (Settings > Environments > ai-review).
+    environment: ai-review
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.base.ref }}
 
       - name: Install dependencies
         run: |
-          pip install requests jq
+          pip install requests
 
       - name: Fetch PR head
         run: |
           git fetch origin ${{ github.event.pull_request.head.sha }}
-      
+
       - name: Get incremental diff
         id: diff
         run: |
@@ -39,58 +46,376 @@ jobs:
             echo "EMPTY_DIFF=true" >> $GITHUB_ENV
           fi
 
+      - name: Fetch existing PR comments
+        if: env.EMPTY_DIFF != 'true'
+        continue-on-error: true
+        run: |
+          # Emitted as JSONL (one object per line): `gh --paginate --jq` writes
+          # one jq result per page, so asking for arrays would produce several
+          # concatenated arrays rather than one valid JSON document.
+          gh api --paginate \
+            repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | {author: .user.login, path: .path, line: (.line // .original_line), body: .body}' \
+            > existing_review_comments.jsonl || : > existing_review_comments.jsonl
+
+          gh api --paginate \
+            repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | {author: .user.login, body: .body}' \
+            > existing_issue_comments.jsonl || : > existing_issue_comments.jsonl
+
+          wc -l existing_review_comments.jsonl existing_issue_comments.jsonl || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run OpenAI review
         if: env.EMPTY_DIFF != 'true'
         run: |
           python3 << 'EOF'
-          import os, json, requests
+          import os, json, re, time, requests
 
           OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-          DIFF = open("pr.diff").read()[:15000]
+          MAX_DIFF_CHARS = 15000
+          MAX_ATTEMPTS = 3
+          BACKOFF_BASE_SECONDS = 5
+          MAX_EXISTING_BLOCK_CHARS = 9000
+          MAX_EXISTING_BODY_CHARS = 300
+          # Authors whose prior comments are treated as this bot's own output.
+          BOT_AUTHORS = {"github-actions[bot]", "github-actions"}
+
+          FULL_DIFF = open("pr.diff").read()
+          DIFF = FULL_DIFF[:MAX_DIFF_CHARS]
+          if len(FULL_DIFF) > MAX_DIFF_CHARS:
+              print(
+                  f"::warning::Diff is {len(FULL_DIFF)} chars; only the first "
+                  f"{MAX_DIFF_CHARS} were sent for review. Later files were not reviewed."
+              )
+
+
+          def load_jsonl(path):
+              """Read a JSONL file written by `gh api --paginate --jq`.
+
+              Missing or partially written files are tolerated: prior comments are
+              a nice-to-have for de-duplication, not a hard requirement.
+              """
+              items = []
+              if not os.path.exists(path):
+                  return items
+              with open(path) as f:
+                  for line in f:
+                      line = line.strip()
+                      if not line:
+                          continue
+                      try:
+                          items.append(json.loads(line))
+                      except json.JSONDecodeError:
+                          print("::warning::Skipping unparseable line in " + path)
+              return items
+
+
+          def format_existing(review_comments, issue_comments):
+              """Render prior PR feedback for the prompt.
+
+              This bot's own comments are what must not be repeated, so they are
+              given the character budget first; human comments fill whatever is
+              left. Within each group the most recent entries win.
+              """
+              def render(c):
+                  body = " ".join((c.get("body") or "").split())
+                  if not body:
+                      return None
+                  body = body[:MAX_EXISTING_BODY_CHARS]
+                  if c.get("path"):
+                      return f"- [{c['path']}:{c.get('line')} by {c.get('author')}] {body}"
+                  return f"- [PR comment by {c.get('author')}] {body}"
+
+              bot, human = [], []
+              for c in list(issue_comments) + list(review_comments):
+                  line = render(c)
+                  if line is None:
+                      continue
+                  (bot if c.get("author") in BOT_AUTHORS else human).append(line)
+
+              total_count = len(bot) + len(human)
+              kept_bot, kept_human, budget = [], [], MAX_EXISTING_BLOCK_CHARS
+              for group, sink in ((bot, kept_bot), (human, kept_human)):
+                  for line in reversed(group):
+                      if len(line) <= budget:
+                          sink.append(line)
+                          budget -= len(line)
+              block = "\n".join(list(reversed(kept_bot)) + list(reversed(kept_human)))
+              return block, total_count, len(kept_bot) + len(kept_human)
+
+
+          existing_review = load_jsonl("existing_review_comments.jsonl")
+          existing_issue = load_jsonl("existing_issue_comments.jsonl")
+          existing_block, existing_total, existing_shown = format_existing(existing_review, existing_issue)
+          if existing_total:
+              print(f"Found {existing_total} existing comment(s); {existing_shown} included in the prompt.")
+          if existing_shown < existing_total:
+              print(
+                  f"::warning::Only the {existing_shown} most recent of {existing_total} existing "
+                  "comments fit in the prompt; older ones may be repeated."
+              )
+
+          # Lines this bot has already commented on — enforced after the model
+          # replies, so a missed instruction cannot resurrect a duplicate.
+          already_commented = {
+              (c.get("path"), c.get("line"))
+              for c in existing_review
+              if c.get("author") in BOT_AUTHORS and c.get("path") and c.get("line")
+          }
+
+          existing_section = f"""
+          Feedback already posted on this pull request:
+          {existing_block}
+
+          Rules about the feedback above:
+          - Do NOT repeat any point that has already been made, and do not
+            restate one in different words or on a neighbouring line.
+          - Do NOT comment again on a file:line that already appears above.
+          - If a point above has already been addressed in the diff, say so in
+            the summary rather than as an inline comment.
+          - If you have nothing genuinely new to add, return an empty "comments"
+            array. An empty list is a good answer; padding is not.
+          """ if existing_block else ""
+
+          def extract_response_text(data):
+              output_text = data.get("output_text")
+              if isinstance(output_text, str) and output_text.strip():
+                  return output_text.strip()
+
+              texts = []
+              for item in data.get("output", []):
+                  for content in item.get("content", []):
+                      text = content.get("text")
+                      if isinstance(text, str) and text.strip():
+                          texts.append(text.strip())
+                      elif isinstance(text, dict):
+                          value = text.get("value")
+                          if isinstance(value, str) and value.strip():
+                              texts.append(value.strip())
+
+              return "\n".join(texts).strip()
+
+          def strip_code_fences(text):
+              text = text.strip()
+              if not text.startswith("```"):
+                  return text
+
+              lines = text.splitlines()
+              if len(lines) < 2 or lines[-1].strip() != "```":
+                  return text
+
+              lines = lines[1:-1]
+
+              return "\n".join(lines).strip()
 
           prompt = f"""
-          Review this incremental pull request diff.
+          Review this incremental pull request diff for a public engineering repository.
 
           Tasks:
           1. Write a concise PR summary (overall risks, design issues).
-          2. Provide inline review comments with:
-             - file
-             - line
-             - comment
-
-          Respond ONLY in valid JSON with this schema:
-          {{
-            "summary": "string",
-            "comments": [
-              {{
-                "file": "path/to/file",
-                "line": 123,
-                "comment": "text"
-              }}
-            ]
-          }}
-
+          2. Provide inline review comments. For each comment, "line" must be a
+             line number in the post-change (right-hand) version of the file and
+             must be a line that appears in the diff below. Only comment on lines
+             you can see in the diff.
+          3. Only raise things that are actionable. Do not describe or approve
+             what the diff already does — a comment that merely restates the
+             change is noise.
+          {existing_section}
           Diff:
           {DIFF}
           """
 
-          response = requests.post(
-              "https://api.openai.com/v1/responses",
-              headers={
-                  "Authorization": f"Bearer {OPENAI_API_KEY}",
-                  "Content-Type": "application/json"
-              },
-              json={
-                  "model": "gpt-4.1-mini",
-                  "input": prompt,
-                  "temperature": 0.2
+          # Structured Outputs: the response is grammar-constrained to this schema,
+          # so it cannot come back as malformed JSON.
+          RESPONSE_FORMAT = {
+              "format": {
+                  "type": "json_schema",
+                  "name": "pr_review",
+                  "strict": True,
+                  "schema": {
+                      "type": "object",
+                      "additionalProperties": False,
+                      "required": ["summary", "comments"],
+                      "properties": {
+                          "summary": {"type": "string"},
+                          "comments": {
+                              "type": "array",
+                              "items": {
+                                  "type": "object",
+                                  "additionalProperties": False,
+                                  "required": ["file", "line", "comment"],
+                                  "properties": {
+                                      "file": {"type": "string"},
+                                      "line": {"type": "integer"},
+                                      "comment": {"type": "string"},
+                                  },
+                              },
+                          },
+                      },
+                  },
               }
-          )
+          }
 
-          data = response.json()
-          text = data["output"][0]["content"][0]["text"]
+          HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
-          parsed = json.loads(text)
+
+          def diff_commentable_lines(diff_text):
+              """Map file path -> set of right-hand line numbers present in the diff.
+
+              The inline comment API rejects any line outside a diff hunk, so we use
+              this to drop comments that would 422 instead of posting them blindly.
+              """
+              valid, path, lineno = {}, None, None
+              for line in diff_text.splitlines():
+                  if line.startswith("diff --git"):
+                      path, lineno = None, None
+                  elif line.startswith("+++ "):
+                      target = line[4:].strip()
+                      path = None if target == "/dev/null" else re.sub(r"^b/", "", target)
+                      if path:
+                          valid.setdefault(path, set())
+                  elif line.startswith("@@"):
+                      m = HUNK_RE.match(line)
+                      lineno = int(m.group(1)) if m else None
+                  elif path and lineno is not None:
+                      if line.startswith("+") or line.startswith(" ") or line == "":
+                          valid[path].add(lineno)
+                          lineno += 1
+                      # "-" lines and "\ No newline..." do not advance the right side
+              return valid
+
+
+          def extract_text(data):
+              text = data.get("output_text")
+              if text:
+                  return text
+              for item in data.get("output", []):
+                  if item.get("type") != "message":
+                      continue
+                  for block in item.get("content", []):
+                      if "text" in block:
+                          return block["text"]
+              return None
+
+
+          def strip_code_fence(text):
+              """Models occasionally wrap JSON in a fence despite instructions."""
+              stripped = text.strip()
+              if not stripped.startswith("```"):
+                  return stripped
+              lines = stripped.splitlines()
+              lines = lines[1:]
+              if lines and lines[-1].strip().startswith("```"):
+                  lines = lines[:-1]
+              return "\n".join(lines).strip()
+
+
+          def parse_json(text):
+              candidate = strip_code_fence(text)
+              try:
+                  return json.loads(candidate)
+              except json.JSONDecodeError:
+                  pass
+              # Salvage: the model prefixed/suffixed prose around the object.
+              start, end = candidate.find("{"), candidate.rfind("}")
+              if start != -1 and end > start:
+                  return json.loads(candidate[start:end + 1])
+              raise json.JSONDecodeError("no JSON object found", candidate, 0)
+
+
+          def backoff_seconds(attempt):
+              """Exponential backoff: 5s, 10s, 20s, ... between retries."""
+              return BACKOFF_BASE_SECONDS * 2 ** (attempt - 1)
+
+
+          parsed = None
+          for attempt in range(1, MAX_ATTEMPTS + 1):
+              try:
+                  response = requests.post(
+                      "https://api.openai.com/v1/responses",
+                      headers={
+                          "Authorization": f"Bearer {OPENAI_API_KEY}",
+                          "Content-Type": "application/json"
+                      },
+                      json={
+                          "model": "gpt-4.1-mini",
+                          "input": prompt,
+                          "temperature": 0,
+                          "max_output_tokens": 4000,
+                          "text": RESPONSE_FORMAT,
+                      },
+                      timeout=120,
+                  )
+              except requests.RequestException as e:
+                  print(f"::warning::OpenAI request failed on attempt {attempt}/{MAX_ATTEMPTS}: {e}")
+                  if attempt == MAX_ATTEMPTS:
+                      print("::error::OpenAI API request failed after retries")
+                      raise SystemExit(1)
+                  time.sleep(backoff_seconds(attempt))
+                  continue
+
+              if response.status_code == 429 or response.status_code >= 500:
+                  print(
+                      f"::warning::OpenAI API returned HTTP {response.status_code} on attempt "
+                      f"{attempt}/{MAX_ATTEMPTS}: {response.text[:500]}"
+                  )
+                  if attempt == MAX_ATTEMPTS:
+                      print(f"::error::OpenAI API request failed with HTTP {response.status_code}")
+                      raise SystemExit(1)
+                  time.sleep(backoff_seconds(attempt))
+                  continue
+
+              if not response.ok:
+                  # 4xx other than 429 will not fix themselves; fail immediately.
+                  print(f"::error::OpenAI API request failed with HTTP {response.status_code}: {response.text[:2000]}")
+                  raise SystemExit(1)
+
+              data = response.json()
+
+              if data.get("status") == "incomplete":
+                  print(
+                      "::warning::Model response was incomplete "
+                      f"({data.get('incomplete_details')}) — output may be truncated."
+                  )
+
+              text = extract_text(data)
+              if text is None:
+                  print(f"::error::Could not find message text in OpenAI response: {json.dumps(data)[:2000]}")
+                  raise SystemExit(1)
+
+              try:
+                  parsed = parse_json(text)
+                  break
+              except json.JSONDecodeError as e:
+                  print(
+                      f"::warning::Failed to parse JSON on attempt {attempt}/{MAX_ATTEMPTS}: {e}\n"
+                      f"Raw text: {text[:2000]}"
+                  )
+                  if attempt == MAX_ATTEMPTS:
+                      print(f"::error::Failed to parse JSON from OpenAI response: {e}\nRaw text: {text[:2000]}")
+                      raise SystemExit(1)
+                  time.sleep(backoff_seconds(attempt))
+
+          commentable = diff_commentable_lines(FULL_DIFF)
+          kept = []
+          for c in parsed.get("comments", []) or []:
+              path, line = c.get("file"), c.get("line")
+              if (path, line) in already_commented:
+                  print(
+                      f"::warning::Dropping AI review comment for {path}:{line} — "
+                      "this bot has already commented on that line"
+                  )
+              elif path in commentable and line in commentable[path]:
+                  kept.append(c)
+              else:
+                  print(
+                      f"::warning::Dropping AI review comment for {path}:{line} — "
+                      "not a line present in the diff"
+                  )
+          parsed["comments"] = kept
+
           with open("ai_output.json", "w") as f:
               json.dump(parsed, f, indent=2)
           EOF
@@ -99,24 +424,38 @@ jobs:
 
       - name: Post PR summary comment
         if: env.EMPTY_DIFF != 'true'
+        shell: bash
         run: |
-          SUMMARY=$(jq -r '.summary' ai_output.json)
+          if [ ! -f ai_output.json ] || ! jq -e . ai_output.json >/dev/null; then
+            echo "::warning::Skipping AI PR summary comment because ai_output.json is missing or invalid"
+            exit 0
+          fi
+          {
+            echo "## 🤖 AI PR Review Summary"
+            echo
+            jq -r '.summary' ai_output.json
+          } > summary_comment.md
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "## 🤖 AI PR Review Summary\n\n$SUMMARY"
+            --body-file summary_comment.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post inline review comments
         if: env.EMPTY_DIFF != 'true'
         continue-on-error: true
+        shell: bash
         run: |
-          jq -c '.comments[]?' ai_output.json | while read c; do
-            FILE=$(echo $c | jq -r '.file')
-            LINE=$(echo $c | jq -r '.line')
-            COMMENT=$(echo $c | jq -r '.comment')
+          jq -c '.comments[]?' ai_output.json | while read -r c; do
+            FILE=$(echo "$c" | jq -r '.file')
+            LINE=$(echo "$c" | jq -r '.line')
+            COMMENT=$(echo "$c" | jq -r '.comment')
 
             if ! [[ "$LINE" =~ ^[0-9]+$ ]]; then
               echo "::warning::Skipping AI review comment with invalid line number for $FILE: $LINE"
+              continue
+            fi
+            if [ -z "$COMMENT" ] || [ "$COMMENT" = "null" ]; then
+              echo "::warning::Skipping AI review comment with empty body for $FILE:$LINE"
               continue
             fi
 
@@ -126,8 +465,7 @@ jobs:
               -f commit_id="${{ github.event.pull_request.head.sha }}" \
               -f path="$FILE" \
               -F line="$LINE" \
-              -f side="RIGHT" \
-              -f subject_type="line" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
+              -f side="RIGHT" || echo "::warning::Failed to post AI inline review comment for $FILE:$LINE"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
