@@ -13,9 +13,10 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
     def setUpClass(cls):
         with WORKFLOW_PATH.open("r", encoding="utf-8") as file:
             cls.workflow = yaml.load(file, Loader=yaml.BaseLoader)
+        cls.steps = cls.workflow["jobs"]["build_wheels"]["steps"]
         cls.steps_by_name = {
             step["name"]: step
-            for step in cls.workflow["jobs"]["build_wheels"]["steps"]
+            for step in cls.steps
             if "name" in step
         }
 
@@ -44,40 +45,58 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
             release_step["run"],
         )
 
-    def test_prepare_release_from_main_keeps_release_state_for_later_steps(
-            self):
+    def test_checkout_uses_app_token_for_protected_branch_pushes(self):
+        token_step = self.steps_by_name["Generate GitHub App token"]
+        checkout_step = next(
+            step for step in self.steps if step.get("uses", "").startswith("actions/checkout@")
+        )
+
+        self.assertEqual(token_step["uses"], "actions/create-github-app-token@v1")
+        self.assertEqual(
+            token_step["with"]["app-id"],
+            "${{ secrets.MLC_AUTOMATIONS_APP_ID }}",
+        )
+        self.assertEqual(
+            checkout_step["with"]["token"],
+            "${{ steps.app-token.outputs.token }}",
+        )
+
+    def test_prepare_release_from_main_updates_main_before_tagging(self):
         prepare_step = self.steps_by_name["Prepare release from main"]
+        run_script = prepare_step["run"]
 
         self.assertIn(
             "printf '%s\\n' \"${new_version}\" > VERSION",
-            prepare_step["run"])
+            run_script)
         self.assertIn(
             "git commit -m \"Bump VERSION to ${new_version}\"",
-            prepare_step["run"])
-        self.assertIn("git tag \"${release_tag}\"", prepare_step["run"])
+            run_script)
         self.assertIn(
-            "git push origin \"${release_tag}\"",
-            prepare_step["run"])
+            "git push origin HEAD:main",
+            run_script)
         self.assertIn(
-            'echo "RELEASE_COMMIT=${release_commit}" >> "$GITHUB_ENV"',
-            prepare_step["run"])
+            "git tag \"${release_tag}\" \"${release_commit}\"",
+            run_script)
+        self.assertIn(
+            "git push origin \"refs/tags/${release_tag}\"",
+            run_script)
+        self.assertLess(
+            run_script.index("git push origin HEAD:main"),
+            run_script.index("git tag \"${release_tag}\" \"${release_commit}\""),
+        )
         self.assertIn(
             'echo "RELEASE_REF_TYPE=tag" >> "$GITHUB_ENV"',
-            prepare_step["run"])
+            run_script)
         self.assertIn(
             'echo "RELEASE_REF_NAME=${release_tag}" >> "$GITHUB_ENV"',
-            prepare_step["run"])
+            run_script)
 
-    def test_successful_manual_release_updates_main_after_publish(self):
-        finalize_step = self.steps_by_name["Update main to released VERSION"]
+    def test_release_step_uses_app_token_for_github_release_mutations(self):
+        release_step = self.steps_by_name["Create GitHub Release"]
 
-        self.assertIn('git fetch origin main', finalize_step["run"])
-        self.assertIn(
-            'git push origin "${RELEASE_COMMIT}:main"',
-            finalize_step["run"])
-        self.assertIn(
-            "The release tag was published, but the VERSION bump commit was not pushed to main.",
-            finalize_step["run"],
+        self.assertEqual(
+            release_step["env"]["GH_TOKEN"],
+            "${{ steps.app-token.outputs.token }}",
         )
 
     def test_workflow_serializes_release_runs(self):
