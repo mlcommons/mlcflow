@@ -452,7 +452,11 @@ class GitRepoStateTest(unittest.TestCase):
     def _git(self, *args, cwd=None):
         # CI runners have no git identity configured, so `git commit` would
         # exit 128; supply one inline rather than touching global config.
-        identity = ['-c', 'user.name=test', '-c', 'user.email=test@example.com']
+        identity = [
+            '-c',
+            'user.name=test',
+            '-c',
+            'user.email=test@example.com']
         return subprocess.run(['git'] + identity + list(args), cwd=cwd,
                               capture_output=True, text=True, check=True)
 
