@@ -5,6 +5,7 @@ import stat
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 import yaml
 from unittest.mock import patch, MagicMock
@@ -776,23 +777,11 @@ class PullRepoTimeoutSemanticsTest(_RepoActionTestBase):
 
 
 class RepoLockMechanicsTest(unittest.TestCase):
-    """Reentrancy, cycle-guarding and key normalisation of the repo lock."""
+    """Release, cycle-guarding and key normalisation of the repo lock."""
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
-
-    def test_same_thread_reentry_does_not_self_deadlock(self):
-        """register_repo recurses into pull_repo for deps while the parent's
-        repo lock is held. filelock is only reentrant per instance, so without
-        the thread-local set the nested acquire blocks for the whole timeout."""
-        from mlc.repo_action import _repo_lock
-
-        lock_file = os.path.join(self.temp_dir.name, "r.lock")
-        with _repo_lock(lock_file, 2):
-            # A fresh FileLock on the same path would block here.
-            with _repo_lock(lock_file, 2):
-                pass
 
     def test_lock_is_released_after_an_exception(self):
         from mlc.repo_action import _repo_lock
@@ -801,7 +790,7 @@ class RepoLockMechanicsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             with _repo_lock(lock_file, 2):
                 raise ValueError("boom")
-        # Must be acquirable again, and bookkeeping must be clean.
+        # Must be acquirable again.
         with _repo_lock(lock_file, 2):
             pass
 
@@ -831,13 +820,17 @@ class RepoLockMechanicsTest(unittest.TestCase):
             msg="unrelated repos must not share a lock file")
 
     def test_dependency_cycle_does_not_recurse(self):
-        """A -> B -> A must not re-enter the pull; the per-repo lock cannot
-        stop that on its own because same-thread reentry is a deliberate
-        no-op, which would turn the old deadlock into unbounded recursion."""
+        """A -> B -> A must skip the nested pull of A, immediately.
+
+        register_repo recurses into pull_repo for deps while the parent's
+        lock is held, and a second FileLock on the same file blocks even
+        within one thread. Without the guard the nested entry would either
+        hang for the full timeout or, if it bypassed the lock, recurse."""
         from mlc.repo_action import _repo_pull_lock
 
         lock_file = os.path.join(self.temp_dir.name, "r.lock")
         depth = []
+        started = time.monotonic()
 
         def pull(remaining):
             with _repo_pull_lock(lock_file, 5) as proceed:
@@ -851,6 +844,9 @@ class RepoLockMechanicsTest(unittest.TestCase):
         self.assertEqual(
             len(depth), 1,
             msg="the cycle guard let the pull re-enter itself")
+        self.assertLess(
+            time.monotonic() - started, 4,
+            msg="the nested entry blocked on the lock instead of skipping")
 
 
 class RmRepoLockingTest(_RepoActionTestBase):
