@@ -350,16 +350,10 @@ def build_pre_parser():
         "action",
         nargs="?",
         help="Top-level action (run, build, help, etc.)")
+    # No choices here: valid targets depend on the action, so validation is
+    # left to the per-action subparsers in build_parser().
     pre_parser.add_argument(
         "target",
-        choices=[
-            'run',
-            'script',
-            'cache',
-            'repo',
-            'repos',
-            'experiment',
-            'all'],
         nargs="?",
         help="Target (repo, script, cache, ...)")
     pre_parser.add_argument("-h", "--help", action="store_true")
@@ -429,6 +423,11 @@ def build_parser(pre_args):
     # Load cfg
     load_parser = subparsers.add_parser("load", add_help=False)
     load_parser.add_argument("target", choices=["cfg"])
+    load_parser.add_argument(
+        'details',
+        nargs='?',
+        help='Details or identifier (optional)')
+    load_parser.add_argument('extra', nargs=argparse.REMAINDER)
     return parser
 
 

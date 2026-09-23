@@ -22,7 +22,7 @@ Building upon the core idea of CMind—wrapping native scripts with Python wrapp
 - **Typo detection** — Mistyped actions or targets produce a "Did you mean …?" hint before the error message, so mistakes are quick to correct:
   ```
   $ mlc rune script
-  Did you mean 'run'?
+  Did you mean one of: 'prune', 'run'?
   mlc: error: argument command: invalid choice: 'rune' …
   ```
   See [docs/typo_detection.md](docs/typo_detection.md) for details.

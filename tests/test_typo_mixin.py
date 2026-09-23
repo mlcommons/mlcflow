@@ -133,6 +133,41 @@ class TypoMixinSuggestTests(unittest.TestCase):
         result = self.parser.suggest("mrak-tmp", candidates)
         self.assertIn("mark-tmp", result)
 
+    # ---- prefix rule --------------------------------------------------------
+
+    def test_prefix_suggests_experiment_for_exp(self):
+        candidates = ["repo", "repos", "script", "cache", "experiment"]
+        result = self.parser.suggest("exp", candidates)
+        self.assertEqual(result, ["experiment"])
+
+    def test_prefix_ranks_docker_before_doc(self):
+        candidates = ["run", "docker", "docker-run", "doc", "lint"]
+        result = self.parser.suggest("dock", candidates)
+        self.assertEqual(result[0], "docker")
+        self.assertIn("doc", result)
+
+    def test_prefix_ignored_below_min_length(self):
+        # 'do' is too short for the prefix rule and too far for difflib
+        candidates = ["docker", "docker-run", "experiment"]
+        self.assertEqual(self.parser.suggest("do", candidates), [])
+
+    def test_prefix_respects_max_suggestions(self):
+        candidates = ["remote-run", "remote-experiment", "remote-docker",
+                      "remote-slurm", "remote-slurm-experiment"]
+        result = self.parser.suggest("remote", candidates)
+        self.assertEqual(len(result), self.parser._TYPO_MAX_SUGGESTIONS)
+
+    def test_no_hint_for_unrelated_words(self):
+        actions = ["run", "pull", "test", "add", "show", "list", "find",
+                   "search", "rm", "cp", "mv", "help", "prune", "mark-tmp",
+                   "reindex", "docker", "docker-run", "apptainer",
+                   "experiment", "remote-run", "slurm-run", "doc", "lint",
+                   "load"]
+        for word in ["xyzzy123", "install", "start", "build", "deploy",
+                     "python", "update", "delete"]:
+            with self.subTest(word=word):
+                self.assertEqual(self.parser.suggest(word, actions), [])
+
 
 # --------------------------------------------------------------------------- #
 # Integration tests — CLI output                                               #
@@ -194,6 +229,43 @@ class TypoMixinCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("Did you mean", result.stderr)
         self.assertIn("repo", result.stderr)
+
+    def test_cli_prefix_suggests_docker_first_for_dock(self):
+        result = _run_mlc("dock", "run")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Did you mean one of: 'docker'", result.stderr)
+
+    def test_cli_prefix_suggests_experiment_for_exp(self):
+        result = _run_mlc("find", "exp")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Did you mean 'experiment'?", result.stderr)
+
+    # ---- target typos use the action's own choices -------------------------
+
+    def test_cli_script_only_action_does_not_suggest_invalid_target(self):
+        # 'docker' only accepts script/run, so 'cache' must not be suggested
+        result = _run_mlc("docker", "cach")
+        self.assertEqual(result.returncode, 2)
+        self.assertNotIn("'cache'", result.stderr)
+        stderr = result.stderr.replace("'", "")
+        self.assertIn("choose from script, run", stderr)
+
+    def test_cli_script_only_action_suggests_script(self):
+        result = _run_mlc("docker", "scrip")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Did you mean 'script'?", result.stderr)
+
+    def test_cli_suggests_cfg_for_cfgg(self):
+        result = _run_mlc("load", "cfgg")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Did you mean 'cfg'?", result.stderr)
+
+    def test_cli_load_cfg_target_is_accepted(self):
+        # 'cfg' used to be rejected by the pre-parser's shared target list
+        result = _run_mlc("load", "cfg")
+        self.assertNotIn("invalid choice", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertNotEqual(result.returncode, 2)
 
     # ---- no suggestion for totally wrong input -----------------------------
 

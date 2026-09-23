@@ -13,7 +13,7 @@ $ mlc rune script
 
 usage: mlc [-h] {run,pull,test,add,...} ...
 
-Did you mean 'run'?
+Did you mean one of: 'prune', 'run'?
 
 mlc: error: argument command: invalid choice: 'rune' (choose from 'run', 'pull', ...)
 ```
@@ -21,11 +21,11 @@ mlc: error: argument command: invalid choice: 'rune' (choose from 'run', 'pull',
 ```
 $ mlc run scrip
 
-usage: mlc run [-h] {repo,repos,script,cache} ...
+usage: mlc run {repo,repos,script,cache,experiment} [details] ...
 
 Did you mean 'script'?
 
-mlc: error: argument target: invalid choice: 'scrip' (choose from 'repo', 'repos', 'script', 'cache')
+mlc run: error: argument target: invalid choice: 'scrip' (choose from repo, repos, script, cache, experiment)
 ```
 
 When several alternatives are similarly close:
@@ -39,19 +39,26 @@ Did you mean one of: 'repo', 'repos'?
 If the input has no close match (e.g. a completely unrelated word), no hint is
 shown — only the standard argparse error.
 
+Target suggestions only come from the targets the chosen action accepts. For
+example `mlc docker cach` shows no hint, because `docker` only accepts `script`
+or `run`.
+
 ## Typos detected
 
 Suggestions are shown for **both** levels of the command syntax:
 
 | Typo location | Example input | Suggestion shown |
 |---|---|---|
-| Action | `mlc rune script` | `Did you mean 'run'?` |
+| Action | `mlc rune script` | `Did you mean one of: 'prune', 'run'?` |
 | Action | `mlc fnd script` | `Did you mean 'find'?` |
 | Action | `mlc serach cache` | `Did you mean 'search'?` |
 | Action | `mlc mrak-tmp cache` | `Did you mean 'mark-tmp'?` |
 | Target | `mlc run scrip` | `Did you mean 'script'?` |
 | Target | `mlc find cach` | `Did you mean 'cache'?` |
-| Target | `mlc pull rpo` | `Did you mean 'repo'?` |
+| Target | `mlc pull rpo` | `Did you mean one of: 'repo', 'repos'?` |
+| Target | `mlc load cfgg` | `Did you mean 'cfg'?` |
+| Action (prefix) | `mlc dock run` | `Did you mean one of: 'docker', 'docker-run', 'doc'?` |
+| Target (prefix) | `mlc find exp` | `Did you mean 'experiment'?` |
 
 ## Implementation
 
@@ -70,8 +77,11 @@ class TypoMixin:
 1. Call `self.print_usage(sys.stderr)` (identical to the standard behaviour).
 2. Parse the mistyped value and the valid-choices list from argparse's error
    text using a regex.
-3. Run `difflib.get_close_matches()` (Python stdlib, no extra dependencies)
-   with a similarity cutoff of `0.6`.
+3. Collect candidates that start with the mistyped value (prefix rule, for
+   inputs of 3+ characters), then add `difflib.get_close_matches()` results
+   (Python stdlib, no extra dependencies) with a similarity cutoff of `0.6`.
+   Prefix matches are listed first, so `exp` suggests `experiment` and `dock`
+   suggests `docker` ahead of `doc`.
 4. If one or more matches are found, write the hint line to stderr.
 5. Call `self.exit(2, …)` with the original error message — identical to the
    standard behaviour.
@@ -90,13 +100,14 @@ typos inside a valid command are also caught.
 
 ## Tuning
 
-Two class-level attributes control the matching behaviour; override them on
+Three class-level attributes control the matching behaviour; override them on
 `TypoArgumentParser` if needed:
 
 | Attribute | Default | Meaning |
 |---|---|---|
 | `_TYPO_CUTOFF` | `0.6` | Minimum similarity ratio (0–1). Raise to require a closer match. |
 | `_TYPO_MAX_SUGGESTIONS` | `3` | Maximum number of alternatives displayed. |
+| `_TYPO_MIN_PREFIX` | `3` | Minimum input length before prefix matches are suggested. |
 
 ## Testing
 

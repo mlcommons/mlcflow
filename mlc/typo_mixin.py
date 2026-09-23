@@ -33,10 +33,14 @@ class TypoMixin:
         shown.  Defaults to 0.6 (same as difflib.get_close_matches default).
     _TYPO_MAX_SUGGESTIONS : int
         Maximum number of alternatives displayed.
+    _TYPO_MIN_PREFIX : int
+        Minimum input length for the prefix rule: candidates that start with
+        the input (e.g. 'exp' -> 'experiment') are listed first.
     """
 
     _TYPO_CUTOFF: float = 0.6
     _TYPO_MAX_SUGGESTIONS: int = 3
+    _TYPO_MIN_PREFIX: int = 3
 
     # Matches argparse's invalid-choice message in Python 3.8 – 3.14:
     #   "invalid choice: 'rune' (choose from 'run', 'pull', 'test')"
@@ -52,8 +56,11 @@ class TypoMixin:
     def suggest(self, word: str, candidates) -> list:
         """Return the closest matches for *word* from *candidates*.
 
-        Thin wrapper around difflib.get_close_matches so callers and tests
-        can access the suggestion logic without triggering sys.exit.
+        Candidates that start with *word* (when it is at least
+        _TYPO_MIN_PREFIX characters) come first, so abbreviations such as
+        'exp' or 'dock' resolve to 'experiment' or 'docker'.  The rest come
+        from difflib.get_close_matches.  Kept separate from error() so
+        callers and tests can use it without triggering sys.exit.
 
         Parameters
         ----------
@@ -65,15 +72,23 @@ class TypoMixin:
         Returns
         -------
         list[str]
-            Up to _TYPO_MAX_SUGGESTIONS matches ordered by similarity,
-            or an empty list when no match exceeds _TYPO_CUTOFF.
+            Up to _TYPO_MAX_SUGGESTIONS matches (prefix matches first, then
+            by similarity), or an empty list when nothing matches.
         """
-        return difflib.get_close_matches(
+        candidates = list(candidates)
+        prefix_matches = []
+        if len(word) >= self._TYPO_MIN_PREFIX:
+            prefix_matches = [
+                c for c in candidates if c.startswith(word) and c != word]
+        close_matches = difflib.get_close_matches(
             word,
             candidates,
             n=self._TYPO_MAX_SUGGESTIONS,
             cutoff=self._TYPO_CUTOFF,
         )
+        # dict.fromkeys de-duplicates while keeping order
+        merged = list(dict.fromkeys(prefix_matches + close_matches))
+        return merged[:self._TYPO_MAX_SUGGESTIONS]
 
     # ------------------------------------------------------------------ #
     # argparse.ArgumentParser override                                     #
