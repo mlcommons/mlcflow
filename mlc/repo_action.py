@@ -19,6 +19,13 @@ from filelock import FileLock, Timeout
 # How long to wait for another process's per-repo lock before giving up.
 # A cold clone of a large repo on a throttled link can run well past five
 # minutes, so the default is generous and can be raised further.
+#
+# MLC_REPO_LOCK_TIMEOUT: seconds (float) that `mlc pull repo` and
+# `mlc rm repo` wait for <repo_path>.lock. Default 1800 (30 min), used when
+# unset or empty; non-numeric or <= 0 values also fall back, with a warning. On
+# timeout the pull fails, unless another process has already left a valid,
+# registered checkout and no --branch/--checkout/--tag/--force was
+# requested. Does not affect the 60 s repos.json lock.
 REPO_LOCK_TIMEOUT_ENV = "MLC_REPO_LOCK_TIMEOUT"
 DEFAULT_REPO_LOCK_TIMEOUT = 1800
 
