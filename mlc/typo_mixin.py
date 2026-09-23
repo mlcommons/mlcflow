@@ -112,7 +112,8 @@ class TypoMixin:
         if m:
             invalid = m.group(1)
             # Choices are repr()'d in the error text: "'run', 'pull', ..."
-            raw_choices = [c.strip().strip("'\"") for c in m.group(2).split(",")]
+            raw_choices = [c.strip().strip("'\"")
+                           for c in m.group(2).split(",")]
             suggestions = self.suggest(invalid, raw_choices)
             if suggestions:
                 if len(suggestions) == 1:

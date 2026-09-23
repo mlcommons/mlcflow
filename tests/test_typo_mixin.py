@@ -22,6 +22,8 @@ from mlc.typo_mixin import TypoMixin
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Minimal concrete class for unit-testing suggest() without a full CLI.
+
+
 class _TestParser(TypoMixin, argparse.ArgumentParser):
     pass
 
@@ -30,7 +32,8 @@ def _run_mlc(*args):
     """Invoke mlc as a subprocess and return the CompletedProcess."""
     env = os.environ.copy()
     existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = REPO_ROOT if not existing else REPO_ROOT + os.pathsep + existing
+    env["PYTHONPATH"] = REPO_ROOT if not existing else REPO_ROOT + \
+        os.pathsep + existing
     return subprocess.run(
         [sys.executable, "-m", "mlc.main", *args],
         capture_output=True,
