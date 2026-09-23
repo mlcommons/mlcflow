@@ -23,9 +23,7 @@ def compute_release_version(current_version, requested_version=None):
     else:
         match = re.search(r"(\d+)(?!.*\d)", current_version)
         if match is None:
-            raise ValueError(
-                f"Current version '{current_version}' does not end with digits to increment."
-            )
+            raise ValueError(f"Current version '{current_version}' does not end with digits to increment.")
         start, end = match.span(1)
         candidate = (
             f"{current_version[:start]}{int(match.group(1)) + 1}{current_version[end:]}"
