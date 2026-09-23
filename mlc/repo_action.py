@@ -30,27 +30,6 @@ REPO_LOCK_TIMEOUT_ENV = "MLC_REPO_LOCK_TIMEOUT"
 DEFAULT_REPO_LOCK_TIMEOUT = 1800
 
 
-# Per-repo lock paths currently held by this thread. register_repo() can
-# recurse back into pull_repo() for a dependency while the parent's lock is
-# still held, so without this a repo that (transitively) depends on itself
-# would block against its own lock for the full timeout.
-#
-# This does NOT rescue two *threads* pulling repos with crossed dependencies
-# (A deps B, B deps A): that is a genuine lock-order inversion between two
-# per-repo locks and still resolves only by timing out. It surfaces as a
-# Timeout error rather than silently, which is why the Timeout handler in
-# pull_repo must not report success indiscriminately.
-_held_repo_locks = threading.local()
-
-
-def _repo_locks_held_by_this_thread():
-    held = getattr(_held_repo_locks, "paths", None)
-    if held is None:
-        held = set()
-        _held_repo_locks.paths = held
-    return held
-
-
 class RepoLockPermissionError(Exception):
     """Raised only when the per-repo lock file itself cannot be created."""
 
@@ -59,7 +38,7 @@ def _repo_lock_path(repo_path):
     """Lock-file path for a repo, normalised so aliases share one lock.
 
     The lock file is both the cross-process mutual-exclusion token and the
-    within-thread reentrancy key, so two spellings of the same repo
+    key of the same-thread cycle guard (_pulling_repos), so two spellings of the same repo
     ("<root>/r" vs "<root>/./r", or a symlinked MLC_REPOS) must map to one
     name -- otherwise two processes take different locks for the same
     directory and the exclusion silently does nothing. Only the parent is
@@ -78,11 +57,20 @@ def _repo_lock_path(repo_path):
 
 
 # Repos whose pull is already in progress on this thread. register_repo()
-# recurses into pull_repo() for each dependency, so a dependency cycle
-# (A -> B -> A) would otherwise recurse until the stack blows, running a git
-# pull and a repos.json rewrite at every level. The per-repo lock cannot stop
-# this on its own: same-thread reentrancy makes the nested acquire a no-op by
-# design, which is exactly what turns the old deadlock into a recursion storm.
+# recurses into pull_repo() for each dependency while the parent's lock is
+# still held. For a dependency cycle (A -> B -> A) the nested pull of A would
+# otherwise take a second FileLock on A's lock file -- which blocks even
+# within one thread -- and hang for the full timeout. Instead it is skipped:
+# A is already being pulled further up the stack.
+#
+# This is the only same-thread guard; _repo_lock itself is not reentrant.
+#
+# It does NOT rescue two *threads* pulling repos with crossed dependencies
+# (thread 1 pulls A which deps B, thread 2 pulls B which deps A): that is a
+# genuine lock-order inversion between two per-repo locks and still resolves
+# only by timing out. It surfaces as a Timeout error rather than silently,
+# which is why the Timeout handler in pull_repo must not report success
+# indiscriminately.
 _pulling_repos = threading.local()
 
 
@@ -109,12 +97,8 @@ def _repo_pull_lock(repo_lock_file, timeout):
 
 @contextlib.contextmanager
 def _repo_lock(repo_lock_file, timeout):
-    """Acquire a per-repo lock, tolerating same-thread re-entry."""
-    held = _repo_locks_held_by_this_thread()
-    if repo_lock_file in held:
-        # Already ours further up the call stack (dependency recursion).
-        yield
-        return
+    """Acquire a per-repo lock. Not reentrant: nested pulls are guarded by
+    _repo_pull_lock, and rm() never runs inside a pull."""
     try:
         lock = FileLock(repo_lock_file, timeout=timeout)
         lock.acquire()
@@ -123,11 +107,9 @@ def _repo_lock(repo_lock_file, timeout):
         # PermissionError around the whole pull would mislabel an EACCES
         # from git, rmtree or reading meta.yaml as a lock problem.
         raise RepoLockPermissionError(str(e)) from e
-    held.add(repo_lock_file)
     try:
         yield
     finally:
-        held.discard(repo_lock_file)
         lock.release()
 
 
