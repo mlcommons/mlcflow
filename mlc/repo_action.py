@@ -371,7 +371,8 @@ class RepoAction(Action):
 
     # Return values of _git_repo_state().
     GIT_STATE_VALID = "valid"        # a git checkout rooted exactly here
-    GIT_STATE_INVALID = "invalid"    # definitely not a checkout; safe to remove
+    GIT_STATE_ABANDONED_CLONE = "abandoned_clone"  # interrupted clone; safe to remove
+    GIT_STATE_INVALID = "invalid"    # not a usable checkout; DO NOT remove
     GIT_STATE_UNKNOWN = "unknown"    # git could not answer; DO NOT remove
 
     # git's phrasing when a path is genuinely not a repository. Anything else
@@ -388,16 +389,18 @@ class RepoAction(Action):
 
         `rev-parse --show-toplevel` is used rather than `rev-parse HEAD` for
         two reasons:
-          * a freshly cloned *empty* repo has an unborn HEAD, so `rev-parse
-            HEAD` fails on a perfectly good checkout;
+          * a repo with an unborn HEAD but work in its tree fails `rev-parse
+            HEAD` although it is a perfectly good checkout;
           * `git -C` searches upwards, so a plain directory nested inside
             another checkout answers for the *enclosing* repo. Comparing the
             reported top level against repo_path rejects that.
 
-        The INVALID/UNKNOWN split matters because callers delete on INVALID.
-        A git that cannot be executed, or that refuses (e.g. "detected
-        dubious ownership" on a shared MLC_REPOS), must never be read as
-        "this is junk, remove it".
+        Only ABANDONED_CLONE may be deleted by callers. INVALID covers
+        everything else that is not a usable checkout -- a copy without
+        .git, a corrupted .git, a plain file -- and may hold the user's only
+        copy of their work, so it is reported, never removed. A git that
+        cannot be executed, or that refuses (e.g. "detected dubious
+        ownership" on a shared MLC_REPOS), is UNKNOWN for the same reason.
         """
         if not os.path.lexists(repo_path):
             return cls.GIT_STATE_INVALID          # nothing there at all
@@ -405,6 +408,11 @@ class RepoAction(Action):
             return cls.GIT_STATE_INVALID          # dangling symlink
         if not os.path.isdir(repo_path):
             return cls.GIT_STATE_INVALID          # a plain file
+        # Checked before --show-toplevel: an interrupted clone passes that
+        # probe (its .git is a well-formed repository), so it would otherwise
+        # be reported VALID and every later pull would fail against it.
+        if cls._is_abandoned_clone(repo_path):
+            return cls.GIT_STATE_ABANDONED_CLONE
         # NOTE: a *live* symlink to a real checkout must fall through to git.
         # Relocating a repo onto a bigger volume and symlinking it back is a
         # normal thing to do; short-circuiting on islink here would classify
@@ -443,6 +451,42 @@ class RepoAction(Action):
             "Leaving the directory untouched.")
         return cls.GIT_STATE_UNKNOWN
 
+    @staticmethod
+    def _is_abandoned_clone(repo_path):
+        """True only for what an interrupted `git clone` leaves behind.
+
+        Killing a real clone mid-transfer leaves a well-formed .git with no
+        refs, an unborn HEAD and an otherwise empty work tree. All three must
+        hold -- anything with a ref, a resolvable HEAD or a single other file
+        in it could be someone's work. Removing a completed clone of an
+        *empty* upstream also matches, which is harmless: it holds nothing
+        that re-cloning does not restore.
+        """
+        if os.path.islink(repo_path):
+            return False
+        git_dir = os.path.join(repo_path, '.git')
+        try:
+            if os.listdir(repo_path) != ['.git']:
+                return False
+            if os.path.islink(git_dir) or not os.path.isdir(git_dir):
+                return False
+            # --git-dir, not -C: -C searches upwards, and would read the refs
+            # of an enclosing checkout if this .git is not a valid repository.
+            refs = subprocess.run(
+                ['git', '--git-dir', git_dir, 'for-each-ref'],
+                capture_output=True, text=True)
+            if refs.returncode != 0 or refs.stdout.strip():
+                return False
+            head = subprocess.run(
+                ['git', '--git-dir', git_dir, 'rev-parse', '--verify', '-q',
+                 'HEAD'],
+                capture_output=True, text=True)
+            # 1 is "does not resolve"; anything else is git failing, which
+            # must not be read as permission to delete.
+            return head.returncode == 1
+        except (OSError, subprocess.SubprocessError):
+            return False
+
     @classmethod
     def _is_valid_git_repo(cls, repo_path):
         """True only when repo_path is a git checkout rooted exactly there."""
@@ -450,17 +494,9 @@ class RepoAction(Action):
 
     @staticmethod
     def _remove_broken_checkout(path):
-        """Remove a path that is known not to be a usable checkout.
-
-        Handles the non-directory cases too: a stale symlink or a plain file
-        sitting where the repo should be would make rmtree raise
-        NotADirectoryError.
-        """
+        """Remove a directory classified as GIT_STATE_ABANDONED_CLONE."""
         try:
-            if os.path.islink(path) or os.path.isfile(path):
-                os.remove(path)
-            else:
-                shutil.rmtree(path)
+            shutil.rmtree(path)
         except OSError as e:
             logger.warning(f"Failed to remove {path}: {e}")
 
@@ -878,11 +914,11 @@ class RepoAction(Action):
                 # every later pull fails against it. Such a directory is
                 # removed and cloned afresh.
                 #
-                # Only GIT_STATE_INVALID is removed. If git could not be run
-                # or refused to answer we do NOT delete: that path would
-                # destroy a healthy checkout -- including uncommitted work --
-                # over a missing git binary or a "dubious ownership" refusal
-                # on a shared MLC_REPOS.
+                # Only GIT_STATE_ABANDONED_CLONE is removed. Anything else that
+                # is not a usable checkout is reported and left alone: a copy
+                # without .git or a corrupted checkout may be the user's only
+                # copy of their work, and a missing git binary or a "dubious
+                # ownership" refusal says nothing about the directory at all.
                 if os.path.lexists(repo_path):
                     repo_state = self._git_repo_state(repo_path)
                     if repo_state == self.GIT_STATE_UNKNOWN:
@@ -895,6 +931,18 @@ class RepoAction(Action):
                             )
                         }
                     if repo_state == self.GIT_STATE_INVALID:
+                        return {
+                            'return': 1,
+                            'error': (
+                                f"{repo_path} exists but is not a git checkout "
+                                "that mlc can pull (for example a copy without "
+                                ".git, a corrupted .git, or a file or broken "
+                                "symlink in its place). mlc will not delete it "
+                                "automatically. Move or remove it yourself, "
+                                "then retry."
+                            )
+                        }
+                    if repo_state == self.GIT_STATE_ABANDONED_CLONE:
                         logger.warning(
                             f"{repo_path} exists but is not a usable git "
                             "checkout (likely a previously interrupted "
