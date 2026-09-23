@@ -91,6 +91,13 @@ jobs:
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
         run: |
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "::error::Local checkout is not at the latest origin/main."
+            echo "Re-run the workflow from main after refreshing the branch selection."
+            exit 1
+          fi
+
           new_version="$(python3 .github/scripts/release_version.py \
             --current-version-file VERSION \
             --requested-version "${REQUESTED_VERSION}")"
@@ -116,13 +123,14 @@ jobs:
           else
             git add VERSION
             git commit -m "Bump VERSION to ${new_version}"
-            git push origin HEAD:main
           fi
 
+          release_commit="$(git rev-parse HEAD)"
           git tag "${release_tag}"
           git push origin "${release_tag}"
           git checkout "${release_tag}"
 
+          echo "RELEASE_COMMIT=${release_commit}" >> "$GITHUB_ENV"
           echo "RELEASE_REF_TYPE=tag" >> "$GITHUB_ENV"
           echo "RELEASE_REF_NAME=${release_tag}" >> "$GITHUB_ENV"
 
@@ -224,3 +232,24 @@ jobs:
               $prerelease_flag \
               dist/*
           fi
+
+      - name: Update main to released VERSION
+        if: github.event_name == 'workflow_dispatch' && github.ref_type == 'branch'
+        run: |
+          git fetch origin main
+          remote_main="$(git rev-parse origin/main)"
+
+          if git merge-base --is-ancestor "${RELEASE_COMMIT}" "${remote_main}"; then
+            echo "Release commit ${RELEASE_COMMIT} is already on origin/main."
+            exit 0
+          fi
+
+          release_parent="$(git rev-parse "${RELEASE_COMMIT}^" 2>/dev/null || true)"
+          if [ -n "${release_parent}" ] && [ "${release_parent}" != "${remote_main}" ]; then
+            echo "::error::origin/main advanced while releasing ${RELEASE_REF_NAME}."
+            echo "The release tag was published, but the VERSION bump commit was not pushed to main."
+            echo "Fast-forward main to ${RELEASE_COMMIT} manually once the branch is reconciled."
+            exit 1
+          fi
+
+          git push origin "${RELEASE_COMMIT}:main"

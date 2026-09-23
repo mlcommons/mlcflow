@@ -27,11 +27,27 @@ class ReleaseVersionTest(unittest.TestCase):
             "1.4.0rc2",
         )
 
+    def test_default_increment_updates_alpha_suffix_counter(self):
+        self.assertEqual(
+            release_version.compute_release_version("1.4.0a1"),
+            "1.4.0a2",
+        )
+
+    def test_default_increment_updates_beta_suffix_counter(self):
+        self.assertEqual(
+            release_version.compute_release_version("1.4.0b2"),
+            "1.4.0b3",
+        )
+
     def test_requested_version_is_returned_when_valid(self):
         self.assertEqual(
             release_version.compute_release_version("1.3.7", "2.0.0"),
             "2.0.0",
         )
+
+    def test_invalid_current_version_raises_clear_error(self):
+        with self.assertRaisesRegex(ValueError, "Current version 'not-a-version'"):
+            release_version.compute_release_version("not-a-version")
 
     def test_invalid_requested_version_raises_clear_error(self):
         with self.assertRaisesRegex(ValueError, "Requested version 'not-a-version'"):
