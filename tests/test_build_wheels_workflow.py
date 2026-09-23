@@ -56,9 +56,8 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
             step for step in self.steps if step.get("uses", "").startswith("actions/checkout@")
         )
 
-        self.assertEqual(
-            token_step["uses"],
-            "actions/create-github-app-token@v1")
+        self.assertTrue(
+            token_step["uses"].startswith("actions/create-github-app-token@"))
         self.assertEqual(
             token_step["with"]["app-id"],
             "${{ secrets.MLC_AUTOMATIONS_APP_ID }}",
@@ -115,6 +114,22 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
             release_step["env"]["GH_TOKEN"],
             "${{ steps.app-token.outputs.token }}",
         )
+
+    def test_tag_push_from_app_token_does_not_start_second_release(self):
+        job_condition = self.workflow["jobs"]["build_wheels"]["if"]
+
+        self.assertIn("github.repository_owner == 'mlcommons'", job_condition)
+        self.assertIn(
+            "!(github.event_name == 'push' && github.actor == 'mlc-automations[bot]')",
+            job_condition,
+        )
+
+    def test_actions_are_pinned_to_commit_shas(self):
+        for step in self.steps:
+            uses = step.get("uses")
+            if uses:
+                ref = uses.split("@", 1)[1]
+                self.assertRegex(ref, r"^[0-9a-f]{40}$", uses)
 
     def test_workflow_serializes_release_runs(self):
         concurrency = self.workflow["concurrency"]
