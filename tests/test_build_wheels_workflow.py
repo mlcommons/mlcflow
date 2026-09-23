@@ -36,7 +36,9 @@ class BuildWheelsWorkflowTest(unittest.TestCase):
     def test_release_step_is_safe_to_rerun_for_existing_tag(self):
         release_step = self.steps_by_name["Create GitHub Release"]
 
-        self.assertIn('gh release view "$RELEASE_REF_NAME"', release_step["run"])
+        self.assertIn(
+            'gh release view "$RELEASE_REF_NAME"',
+            release_step["run"])
         self.assertIn(
             'gh release upload "$RELEASE_REF_NAME" dist/* --clobber',
             release_step["run"],
