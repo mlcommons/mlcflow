@@ -36,7 +36,7 @@ fi
 MIN_PYTHON_VERSION="3.7"
 DEFAULT_VENV_DIR="$HOME/mlcflow"
 DEFAULT_REPO="mlcommons@mlperf-automations"
-DEFAULT_BRANCH="dev"
+DEFAULT_BRANCH="main"
 PYTHON_CMD="python3"
 
 # What to hand to `pip install` for mlcflow itself. Defaults to the PyPI
@@ -172,6 +172,16 @@ detect_os() {
             ;;
         macos)
             PKG_MANAGER="brew"
+            # Ensure Homebrew is in PATH (may be missing in non-login SSH sessions)
+            if ! command -v brew >/dev/null 2>&1; then
+                for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+                    if [ -x "$brew_path" ]; then
+                        eval "$("$brew_path" shellenv)"
+                        log_debug "Added Homebrew to PATH from $brew_path"
+                        break
+                    fi
+                done
+            fi
             ;;
         *)
             log_error "Unsupported OS: $OS_ID"
@@ -269,12 +279,22 @@ install_packages() {
             run_root "$PKG_MANAGER" install -y python3-venv >/dev/null 2>&1 || true
             ;;
         brew)
+            # Homebrew may not be in PATH (e.g. non-login SSH sessions).
+            # Try common install locations before giving up.
+            if ! command -v brew >/dev/null 2>&1; then
+                for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+                    if [ -x "$brew_path" ]; then
+                        eval "$("$brew_path" shellenv)"
+                        break
+                    fi
+                done
+            fi
             if ! command -v brew >/dev/null 2>&1; then
                 log_error "Homebrew is required on macOS. Please install it from https://brew.sh"
                 exit 1
             fi
             brew update
-            brew install python git curl wget unzip
+            brew install python git curl unzip wget
             ;;
     esac
 }

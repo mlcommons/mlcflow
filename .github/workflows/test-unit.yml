@@ -9,6 +9,7 @@ on:
     paths:
       - 'mlc/**'
       - 'tests/**'
+      - 'automation/**'
       - '.github/workflows/test-unit.yml'
       - 'pyproject.toml'
   push:
@@ -16,6 +17,7 @@ on:
     paths:
       - 'mlc/**'
       - 'tests/**'
+      - 'automation/**'
       - '.github/workflows/test-unit.yml'
       - 'pyproject.toml'
 

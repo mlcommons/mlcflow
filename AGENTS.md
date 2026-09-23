@@ -502,3 +502,61 @@ avoids the prompt.
 - `dev` is kept in sync with `main` and is only used for urgent merges that
   need to bypass the normal approval process.
 - Never push directly to `main`.
+
+---
+
+## PR review format
+
+When an agent is asked to review a pull request, the posted review must follow
+the structure below. The goal is that a maintainer can triage by severity
+without reading the whole comment, and that every claim is checkable.
+
+### Required structure
+
+1. **Attribution block** (blockquote, first thing in the comment) — state that
+   the review was performed by an AI agent, on whose request, what was
+   inspected, and that it is input to human review rather than a substitute.
+   Reviews posted from a human's account without this block are not acceptable.
+2. **Verdict** — two or three sentences: what the PR is trying to do, whether
+   it does it, and a merge recommendation.
+3. **Findings grouped under severity headings**, highest first. Omit a heading
+   entirely if it has no findings — never emit an empty section.
+   - `## 🔴 High severity`
+   - `## 🟠 Medium severity`
+   - `## 🟡 Low severity`
+4. **Suggested path to merge** — a numbered, ordered list of concrete actions.
+
+### Severity definitions
+
+| Level | Use when |
+|---|---|
+| 🔴 High | Incorrect behaviour, data loss or unintended filesystem/network mutation, a security issue, or code whose comments/docs contradict what it actually does. Also: the PR's central mechanism does not work. |
+| 🟠 Medium | Works, but is wrong under a documented mode or realistic configuration; missing tests for new user-facing behaviour; CI that does not exercise the change; duplicated or racy logic. |
+| 🟡 Low | Style, dead code, redundancy, naming, fragile-but-working test setup, PR hygiene (title/description/docs), pre-existing gaps the PR merely surfaces. |
+
+### Rules for individual findings
+
+- Give each finding a `###` heading that states the defect as a claim, not a
+  topic — "Marker file is written but never read", not "Marker file".
+- Cite `path:line` (or a permalink at the PR head SHA) for every claim.
+- Prefer evidence over assertion. Paste the grep, the failing command, or the
+  observed output that demonstrates the problem. If a claim was verified by
+  running code, say so; if it is reasoned-but-unverified, say that too.
+- Mark pre-existing issues as pre-existing. Do not charge them against the PR,
+  but do flag them when the PR makes them easier to reach.
+- End each High/Medium finding with a concrete **Fix:** line.
+- Do not pad. No praise sections, no restating the diff, no findings invented to
+  fill a severity tier.
+
+### Mechanics
+
+```bash
+gh pr diff <N> --repo mlcommons/mlcflow          # the change
+gh pr view <N> --repo mlcommons/mlcflow --json headRefOid -q .headRefOid
+# read the *callers and callees* of changed code, not just the diff —
+# most real findings live in the gap between the two
+gh pr comment <N> --repo mlcommons/mlcflow --body-file review.md
+```
+
+Post as a regular comment (`gh pr comment`), not as a formal approval or
+change-request review — an agent should not consume a required review slot.
