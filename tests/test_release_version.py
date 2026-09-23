@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import pathlib
 import tempfile
 import unittest
@@ -69,10 +70,15 @@ class ReleaseVersionTest(unittest.TestCase):
                     "not-a-version",
                 ],
             ):
-                with self.assertRaises(SystemExit) as context:
-                    release_version.main()
+                with mock.patch("sys.stderr", new=io.StringIO()) as stderr:
+                    with self.assertRaises(SystemExit) as context:
+                        release_version.main()
 
         self.assertEqual(context.exception.code, 1)
+        self.assertIn(
+            "Requested version 'not-a-version' is not a valid PEP 440 version.",
+            stderr.getvalue(),
+        )
 
 
 if __name__ == "__main__":

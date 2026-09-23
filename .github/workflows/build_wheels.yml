@@ -92,7 +92,7 @@ jobs:
             --requested-version "${REQUESTED_VERSION}")"
           release_tag="v${new_version}"
 
-          if git rev-parse "${release_tag}" >/dev/null 2>&1; then
+          if git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null 2>&1; then
             echo "::error::Tag ${release_tag} already exists locally."
             exit 1
           fi
