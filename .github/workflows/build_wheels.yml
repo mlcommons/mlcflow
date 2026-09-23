@@ -45,6 +45,13 @@ jobs:
     strategy:
       fail-fast: false
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.MLC_AUTOMATIONS_APP_ID }}
+          private-key: ${{ secrets.MLC_AUTOMATIONS_PRIVATE_KEY }}
+
       - name: Validate workflow_dispatch source
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -74,6 +81,7 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       # Step 2: Set up Python
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -83,9 +91,10 @@ jobs:
       - name: Install requirements
         run: python3 -m pip install setuptools wheel build packaging
 
-      # Step 4: When dispatched from main, create the release commit and tag
-      # before building. If version is omitted, increment the right-most digits
-      # in VERSION (for example 1.3.7 -> 1.3.8, 1.4.0rc1 -> 1.4.0rc2).
+      # Step 4: When dispatched from main, update VERSION on main first and
+      # then tag that exact commit before building. If version is omitted,
+      # increment the right-most digits in VERSION (for example 1.3.7 ->
+      # 1.3.8, 1.4.0rc1 -> 1.4.0rc2).
       - name: Prepare release from main
         if: github.event_name == 'workflow_dispatch' && github.ref_type == 'branch'
         env:
@@ -115,22 +124,22 @@ jobs:
 
           printf '%s\n' "${new_version}" > VERSION
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "mlc-automations"
+          git config user.email "3246381+mlc-automations@users.noreply.github.com"
 
           if git diff --quiet -- VERSION; then
-            echo "VERSION already set to ${new_version}; creating the tag from the current main HEAD."
+            echo "VERSION already set to ${new_version}; tagging the current main HEAD."
           else
             git add VERSION
             git commit -m "Bump VERSION to ${new_version}"
+            git push origin HEAD:main
           fi
 
           release_commit="$(git rev-parse HEAD)"
-          git tag "${release_tag}"
-          git push origin "${release_tag}"
+          git tag "${release_tag}" "${release_commit}"
+          git push origin "refs/tags/${release_tag}"
           git checkout "${release_tag}"
 
-          echo "RELEASE_COMMIT=${release_commit}" >> "$GITHUB_ENV"
           echo "RELEASE_REF_TYPE=tag" >> "$GITHUB_ENV"
           echo "RELEASE_REF_NAME=${release_tag}" >> "$GITHUB_ENV"
 
@@ -214,7 +223,7 @@ jobs:
       # this from the version itself, but the GitHub Release does not.
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           if [ "${IS_PRERELEASE}" = "true" ]; then
             echo "${RELEASE_REF_NAME} is a prerelease; marking the GitHub Release accordingly."
@@ -232,24 +241,3 @@ jobs:
               $prerelease_flag \
               dist/*
           fi
-
-      - name: Update main to released VERSION
-        if: github.event_name == 'workflow_dispatch' && github.ref_type == 'branch'
-        run: |
-          git fetch origin main
-          remote_main="$(git rev-parse origin/main)"
-
-          if git merge-base --is-ancestor "${RELEASE_COMMIT}" "${remote_main}"; then
-            echo "Release commit ${RELEASE_COMMIT} is already on origin/main."
-            exit 0
-          fi
-
-          release_parent="$(git rev-parse "${RELEASE_COMMIT}^" 2>/dev/null || true)"
-          if [ -n "${release_parent}" ] && [ "${release_parent}" != "${remote_main}" ]; then
-            echo "::error::origin/main advanced while releasing ${RELEASE_REF_NAME}."
-            echo "The release tag was published, but the VERSION bump commit was not pushed to main."
-            echo "Fast-forward main to ${RELEASE_COMMIT} manually once the branch is reconciled."
-            exit 1
-          fi
-
-          git push origin "${RELEASE_COMMIT}:main"
