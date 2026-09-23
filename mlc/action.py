@@ -5,6 +5,7 @@ import yaml
 import logging
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from .logger import logger, setup_logging
@@ -67,7 +68,42 @@ class Action:
                 'return': 1, 'error': f"'{action_name}' action is not supported for {action_target}."}
         return {'return': 0}
 
+    def bundled_automation_path(self, target):
+        """
+        Resolve <target> (e.g. "script") relative to the automation/ engine
+        bundled with this mlcflow install.
+
+        automation/ ships as a top-level package alongside mlc/, both in the
+        editable checkout (mlcflow/automation) and in site-packages once
+        installed, since mlc/action.py always lives one level under the
+        package root that automation/ is a sibling of.
+
+        Returns the absolute path if it exists, else None.
+        """
+        pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        target_folder = os.path.join(pkg_root, 'automation', target)
+        return target_folder if os.path.isdir(target_folder) else None
+
     def find_target_folder(self, target):
+        """
+        Resolve the automation/<target> folder to load the engine from, in
+        order:
+
+        1. The engine bundled with mlcflow itself (bundled_automation_path())
+           - this is always preferred and covers the normal case, since
+           automation/ ships inside every mlcflow install.
+        2. A fallback scan of registered repos for a custom/external
+           'automation' folder (a dev-override escape hatch), used only if
+           step 1 finds nothing - e.g. a bundled install is missing/corrupted.
+
+        Returns the absolute path to automation/<target>, or None if neither
+        source has it (the caller then auto-pulls mlperf-automations as a
+        last resort - see call_script_module_function()).
+        """
+        bundled = self.bundled_automation_path(target)
+        if bundled:
+            return bundled
+
         # Traverse through each repo to find the first 'target' folder inside
         # an 'automation' folder
         for repo in self.repos:
@@ -223,10 +259,13 @@ class Action:
 
         repo_json_path = os.path.join(self.repos_path, "repos.json")
         if not os.path.exists(repo_json_path):
-            with open(repo_json_path, 'w') as f:
-                json.dump([str(mlc_local_repo_path_expanded)], f, indent=2)
-                logger.info(
-                    f"Created repos.json in {os.path.dirname(self.repos_path)} and initialised with local cache folder path: {mlc_local_repo_path}")
+            try:
+                with open(repo_json_path, 'x') as f:
+                    json.dump([str(mlc_local_repo_path_expanded)], f, indent=2)
+                    logger.info(
+                        f"Created repos.json in {os.path.dirname(self.repos_path)} and initialised with local cache folder path: {mlc_local_repo_path}")
+            except FileExistsError:
+                pass
 
         self.local_cache_path = os.path.join(mlc_local_repo_path, "cache")
         if not os.path.exists(self.local_cache_path):
@@ -415,18 +454,19 @@ class Action:
             item_meta = result.meta
 
             if os.path.exists(item_path):
-                if force_remove == True:
-                    shutil.rmtree(item_path)
-                else:
+                if force_remove != True:
                     user_choice = input(
                         f"Confirm to delete {target_name} item: {item_path}? (yes/no): ").strip().lower()
                     if user_choice not in ['yes', 'y']:
                         continue
-                    else:
-                        shutil.rmtree(item_path)
 
-                logger.info(
-                    f"{target_name} item: {item_path} has been successfully removed")
+                try:
+                    shutil.rmtree(item_path)
+                    logger.info(
+                        f"{target_name} item: {item_path} has been successfully removed")
+                except FileNotFoundError:
+                    logger.warning(
+                        f"{item_path} was already removed by another process.")
 
             self.get_index().rm(item_meta, target_name, item_path)
 
@@ -483,6 +523,7 @@ class Action:
         target_name = i.get('target_name', i.get('target', "cache"))
         i['target_name'] = target_name
         ii = i.copy()
+        quiet = ii.get('quiet', not sys.stdin.isatty())
 
         if i.get('search_tags'):
             ii['tags'] = ",".join(i['search_tags'])
@@ -504,9 +545,12 @@ class Action:
 
         new_tags = set(search_tags)
         if len(found_items) > 1:
-            # Step 3: Ask user for confirmation if multiple items are found
-            user_input = input(
-                f"{len(found_items)} items found. Do you want to update all? (yes/no): ").strip().lower()
+            if quiet:
+                user_input = 'yes'
+            else:
+                # Step 3: Ask user for confirmation if multiple items are found
+                user_input = input(
+                    f"{len(found_items)} items found. Do you want to update all? (yes/no): ").strip().lower()
             if user_input not in ['yes', 'y']:
                 return {'return': 0,
                         'message': 'Update operation canceled by the user.'}

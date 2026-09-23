@@ -10,12 +10,38 @@ Compact task playbooks. Read AGENTS.md for full technical detail.
 mlcr <tags>  →  mlc_expand_short("run")  →  main()
   →  get_action("script", parent)  →  ScriptAction.run(run_args)
     →  call_script_module_function("run", run_args)
-      →  find_target_folder("script")        # walks registered repos
+      →  find_target_folder("script")        # bundled automation/script/ always preferred first,
+                                              # falls back to scanning registered repos only if absent
       →  dynamic_import_module(module.py)    # loads ScriptAutomation
-      →  ScriptAutomation(self, path).run(run_args)   # engine in mlperf-automations
+      →  ScriptAutomation(self, path).run(run_args)   # engine bundled in this repo
 ```
 
-**This repo = CLI driver only.** Script logic lives in `mlperf-automations/automation/script/module.py`, loaded at runtime.
+**This repo = CLI driver + script execution engine.** Engine logic lives in
+`automation/script/module.py` here (originally developed in
+`mlperf-automations`, now bundled here as the copy mlcflow actually loads).
+`mlperf-automations` **keeps its own `automation/` copy** — it is not being
+removed, so that pre-bundling mlcflow releases still have an engine to fall
+back to. Script *content* (the 350+ `script/<alias>/` directories with
+`meta.yaml`, `customize.py`, `run.sh`) still lives there and is pulled into
+`~/MLC/repos/` as before.
+
+**Coexistence is safe** (verified on real installs): bundled mlcflow loads the
+bundled copy, pre-bundling mlcflow loads the repo copy, and in both cases
+`module.py` + `utils.py` come from the *same* copy — never a hybrid.
+
+**Version drift is permanent, and it bites via coupled changes.** The bundled
+copy always wins, so any edit to `mlperf-automations/automation/` is invisible
+here. Engine and content changes usually land together in one
+mlperf-automations PR (see #1061: `MLC_SKIP_SUDO` + `script/detect-sudo/`,
+`remote_shell` + `script/remote-run-commands/`). A bundled mlcflow then gets
+new content against a frozen engine, and the feature silently stops working —
+no error. **Any mlperf-automations PR touching `automation/` needs a companion
+PR here.** `mlc_compat` in a script's `meta.yaml` is the guard that works.
+
+**Don't break `from utils import …`:** `dynamic_import_module()` puts the
+bundled `automation/` dir on `sys.path`, and ~188 `customize.py` files in
+`mlperf-automations` rely on that to resolve a bare `from utils import ...`.
+Touching that insertion breaks all of them at once.
 
 **Result dict contract** — every action method must return:
 - `{'return': 0}` on success
@@ -163,6 +189,41 @@ Run tests with:
 ```bash
 pip install -e .
 python -m pytest tests/
+```
+
+### "I need to review a PR"
+
+Full spec — required structure, severity definitions, evidence rules — is in
+**AGENTS.md → "PR review format"**. Follow it exactly; the short version:
+
+```
+> attribution block: AI-performed, on whose request, what was inspected
+## Verdict                  ← 2-3 sentences + merge recommendation
+## 🔴 High severity         ← omit any tier with no findings
+## 🟠 Medium severity
+## 🟡 Low severity
+## Suggested path to merge  ← numbered, ordered, concrete
+```
+
+Investigate before writing:
+```bash
+gh pr diff <N> --repo mlcommons/mlcflow
+SHA=$(gh pr view <N> --repo mlcommons/mlcflow --json headRefOid -q .headRefOid)
+git fetch --depth 1 https://github.com/mlcommons/mlcflow.git refs/pull/<N>/head && git checkout FETCH_HEAD
+```
+
+- Read the **callers and callees** of changed code, not just the diff. A comment
+  claiming "we now read X" is only true if some caller actually reads X — grep
+  for readers before believing it.
+- Check whether CI actually runs for the change: compare the touched paths
+  against each workflow's `paths:` filter. `automation/**` is **not** covered by
+  `test-unit.yml`.
+- Check whether the change duplicates existing coverage in `tests/`.
+- Run the changed shell functions where you can; quote the real output as evidence.
+
+Post as a plain comment so no required review slot is consumed:
+```bash
+gh pr comment <N> --repo mlcommons/mlcflow --body-file review.md
 ```
 
 ---

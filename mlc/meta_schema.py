@@ -40,7 +40,6 @@ TOP_LEVEL_SCHEMA = {
     "sort": INT,
     "category_sort": INT,
     "private": BOOL,
-    "min_mlc_version": STR,
 
     # Environment
     "env": DICT,        # dict[str, str]
@@ -87,6 +86,7 @@ TOP_LEVEL_SCHEMA = {
 
     # Docker
     "docker": DICT,        # dict - see DOCKER_SCHEMA
+    "apptainer": DICT,     # dict - apptainer overrides; merges with docker settings
 
     # Output / debugging
     "print_env_at_the_end": DICT,        # dict[str, list[str]]
@@ -100,6 +100,10 @@ TOP_LEVEL_SCHEMA = {
 
     # Tests
     "tests": DICT,        # dict - see TESTS_SCHEMA
+
+    # Version compatibility requirements (see automation/script/compat.py in
+    # mlperf-automations)
+    "mlc_compat": LIST,   # list[mlc_compat_entry]
 }
 
 # ─── Dependency entry keys ──────────────────────────────────────
@@ -161,6 +165,7 @@ VARIATION_ENTRY_SCHEMA = {
     "state": DICT,
     "const": DICT,
     "docker": DICT,
+    "apptainer": DICT,
     "alias": STR,
     "default_version": STR_OR_FLOAT,
     "required_disk_space": INT,
@@ -219,6 +224,13 @@ TESTS_SCHEMA = {
     "needs_pat": BOOL,
 }
 
+# ─── mlc_compat entry keys ──────────────────────────────────────
+MLC_COMPAT_ENTRY_SCHEMA = {
+    "min_version": STR,   # required: minimum mlcflow version
+    "message": STR,       # required: human-readable reason
+    "fail": BOOL,         # optional (default false): block execution if unmet
+}
+
 # ─── Tests run_inputs entry keys ────────────────────────────────
 TESTS_RUN_INPUT_SCHEMA = {
     "variations_list": LIST,   # list[str]
@@ -238,6 +250,7 @@ UPDATE_META_IF_ENV_SCHEMA = {
     "default_env": DICT,
     "default_variations": DICT,
     "docker": DICT,
+    "apptainer": DICT,
     "adr": DICT,
     "ad": DICT,
 }
@@ -393,6 +406,21 @@ def validate_meta(data, file_path=""):
                 errors.append(
                     f"{prefix}docker.{dk} has type '{actual}', expected {allowed}")
 
+    # Validate apptainer section (same schema as docker; apptainer overrides
+    # docker)
+    apptainer = data.get("apptainer")
+    if isinstance(apptainer, dict):
+        for ak, av in apptainer.items():
+            if ak not in DOCKER_SCHEMA:
+                warnings.append(
+                    f"{prefix}apptainer: unknown key '{ak}'")
+                continue
+            actual = type(av).__name__
+            allowed = DOCKER_SCHEMA[ak]
+            if actual not in allowed:
+                errors.append(
+                    f"{prefix}apptainer.{ak} has type '{actual}', expected {allowed}")
+
     # Validate tests section
     tests = data.get("tests")
     if isinstance(tests, dict):
@@ -447,6 +475,36 @@ def validate_meta(data, file_path=""):
                     if vk in variations and vk != vname:
                         warnings.append(
                             f"{prefix}variations.{vname}: key '{vk}' matches another variation name - possible indentation error")
+
+    # Validate mlc_compat entries
+    mlc_compat = data.get("mlc_compat")
+    if isinstance(mlc_compat, list):
+        for i, entry in enumerate(mlc_compat):
+            if not isinstance(entry, dict):
+                errors.append(f"{prefix}mlc_compat[{i}] is not a dict")
+                continue
+            if "min_version" not in entry:
+                errors.append(
+                    f"{prefix}mlc_compat[{i}]: missing required key 'min_version'")
+            elif not str(entry["min_version"]).strip():
+                errors.append(
+                    f"{prefix}mlc_compat[{i}]: 'min_version' must be a non-empty string")
+            if "message" not in entry:
+                errors.append(
+                    f"{prefix}mlc_compat[{i}]: missing required key 'message'")
+            elif not str(entry["message"]).strip():
+                errors.append(
+                    f"{prefix}mlc_compat[{i}]: 'message' must be a non-empty string")
+            for ck, cv in entry.items():
+                if ck not in MLC_COMPAT_ENTRY_SCHEMA:
+                    warnings.append(
+                        f"{prefix}mlc_compat[{i}]: unknown key '{ck}'")
+                    continue
+                actual = type(cv).__name__
+                allowed = MLC_COMPAT_ENTRY_SCHEMA[ck]
+                if actual not in allowed:
+                    errors.append(
+                        f"{prefix}mlc_compat[{i}].{ck} has type '{actual}', expected {allowed}")
 
     # Cross-key validations
     default_variation = data.get("default_variation")

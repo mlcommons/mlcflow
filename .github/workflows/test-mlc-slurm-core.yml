@@ -1,0 +1,94 @@
+name: MLC slurm core smoke test
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [ "main", "dev" ]
+    paths:
+      - '.github/workflows/test-mlc-slurm-core.yml'
+      - 'mlc/**'
+      - 'automation/script/slurm_run.py'
+      - 'automation/script/remote_run.py'
+      - 'automation/script/module.py'
+      - 'automation/utils.py'
+      - 'tests/test_slurm_run.py'
+      - '!**.md'
+
+jobs:
+  test_slurm_smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install mlcflow
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install . pytest
+
+    - name: Pull automation repo
+      run: |
+        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+
+    - name: Run slurm unit tests
+      run: |
+        python -m pytest tests/test_slurm_run.py -v
+
+    - name: Smoke test - mlcsr help
+      run: |
+        mlcsr --help | grep -q "slurm-run"
+
+    - name: Smoke test - mlcse help
+      run: |
+        mlcse --help | grep -q "slurm-experiment"
+
+    - name: Smoke test - mlcsd help
+      run: |
+        mlcsd --help | grep -q "slurm-docker"
+
+    - name: Smoke test - mlcsa help
+      run: |
+        mlcsa --help | grep -q "slurm-apptainer"
+
+    - name: Smoke test - mlcrs help
+      run: |
+        mlcrs --help | grep -q "remote-slurm"
+
+    - name: Smoke test - slurm-run command registered
+      run: |
+        mlc slurm-run --help | grep -q "slurm-run"
+
+    - name: Smoke test - slurm-docker command registered
+      run: |
+        mlc slurm-docker --help | grep -q "slurm-docker"
+
+    - name: Smoke test - slurm-apptainer command registered
+      run: |
+        mlc slurm-apptainer --help | grep -q "slurm-apptainer"
+
+    - name: Smoke test - slurm-experiment command registered
+      run: |
+        mlc slurm-experiment --help | grep -q "slurm-experiment"
+
+    - name: Smoke test - remote-slurm command registered
+      run: |
+        mlc remote-slurm --help | grep -q "remote-slurm"
+
+    - name: Smoke test - mlcres help
+      run: |
+        mlcres --help | grep -q "remote-slurm-experiment"
+
+    - name: Smoke test - mlcrse help
+      run: |
+        mlcrse --help | grep -q "remote-slurm-experiment"
+
+    - name: Smoke test - remote-slurm-experiment command registered
+      run: |
+        mlc remote-slurm-experiment --help | grep -q "remote-slurm-experiment"
