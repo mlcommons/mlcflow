@@ -61,8 +61,8 @@ def apptainerfile(self_module, input_params):
     for key in apptainer_settings_default_env:
         env.setdefault(key, apptainer_settings_default_env[key])
 
-    if not apptainer_settings.get('run', True) and not input_params.get(
-            'apptainer_run_override', False):
+    if not apptainer_settings.get('run', True) and not get_apptainer_input(
+            input_params, 'run_override', False):
         logger.info("Apptainer 'run' is set to False in meta.yaml")
         return {'return': 0,
                 'warning': 'Apptainer run is set to false in script meta'}
@@ -102,7 +102,7 @@ def apptainerfile(self_module, input_params):
         'tags': script_tags,
         'fake_run': True,
         'docker_settings': apptainer_settings,
-        'docker_run_cmd_prefix': input_params.get('apptainer_run_cmd_prefix', apptainer_settings.get('run_cmd_prefix', ''))
+        'docker_run_cmd_prefix': get_apptainer_input(input_params, 'run_cmd_prefix', apptainer_settings.get('run_cmd_prefix', ''))
     })
     if regenerate_result['return'] > 0:
         return regenerate_result
@@ -152,13 +152,18 @@ def apptainerfile(self_module, input_params):
     if apptainer_inputs.get('mlc_repo_path', '') != '':
         mlc_apptainer_input['mlc_repo_path'] = apptainer_inputs['mlc_repo_path']
 
+    if is_true(get_apptainer_input(input_params, 'host_mlc_repos', '')):
+        mlc_apptainer_input['host_mlc_repos'] = 'yes'
+
     apptainer_v = False
     apptainer_s = False
-    if is_true(input_params.get(
-            'apptainer_v', input_params.get('apptainer_verbose', False))):
+    if is_true(get_apptainer_input(
+            input_params, 'v',
+            get_apptainer_input(input_params, 'verbose', False))):
         apptainer_v = True
-    if is_true(input_params.get(
-            'apptainer_s', input_params.get('apptainer_silent', False))):
+    if is_true(get_apptainer_input(
+            input_params, 's',
+            get_apptainer_input(input_params, 'silent', False))):
         apptainer_s = True
 
     if apptainer_s and apptainer_v:
@@ -213,8 +218,8 @@ def apptainer_run(self_module, i):
     if quiet:
         env['MLC_QUIET'] = 'yes'
 
-    regenerate_def_file = not i.get('apptainer_noregenerate', False)
-    rebuild_apptainer_image = i.get('apptainer_rebuild', False)
+    regenerate_def_file = not get_apptainer_input(i, 'noregenerate', False)
+    rebuild_apptainer_image = get_apptainer_input(i, 'rebuild', False)
 
     # Prune unnecessary Apptainer-related input keys
     r = prune_input({'input': i, 'extra_keys_starts_with': ['apptainer_']})
@@ -257,9 +262,7 @@ def apptainer_run(self_module, i):
         'uid', '')
 
     mounts = copy.deepcopy(
-        i.get(
-            'apptainer_mounts',
-            []))
+        get_apptainer_input(i, 'mounts', []))
     variations = meta.get('variations', {})
 
     if not hasattr(self_module, 'run_state'):
@@ -296,8 +299,8 @@ def apptainer_run(self_module, i):
         return r
 
     # Skip scripts marked as non-runnable
-    if not apptainer_settings.get('run', True) and not i.get(
-            'apptainer_run_override', False):
+    if not apptainer_settings.get('run', True) and not get_apptainer_input(
+            i, 'run_override', False):
         logger.info("apptainer.run set to False in meta.yaml")
         return {'return': 0,
                 'warning': 'Apptainer run is set to false in script meta'}
@@ -379,6 +382,20 @@ def apptainer_run(self_module, i):
         'quiet': True, 'real_run': True,
         'add_deps_recursive': {'build-apptainer-image': {'def_file': def_file_path}}
     }
+
+    # Detached mode (mirrors --docker_dt): run as a background instance.
+    if is_true(get_apptainer_input(
+            i, 'dt', get_apptainer_input(i, 'detached', ''))):
+        mlc_apptainer_input['detached'] = 'yes'
+    # Drop into an interactive shell after the run (mirrors --docker_it).
+    elif is_true(get_apptainer_input(
+            i, 'it', get_apptainer_input(i, 'interactive', ''))):
+        mlc_apptainer_input['interactive'] = 'yes'
+
+    # Tell the run step host repos were baked in, so it points MLC_REPOS at
+    # /opt/mlc_host_repos (matters under fakeroot, which otherwise overrides it).
+    if is_true(get_apptainer_input(i, 'host_mlc_repos', '')):
+        mlc_apptainer_input['host_mlc_repos'] = 'yes'
     # Forward build options to build-apptainer-image
     build_image_extras = {}
     if apptainer_inputs.get('ignore_fakeroot_cmd'):
@@ -445,11 +462,11 @@ def prepare_apptainer_inputs(input_params, apptainer_settings,
 
     # Collect inputs
     apptainer_inputs = {
-        key: input_params.get(
-            f"apptainer_{key}", apptainer_settings.get(
-                key, get_apptainer_default(key)))
+        key: value
         for key in keys
-        if (value := input_params.get(f"apptainer_{key}", apptainer_settings.get(key, get_apptainer_default(key)))) is not None
+        if (value := get_apptainer_input(
+            input_params, key,
+            apptainer_settings.get(key, get_apptainer_default(key)))) is not None
     }
 
     # Convert boolean values to 'yes'/'no' strings for MLC input mapping
@@ -542,6 +559,21 @@ def process_apptainer_mounts(mounts, env, apptainer_settings, run_state):
 
     return {'return': 0, 'mounts': mounts,
             'container_env_string': container_env_string}
+
+
+def get_apptainer_input(input_params, key, default=None):
+    """Return apptainer_<key> if provided, else fall back to docker_<key>.
+
+    Lets docker_* options passed to `mlca` take effect unless the matching
+    apptainer_* option overrides them.
+    """
+    apptainer_key = f"apptainer_{key}"
+    if input_params.get(apptainer_key) is not None:
+        return input_params[apptainer_key]
+    docker_key = f"docker_{key}"
+    if input_params.get(docker_key) is not None:
+        return input_params[docker_key]
+    return default
 
 
 def get_apptainer_default(key):

@@ -509,6 +509,101 @@ Main Script Meta:""")
     1. Apptainer Run: mlc apptainer run --tags=<script tags> <run flags>
     2. Apptainer Script: mlc apptainer script --tags=<script tags> <run flags>
 
+    Flags Available:
+
+    Image build / definition-file options:
+    1. --apptainer_base_image:
+        Base image to build the Apptainer image from.
+    2. --apptainer_os:
+        Operating system for the generated definition file (default: ubuntu).
+    3. --apptainer_os_version:
+        OS version for the generated definition file.
+    4. --apptainer_image_name:
+        Explicit name for the built Apptainer image.
+    5. --apptainer_path:
+        Path used as the build context / definition-file location.
+    6. --apptainer_noregenerate:
+        Skip regeneration of the definition file during execution (default: False).
+    7. --apptainer_rebuild:
+        Rebuild the Apptainer image even if one already exists (default: False).
+    8. --apptainer_gh_token:
+        GitHub token made available during the image build.
+    9. --apptainer_mlc_repo:
+        MLC repo to clone inside the image (default: mlcommons@mlperf-automations).
+    10. --apptainer_mlc_repo_branch:
+        Branch of the MLC repo to clone inside the image (default: dev).
+    11. --apptainer_mlc_repo_path:
+        Local path to an MLC repo to use inside the image.
+    12. --apptainer_mlc_repos:
+        Additional MLC repos to make available inside the image.
+    13. --apptainer_host_mlc_repos:
+        Copy the host's registered MLC repos into the image instead of cloning
+        them at build time (mirrors --docker_host_mlc_repos).
+    14. --apptainer_skip_mlc_sys_upgrade:
+        Skip the system package upgrade step during image build.
+    15. --apptainer_extra_sys_deps:
+        Extra system dependencies to install during image build.
+    16. --apptainer_copy_files:
+        Additional files to copy into the image.
+    17. --apptainer_env:
+        Environment variables to bake into the image.
+    18. --apptainer_sudo:
+        Use sudo when building the image.
+    19. --apptainer_ignore_fakeroot_cmd:
+        Do not use the --fakeroot flag when building the image.
+
+    Run-time options:
+    20. --apptainer_dt or --apptainer_detached:
+        Run the container detached as a background apptainer instance that
+        stays alive after the run command (mirrors --docker_dt).
+    21. --apptainer_it or --apptainer_interactive:
+        Drop into an interactive shell inside the container after the run
+        (mirrors --docker_it).
+    22. --apptainer_nv:
+        Enable NVIDIA GPU support (--nv) inside the container.
+    23. --apptainer_rocm:
+        Enable ROCm GPU support (--rocm) inside the container.
+    24. --apptainer_bind:
+        Bind-mount host path(s) into the container.
+    25. --apptainer_writable:
+        Run the container with a writable filesystem.
+    26. --apptainer_writable_tmpfs:
+        Run with a writable tmpfs overlay (default: True).
+    27. --apptainer_cleanenv:
+        Run with a clean environment (--cleanenv) (default: True).
+    28. --apptainer_fakeroot:
+        Run the container with --fakeroot.
+    29. --apptainer_no_home:
+        Do not mount the host home directory (--no-home).
+    30. --apptainer_contain:
+        Use a minimal /dev and empty other directories (--contain).
+    31. --apptainer_containall:
+        Contain filesystem and PID/IPC/env namespaces (--containall).
+    32. --apptainer_overlay:
+        Attach an overlay image to the container.
+    33. --apptainer_sandbox:
+        Run/build the container as a writable sandbox directory.
+    34. --apptainer_network:
+        Network configuration to use for the container.
+    35. --apptainer_security_opt:
+        Security options to apply to the container.
+    36. --apptainer_extra_args:
+        Extra raw arguments appended to the apptainer run command.
+    37. --apptainer_run_cmd_prefix:
+        Prefix to prepend to the run command inside the container.
+    38. --apptainer_pre_run_cmds:
+        Commands to run inside the container before the main script.
+    39. --apptainer_skip_run_cmd:
+        Build the image but skip executing the script's run command.
+    40. --apptainer_real_run:
+        Perform a real run instead of a fake/dry run.
+
+    Output options:
+    41. --apptainer_verbose or --apptainer_v:
+        Enable verbose output during Apptainer operations.
+    42. --apptainer_silent or --apptainer_s:
+        Suppress output during Apptainer operations.
+
     Example Command:
 
     mlc apptainer script --tags=detect,os -j
