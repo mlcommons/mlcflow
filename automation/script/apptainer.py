@@ -8,9 +8,10 @@ import copy
 
 def apptainerfile(self_module, input_params):
 
-    # Step 1: Prune and prepare input
+    # Step 1: Prune and prepare input (remove both apptainer_ and docker_
+    # prefixed keys)
     prune_result = prune_input(
-        {'input': input_params, 'extra_keys_starts_with': ['apptainer_']})
+        {'input': input_params, 'extra_keys_starts_with': ['apptainer_', 'docker_']})
     if prune_result['return'] > 0:
         return prune_result
 
@@ -56,13 +57,15 @@ def apptainerfile(self_module, input_params):
 
     run_state = self_module.run_state
 
-    apptainer_settings = run_state.get('docker', {})
+    apptainer_settings = copy.deepcopy(run_state.get('docker', {}))
+    utils.merge_dicts({'dict1': apptainer_settings, 'dict2': run_state.get('apptainer', {}),
+                       'append_lists': True, 'append_unique': True})
     apptainer_settings_default_env = apptainer_settings.get('default_env', {})
     for key in apptainer_settings_default_env:
         env.setdefault(key, apptainer_settings_default_env[key])
 
-    if not apptainer_settings.get('run', True) and not get_apptainer_input(
-            input_params, 'run_override', False):
+    if not apptainer_settings.get('run', True) and not input_params.get(
+            'apptainer_run_override', input_params.get('docker_run_override', False)):
         logger.info("Apptainer 'run' is set to False in meta.yaml")
         return {'return': 0,
                 'warning': 'Apptainer run is set to false in script meta'}
@@ -86,7 +89,9 @@ def apptainerfile(self_module, input_params):
     if update_state_result['return'] > 0:
         return update_state_result
 
-    apptainer_settings = run_state.get('docker', {})
+    apptainer_settings = copy.deepcopy(run_state.get('docker', {}))
+    utils.merge_dicts({'dict1': apptainer_settings, 'dict2': run_state.get('apptainer', {}),
+                       'append_lists': True, 'append_unique': True})
 
     # Prune temporary environment variables
     run_command = copy.deepcopy(run_command_arc)
@@ -102,7 +107,7 @@ def apptainerfile(self_module, input_params):
         'tags': script_tags,
         'fake_run': True,
         'docker_settings': apptainer_settings,
-        'docker_run_cmd_prefix': get_apptainer_input(input_params, 'run_cmd_prefix', apptainer_settings.get('run_cmd_prefix', ''))
+        'docker_run_cmd_prefix': input_params.get('apptainer_run_cmd_prefix', input_params.get('docker_run_cmd_prefix', apptainer_settings.get('run_cmd_prefix', '')))
     })
     if regenerate_result['return'] > 0:
         return regenerate_result
@@ -157,13 +162,11 @@ def apptainerfile(self_module, input_params):
 
     apptainer_v = False
     apptainer_s = False
-    if is_true(get_apptainer_input(
-            input_params, 'v',
-            get_apptainer_input(input_params, 'verbose', False))):
+    if is_true(input_params.get(
+            'apptainer_v', input_params.get('apptainer_verbose', input_params.get('docker_v', input_params.get('docker_verbose', False))))):
         apptainer_v = True
-    if is_true(get_apptainer_input(
-            input_params, 's',
-            get_apptainer_input(input_params, 'silent', False))):
+    if is_true(input_params.get(
+            'apptainer_s', input_params.get('apptainer_silent', input_params.get('docker_s', input_params.get('docker_silent', False))))):
         apptainer_s = True
 
     if apptainer_s and apptainer_v:
@@ -218,11 +221,16 @@ def apptainer_run(self_module, i):
     if quiet:
         env['MLC_QUIET'] = 'yes'
 
-    regenerate_def_file = not get_apptainer_input(i, 'noregenerate', False)
-    rebuild_apptainer_image = get_apptainer_input(i, 'rebuild', False)
+    regenerate_def_file = not i.get(
+        'apptainer_noregenerate', i.get(
+            'docker_noregenerate', False))
+    rebuild_apptainer_image = i.get(
+        'apptainer_rebuild', i.get(
+            'docker_rebuild', False))
 
-    # Prune unnecessary Apptainer-related input keys
-    r = prune_input({'input': i, 'extra_keys_starts_with': ['apptainer_']})
+    # Prune unnecessary Apptainer- and Docker-related input keys
+    r = prune_input(
+        {'input': i, 'extra_keys_starts_with': ['apptainer_', 'docker_']})
     f_run_cmd = r['new_input']
 
     # Save current directory and prepare to search for scripts
@@ -262,7 +270,9 @@ def apptainer_run(self_module, i):
         'uid', '')
 
     mounts = copy.deepcopy(
-        get_apptainer_input(i, 'mounts', []))
+        i.get(
+            'apptainer_mounts',
+            i.get('docker_mounts', [])))
     variations = meta.get('variations', {})
 
     if not hasattr(self_module, 'run_state'):
@@ -276,7 +286,9 @@ def apptainer_run(self_module, i):
 
     run_state = self_module.run_state
 
-    apptainer_settings = run_state.get('docker', {})
+    apptainer_settings = copy.deepcopy(run_state.get('docker', {}))
+    utils.merge_dicts({'dict1': apptainer_settings, 'dict2': run_state.get('apptainer', {}),
+                       'append_lists': True, 'append_unique': True})
 
     apptainer_settings_default_env = apptainer_settings.get('default_env', {})
     for key in apptainer_settings_default_env:
@@ -299,8 +311,8 @@ def apptainer_run(self_module, i):
         return r
 
     # Skip scripts marked as non-runnable
-    if not apptainer_settings.get('run', True) and not get_apptainer_input(
-            i, 'run_override', False):
+    if not apptainer_settings.get('run', True) and not i.get(
+            'apptainer_run_override', i.get('docker_run_override', False)):
         logger.info("apptainer.run set to False in meta.yaml")
         return {'return': 0,
                 'warning': 'Apptainer run is set to false in script meta'}
@@ -460,14 +472,15 @@ def prepare_apptainer_inputs(input_params, apptainer_settings,
             "network", "security_opt"
         ]
 
-    # Collect inputs
-    apptainer_inputs = {
-        key: value
-        for key in keys
-        if (value := get_apptainer_input(
-            input_params, key,
-            apptainer_settings.get(key, get_apptainer_default(key)))) is not None
-    }
+    # Collect inputs: apptainer_X > docker_X > meta settings > default
+    apptainer_inputs = {}
+    for key in keys:
+        value = input_params.get(
+            f"apptainer_{key}",
+            input_params.get(
+                f"docker_{key}", apptainer_settings.get(key, get_apptainer_default(key))))
+        if value is not None:
+            apptainer_inputs[key] = value
 
     # Convert boolean values to 'yes'/'no' strings for MLC input mapping
     for key in list(apptainer_inputs.keys()):

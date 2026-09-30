@@ -609,6 +609,38 @@ Main Script Meta:""")
     mlc apptainer script --tags=detect,os -j
     mlca detect,os -j
 
+    Flags Available (--apptainer_X takes priority over --docker_X for each option):
+
+    1. --apptainer_rebuild / --docker_rebuild:
+       Force rebuild of the Apptainer image even if it already exists.
+
+    2. --apptainer_noregenerate / --docker_noregenerate:
+       Skip regenerating the Apptainer definition file before running.
+
+    3. --apptainer_mounts / --docker_mounts:
+       List of bind mounts to pass to the container (host:container format).
+
+    4. --apptainer_run_cmd_prefix / --docker_run_cmd_prefix:
+       Command prefix to prepend before the mlcr command inside the container.
+
+    5. --apptainer_verbose / --apptainer_v / --docker_verbose / --docker_v:
+       Enable verbose output inside the container.
+
+    6. --apptainer_silent / --apptainer_s / --docker_silent / --docker_s:
+       Enable silent output inside the container.
+
+    7. --apptainer_run_override / --docker_run_override:
+       Force apptainer execution even if 'run' is set to False in script meta.
+
+    All --docker_X options listed above are accepted as defaults when the
+    corresponding --apptainer_X option is not provided. Docker-only options
+    (e.g. --docker_dt, --docker_cache, --docker_shm_size) are not applicable
+    to Apptainer and are ignored.
+
+    Script meta.yaml keys:
+    - ``docker``: base container settings (used by both mlcd and mlca).
+    - ``apptainer``: apptainer-specific overrides; merged over ``docker`` settings.
+
         """
         return self.call_script_module_function("apptainer", run_args)
 
@@ -694,7 +726,8 @@ Main Script Meta:""")
         if not run_args.get('tags') and not run_args.get('details'):
             return self.call_script_module_function("help", run_args)
 
-        if str(run_args.get('mlc_isolate', '')).lower() in ('true', 'yes', '1'):
+        if str(run_args.get('mlc_isolate', '')
+               ).lower() in ('true', 'yes', '1'):
             return self._run_isolated(run_args)
 
         return self.call_script_module_function("run", run_args)
@@ -706,16 +739,25 @@ Main Script Meta:""")
         import shutil
 
         isolate_dir = run_args.get('mlc_isolate_dir', '')
-        isolate_clean = str(run_args.get('mlc_isolate_clean', '')).lower() in ('true', 'yes', '1')
+        isolate_clean = str(
+            run_args.get(
+                'mlc_isolate_clean',
+                '')).lower() in (
+            'true',
+            'yes',
+            '1')
         uid = uuid.uuid4().hex[:16]
 
         if isolate_dir:
             base = os.path.abspath(isolate_dir)
             if not os.path.isdir(base):
-                return {'return': 1, 'error': f'mlc_isolate_dir does not exist: {base}'}
+                return {'return': 1,
+                        'error': f'mlc_isolate_dir does not exist: {base}'}
             tmp_dir = os.path.join(base, f'mlcflow-isolated-{uid}')
         else:
-            tmp_dir = os.path.join(tempfile.gettempdir(), f'mlcflow-isolated-{uid}')
+            tmp_dir = os.path.join(
+                tempfile.gettempdir(),
+                f'mlcflow-isolated-{uid}')
 
         os.makedirs(tmp_dir, exist_ok=True)
         logger.info(f"Isolated run directory: {tmp_dir}")
