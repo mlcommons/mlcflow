@@ -12,12 +12,20 @@
 
 MLCFlow is a versatile CLI and Python interface developed by MLCommons in collaboration with a dedicated team of volunteers (see [Contributors](https://github.com/mlcommons/mlcflow/blob/main/CONTRIBUTORS.md)). It serves as a streamlined replacement for the [CMind](https://github.com/mlcommons/ck/tree/master/cm) tool, designed to drive the automation workflows of MLPerf benchmarks more efficiently. You can use this tool for any of your workflow automation tasks. 
 
-The concept behind CMind originated from **Grigori Fursin**, while the **MLPerf Automations** project was created by **Grigori Fursin** and **Arjun Suresh**, whose collective contributions laid the foundation for modernizing MLPerf benchmarking tools. MLCFlow is a complete replacement for the CMind package with an entirely new implementation led by **Arjun Suresh** and **Anandhu Sooraj**, with support from the [MLCFlow community](https://github.com/mlcommons/mlcflow/blob/main/CONTRIBUTORS.md). The script automation used in MLCFlow is inherited from the CM project but is now modified to support MLC and provides a simpler interface to the devlopers. Please see [the documentation](https://docs.mlcommons.org/mlcflow/) for more details. 
+The concept behind CMind originated from [**Grigori Fursin**](https://github.com/gfursin), while the **MLPerf Automations** project was created by [**Grigori Fursin**](https://github.com/gfursin) and [**Arjun Suresh**](https://github.com/arjunsuresh), whose collective contributions laid the foundation for modernizing MLPerf benchmarking tools. MLCFlow is a complete replacement for the CMind package with an entirely new implementation led by [**Arjun Suresh**](https://github.com/arjunsuresh) and [**Anandhu Sooraj**](https://github.com/anandhu-eng), with support from the [MLCFlow community](https://github.com/mlcommons/mlcflow/blob/main/CONTRIBUTORS.md). The script automation used in MLCFlow is inherited from the CM project but is now modified to support MLC and provides a simpler interface to the developers. Please see [the documentation](https://docs.mlcommons.org/mlcflow/) for more details. 
 
 On February 9, 2025, MLCFlow released its first stable version, 1.0.0.
 
 ### Key Features
 Building upon the core idea of CMind—wrapping native scripts with Python wrappers and YAML metadata—MLCFlow focuses exclusively on key automation components: **Scripts**, along with its complementary modules: **Cache**, **Docker**, and **Experiments**. This targeted design simplifies both implementation and interface, enabling a more user-friendly experience.
+
+- **Typo detection** — Mistyped actions or targets produce a "Did you mean …?" hint before the error message, so mistakes are quick to correct:
+  ```
+  $ mlc rune script
+  Did you mean one of: 'prune', 'run'?
+  mlc: error: argument command: invalid choice: 'rune' …
+  ```
+  See [docs/typo_detection.md](docs/typo_detection.md) for details.
 
 ---
 
