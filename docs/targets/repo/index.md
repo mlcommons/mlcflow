@@ -113,6 +113,7 @@ Examples of `pull` action for `repo` target could be found inside the GitHub act
 !!! note  
     - `repo_uid` and `repo_alias` are not supported in the `pull` action for the `repo` target.  
     - Only one of `--checkout`, `--branch`, or `--tag` should be specified when using this action.  
+    - If another MLC process is already cloning or pulling the same repo, `pull` waits for it to finish. The wait is capped at 1800 seconds by default; set the `MLC_REPO_LOCK_TIMEOUT` environment variable (in seconds) to change it, e.g. `MLC_REPO_LOCK_TIMEOUT=3600 mlc pull repo mlcommons@mlperf-automations`.  
 
 ## List
 
