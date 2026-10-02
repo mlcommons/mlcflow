@@ -371,7 +371,8 @@ class RepoAction(Action):
 
     # Return values of _git_repo_state().
     GIT_STATE_VALID = "valid"        # a git checkout rooted exactly here
-    GIT_STATE_ABANDONED_CLONE = "abandoned_clone"  # interrupted clone; safe to remove
+    # interrupted clone; safe to remove
+    GIT_STATE_ABANDONED_CLONE = "abandoned_clone"
     GIT_STATE_INVALID = "invalid"    # not a usable checkout; DO NOT remove
     GIT_STATE_UNKNOWN = "unknown"    # git could not answer; DO NOT remove
 
