@@ -500,6 +500,62 @@ def convert_args_to_dictionary(inp):
     return {'return': 0, 'args_dict': args_dict}
 
 
+def load_cli_input_file(args_dict, file_keys=('mlc_input_file',)):
+    """
+    Load run options from a YAML/JSON file referenced on the command line
+    (e.g. ``--mlc_input_file=run.yaml``) and merge them into ``args_dict``.
+
+    The file must contain a top-level mapping whose keys mirror the CLI
+    options (``tags``, ``quiet``, ``env``, ``adr`` ...). Explicit CLI
+    arguments take precedence over values from the file; nested dicts are
+    deep-merged. The file type is chosen by extension (``.json`` -> JSON,
+    otherwise YAML, which also parses JSON).
+    """
+    file_path = None
+    for key in file_keys:
+        if key in args_dict:
+            file_path = args_dict.pop(key)
+            break
+
+    if not file_path:
+        return {'return': 0, 'args_dict': args_dict}
+
+    if not isinstance(file_path, str):
+        return {'return': 1,
+                'error': f'Input file option must be a path, got: {file_path!r}'}
+
+    if not os.path.isfile(file_path):
+        return {'return': 1, 'error': f'Input file not found: {file_path}'}
+
+    ext = os.path.splitext(file_path)[1].lower()
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            if ext == '.json':
+                file_data = json.load(f)
+            else:
+                file_data = yaml.safe_load(f)
+    except Exception as e:
+        return {'return': 1,
+                'error': f'Failed to parse input file {file_path}: {e}'}
+
+    if file_data is None:
+        file_data = {}
+    if not isinstance(file_data, dict):
+        return {'return': 1,
+                'error': f'Input file {file_path} must contain a top-level '
+                         f'mapping, got {type(file_data).__name__}'}
+
+    # Drop any nested input-file key so the file cannot chain-load others.
+    for key in file_keys:
+        file_data.pop(key, None)
+
+    # CLI args (dict2) override file values (dict1); nested dicts merge.
+    r = merge_dicts({'dict1': file_data, 'dict2': args_dict})
+    if r['return'] > 0:
+        return r
+    return {'return': 0, 'args_dict': r['merged']}
+
+
 def is_uid(name):
     """
     Checks if the given name is a 16-digit hexadecimal UID.
