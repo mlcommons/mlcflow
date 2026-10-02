@@ -448,6 +448,7 @@ class Action:
                         force_remove = True
 
         results = res['list']
+        removed_any = False
 
         for result in results:
             item_path = result.path
@@ -468,7 +469,13 @@ class Action:
                     logger.warning(
                         f"{item_path} was already removed by another process.")
 
-            self.get_index().rm(item_meta, target_name, item_path)
+            # Batch the index write: de-index in memory, persist once after
+            # the loop instead of rewriting all index files per item.
+            self.get_index().rm(item_meta, target_name, item_path, save=False)
+            removed_any = True
+
+        if removed_any:
+            self.get_index().save()
 
         return {
             "return": 0,

@@ -192,7 +192,7 @@ class Index:
             }
         self._save_indices()
 
-    def rm(self, meta, folder_type, path):
+    def rm(self, meta, folder_type, path, save=True):
         uid = meta['uid']
         index = self.get_index(folder_type, uid)
         if index == -1:
@@ -200,6 +200,11 @@ class Index:
                 f"Index is not having the {folder_type} item {path}")
         else:
             del (self.indices[folder_type][index])
+        if save:
+            self._save_indices()
+
+    def save(self):
+        """Persist all in-memory indices to disk (for batched callers)."""
         self._save_indices()
 
     def get_item_mtime(self, file):
@@ -348,6 +353,40 @@ class Index:
         if deleted_keys:
             logger.debug(
                 f"Deleted keys removed from modified times and indices: {deleted_keys}")
+
+        # Reconcile against the filesystem. Entries added via add()/update()
+        # (e.g. caches written during a script run) are never recorded in
+        # modified_times, so the deleted-key check above cannot catch them
+        # once their folder is removed out-of-band. Drop any index entry
+        # whose folder no longer exists, scoped to repos currently present
+        # so an empty/unavailable repo list can never wipe a valid index.
+        repo_prefixes = [
+            os.path.normpath(r.path) for r in self.repos
+            if getattr(r, 'path', None)
+        ]
+        if repo_prefixes:
+            for ft in self.indices:
+                kept = []
+                for item in self.indices[ft]:
+                    path = item.get('path', '')
+                    norm = os.path.normpath(path) if path else ''
+                    under_known_repo = any(
+                        norm == rp or norm.startswith(rp + os.sep)
+                        for rp in repo_prefixes
+                    )
+                    if under_known_repo and not os.path.exists(path):
+                        logger.warning(
+                            f"Removing stale {ft} index entry whose folder "
+                            f"no longer exists: {path}")
+                        for mt_key in [
+                                k for k in self.modified_times
+                                if os.path.normpath(k) == norm
+                                or os.path.normpath(k).startswith(norm + os.sep)]:
+                            del self.modified_times[mt_key]
+                        changed = True
+                        continue
+                    kept.append(item)
+                self.indices[ft] = kept
 
         if force_rebuild or changed:
             logger.debug(

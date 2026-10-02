@@ -480,6 +480,14 @@ def build_run_args(args):
         if hasattr(args, 'target') and args.target:
             run_args['reindex_target'] = args.target
 
+    # Merge bulk options from a YAML/JSON file (--mlc_input_file=run.yaml).
+    # Done last so explicit CLI args (including positional tags) win.
+    r = utils.load_cli_input_file(run_args)
+    if r['return'] > 0:
+        logger.error(r['error'])
+        sys.exit(1)
+    run_args = r['args_dict']
+
     # Check for path-only flag (for script-friendly output)
     if run_args.get('path_only') or run_args.get('p'):
         run_args['path_only'] = True

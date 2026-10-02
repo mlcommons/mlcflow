@@ -157,6 +157,9 @@ def apptainerfile(self_module, input_params):
     if apptainer_inputs.get('mlc_repo_path', '') != '':
         mlc_apptainer_input['mlc_repo_path'] = apptainer_inputs['mlc_repo_path']
 
+    if is_true(get_apptainer_input(input_params, 'host_mlc_repos', '')):
+        mlc_apptainer_input['host_mlc_repos'] = 'yes'
+
     apptainer_v = False
     apptainer_s = False
     if is_true(input_params.get(
@@ -391,6 +394,20 @@ def apptainer_run(self_module, i):
         'quiet': True, 'real_run': True,
         'add_deps_recursive': {'build-apptainer-image': {'def_file': def_file_path}}
     }
+
+    # Detached mode (mirrors --docker_dt): run as a background instance.
+    if is_true(get_apptainer_input(
+            i, 'dt', get_apptainer_input(i, 'detached', ''))):
+        mlc_apptainer_input['detached'] = 'yes'
+    # Drop into an interactive shell after the run (mirrors --docker_it).
+    elif is_true(get_apptainer_input(
+            i, 'it', get_apptainer_input(i, 'interactive', ''))):
+        mlc_apptainer_input['interactive'] = 'yes'
+
+    # Tell the run step host repos were baked in, so it points MLC_REPOS at
+    # /opt/mlc_host_repos (matters under fakeroot, which otherwise overrides it).
+    if is_true(get_apptainer_input(i, 'host_mlc_repos', '')):
+        mlc_apptainer_input['host_mlc_repos'] = 'yes'
     # Forward build options to build-apptainer-image
     build_image_extras = {}
     if apptainer_inputs.get('ignore_fakeroot_cmd'):
@@ -555,6 +572,21 @@ def process_apptainer_mounts(mounts, env, apptainer_settings, run_state):
 
     return {'return': 0, 'mounts': mounts,
             'container_env_string': container_env_string}
+
+
+def get_apptainer_input(input_params, key, default=None):
+    """Return apptainer_<key> if provided, else fall back to docker_<key>.
+
+    Lets docker_* options passed to `mlca` take effect unless the matching
+    apptainer_* option overrides them.
+    """
+    apptainer_key = f"apptainer_{key}"
+    if input_params.get(apptainer_key) is not None:
+        return input_params[apptainer_key]
+    docker_key = f"docker_{key}"
+    if input_params.get(docker_key) is not None:
+        return input_params[docker_key]
+    return default
 
 
 def get_apptainer_default(key):

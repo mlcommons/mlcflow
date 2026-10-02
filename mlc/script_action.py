@@ -357,7 +357,7 @@ Main Script Meta:""")
                     json.dump(result['new_state'], f, indent=2)
 
                 with open("tmp-run-env.out", "w") as f:
-                    for key, val in result['new_env'].items():
+                    for key, val in (result.get('new_env') or {}).items():
                         f.write(f"""{key}="{val}"\n""")
 
             return result
@@ -387,27 +387,100 @@ Main Script Meta:""")
 
     Flags Available:
 
-    1. --docker_dt or --docker_detached:
+    Image build / Dockerfile options:
+    1. --docker_base_image:
+        Base image to build the Docker image from.
+    2. --docker_os:
+        Operating system for the generated Dockerfile (default: ubuntu).
+    3. --docker_os_version:
+        OS version for the generated Dockerfile.
+    4. --docker_image_name:
+        Explicit name for the built Docker image.
+    5. --docker_image_repo:
+        Custom Docker image repository name.
+    6. --docker_image_tag_extra:
+        Extra suffix appended to the image tag (default: -latest).
+    7. --docker_cache:
+        Disabling this flag forces Docker to build all layers from scratch, ignoring cached layers (default: yes).
+    8. --docker_rebuild:
+        Rebuilds the Docker image even if one with the same tag already exists (default: False).
+    9. --docker_noregenerate:
+        Skip regeneration of the Dockerfile during execution (default: False).
+    10. --docker_path:
+        Path used as the Docker build context / Dockerfile location.
+    11. --docker_gh_token:
+        GitHub token made available during the image build.
+    12. --docker_mlc_repo:
+        MLC repo to clone inside the image (default: mlcommons@mlperf-automations).
+    13. --docker_mlc_repo_branch:
+        Branch of the MLC repo to clone inside the image (default: dev).
+    14. --docker_mlc_repo_path:
+        Local path to an MLC repo to use inside the image.
+    15. --docker_skip_mlc_sys_upgrade:
+        Skip the system package upgrade step during image build.
+    16. --docker_extra_sys_deps:
+        Extra system dependencies to install during image build.
+    17. --docker_copy_files:
+        Additional files to copy into the image.
+    18. --docker_user:
+        Username to create/use inside the container (default: mlcuser).
+    19. --docker_env:
+        Environment variables to bake into the image.
+    20. --docker_build_env:
+        Environment variables used only at build time.
+    21. --docker_system_site_packages:
+        Allow the container venv to access system site-packages.
+
+    Run-time options:
+    22. --docker_dt or --docker_detached:
         Runs the specified script inside a Docker container in detached mode.
         By default, the Docker container is launched in interactive mode.
-    2. --docker_cache:
-        Disabling this flag forces Docker to build all layers from scratch, ignoring cached layers (default: yes)
-    3. --docker_rebuild:
-        Rebuilds the Docker image even if one with the same tag already exists (default: False)
-    4. --docker_noregenerate:
-        Skip regeneration of the Dockerfile during execution (default: False)
-    5. --docker_image_repo:
-        Custom Docker image repository name
-    6. --docker_verbose:
-        Enable verbose output during Docker operations
-    7. --docker_silent:
-        Suppress output during Docker operations
-    8. --docker_host_mlc_repos:
-        Mount host MLC repos inside the container
-    9. --docker_upload:
-        Push the built Docker image after execution
-    10. --docker_run_cmd_prefix:
-        Prefix to prepend to the run command inside the container
+    23. --docker_it or --docker_interactive:
+        Force interactive mode for the container.
+    24. --docker_keep_detached:
+        Keep the detached container running after the script finishes (default: False).
+    25. --docker_reuse_existing:
+        Reuse an already running container instead of starting a new one.
+    26. --docker_all_gpus:
+        Expose all host GPUs to the container.
+    27. --docker_num_gpus:
+        Number of GPUs to expose to the container.
+    28. --docker_device:
+        Host device(s) to pass into the container.
+    29. --docker_port_maps:
+        Port mappings between host and container.
+    30. --docker_shm_size:
+        Shared memory (/dev/shm) size for the container.
+    31. --docker_privileged:
+        Run the container in privileged mode.
+    32. --docker_extra_run_args:
+        Extra raw arguments appended to the docker run command.
+    33. --docker_run_cmd_prefix:
+        Prefix to prepend to the run command inside the container.
+    34. --docker_pre_run_cmds:
+        Commands to run inside the container before the main script.
+    35. --docker_skip_run_cmd:
+        Build the image but skip executing the script's run command.
+    36. --docker_pass_user_id / --docker_use_host_user_id:
+        Use the host user id inside the container (default: True).
+    37. --docker_pass_user_group / --docker_use_host_group_id:
+        Use the host group id inside the container (default: True).
+    38. --docker_use_google_dns:
+        Configure the container to use Google DNS.
+    39. --docker_host_mlc_repos:
+        Mount host MLC repos inside the container.
+    40. --docker_real_run:
+        Perform a real run instead of a fake/dry run.
+
+    Output / lifecycle options:
+    41. --docker_verbose or --docker_v:
+        Enable verbose output during Docker operations.
+    42. --docker_silent or --docker_s:
+        Suppress output during Docker operations.
+    43. --docker_upload or --docker_push_image:
+        Push the built Docker image after execution.
+    44. --docker_prune:
+        Prune Docker resources as part of the run.
 
     Example Command:
 
@@ -435,6 +508,101 @@ Main Script Meta:""")
 
     1. Apptainer Run: mlc apptainer run --tags=<script tags> <run flags>
     2. Apptainer Script: mlc apptainer script --tags=<script tags> <run flags>
+
+    Flags Available:
+
+    Image build / definition-file options:
+    1. --apptainer_base_image:
+        Base image to build the Apptainer image from.
+    2. --apptainer_os:
+        Operating system for the generated definition file (default: ubuntu).
+    3. --apptainer_os_version:
+        OS version for the generated definition file.
+    4. --apptainer_image_name:
+        Explicit name for the built Apptainer image.
+    5. --apptainer_path:
+        Path used as the build context / definition-file location.
+    6. --apptainer_noregenerate:
+        Skip regeneration of the definition file during execution (default: False).
+    7. --apptainer_rebuild:
+        Rebuild the Apptainer image even if one already exists (default: False).
+    8. --apptainer_gh_token:
+        GitHub token made available during the image build.
+    9. --apptainer_mlc_repo:
+        MLC repo to clone inside the image (default: mlcommons@mlperf-automations).
+    10. --apptainer_mlc_repo_branch:
+        Branch of the MLC repo to clone inside the image (default: dev).
+    11. --apptainer_mlc_repo_path:
+        Local path to an MLC repo to use inside the image.
+    12. --apptainer_mlc_repos:
+        Additional MLC repos to make available inside the image.
+    13. --apptainer_host_mlc_repos:
+        Copy the host's registered MLC repos into the image instead of cloning
+        them at build time (mirrors --docker_host_mlc_repos).
+    14. --apptainer_skip_mlc_sys_upgrade:
+        Skip the system package upgrade step during image build.
+    15. --apptainer_extra_sys_deps:
+        Extra system dependencies to install during image build.
+    16. --apptainer_copy_files:
+        Additional files to copy into the image.
+    17. --apptainer_env:
+        Environment variables to bake into the image.
+    18. --apptainer_sudo:
+        Use sudo when building the image.
+    19. --apptainer_ignore_fakeroot_cmd:
+        Do not use the --fakeroot flag when building the image.
+
+    Run-time options:
+    20. --apptainer_dt or --apptainer_detached:
+        Run the container detached as a background apptainer instance that
+        stays alive after the run command (mirrors --docker_dt).
+    21. --apptainer_it or --apptainer_interactive:
+        Drop into an interactive shell inside the container after the run
+        (mirrors --docker_it).
+    22. --apptainer_nv:
+        Enable NVIDIA GPU support (--nv) inside the container.
+    23. --apptainer_rocm:
+        Enable ROCm GPU support (--rocm) inside the container.
+    24. --apptainer_bind:
+        Bind-mount host path(s) into the container.
+    25. --apptainer_writable:
+        Run the container with a writable filesystem.
+    26. --apptainer_writable_tmpfs:
+        Run with a writable tmpfs overlay (default: True).
+    27. --apptainer_cleanenv:
+        Run with a clean environment (--cleanenv) (default: True).
+    28. --apptainer_fakeroot:
+        Run the container with --fakeroot.
+    29. --apptainer_no_home:
+        Do not mount the host home directory (--no-home).
+    30. --apptainer_contain:
+        Use a minimal /dev and empty other directories (--contain).
+    31. --apptainer_containall:
+        Contain filesystem and PID/IPC/env namespaces (--containall).
+    32. --apptainer_overlay:
+        Attach an overlay image to the container.
+    33. --apptainer_sandbox:
+        Run/build the container as a writable sandbox directory.
+    34. --apptainer_network:
+        Network configuration to use for the container.
+    35. --apptainer_security_opt:
+        Security options to apply to the container.
+    36. --apptainer_extra_args:
+        Extra raw arguments appended to the apptainer run command.
+    37. --apptainer_run_cmd_prefix:
+        Prefix to prepend to the run command inside the container.
+    38. --apptainer_pre_run_cmds:
+        Commands to run inside the container before the main script.
+    39. --apptainer_skip_run_cmd:
+        Build the image but skip executing the script's run command.
+    40. --apptainer_real_run:
+        Perform a real run instead of a fake/dry run.
+
+    Output options:
+    41. --apptainer_verbose or --apptainer_v:
+        Enable verbose output during Apptainer operations.
+    42. --apptainer_silent or --apptainer_s:
+        Suppress output during Apptainer operations.
 
     Example Command:
 
