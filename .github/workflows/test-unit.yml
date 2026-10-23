@@ -46,3 +46,56 @@ jobs:
       - name: Run unit tests (meta validation, cache operations, typo detection)
         run: |
           python -m unittest discover -s tests -p "test_*.py" -v
+
+  windows-basic-commands:
+    # Smoke test the basic mlc commands on Windows. Several tests in tests/
+    # exercise the Unix installer/bash tooling and are not Windows-compatible,
+    # so we run the cross-platform repo-path tests plus the CLI directly here
+    # instead of the full discover.
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.14"]
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install mlcflow
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Run repo-path unit tests
+        run: |
+          python -m unittest tests.test_repo_action_add_path -v
+
+      - name: Basic mlc commands smoke test
+        shell: bash
+        run: |
+          set -e
+          # Core actions that must work on Windows.
+          mlc --help
+          mlc add repo my-new-repo
+          mlc find repo my-new-repo
+          mlc list repo
+          mlc rm repo my-new-repo
+
+      - name: Regression test for issue #331 - explicit missing drive path must not register the wrong path
+        shell: bash
+        run: |
+          # A Windows mounted/network drive that is not visible to this process
+          # must fail loudly instead of silently registering <repos>/<basename>.
+          if mlc add repo 'Z:\does-not-exist-331\aocc-scripts'; then
+            echo "Expected 'mlc add repo' to fail for a missing explicit path."
+            exit 1
+          fi
+          echo "mlc add repo correctly rejected the missing explicit path."
+
+
