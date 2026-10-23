@@ -172,6 +172,33 @@ def _get_repo_lock_timeout():
     return timeout
 
 
+def _looks_like_filesystem_path(value):
+    """Return True if ``value`` is an explicit filesystem path rather than a
+    bare repo folder name or alias.
+
+    A bare repo name (e.g. ``mlcommons@script-automations`` or ``aocc-scripts``)
+    has no path separators and no drive letter, so it is meant to be created
+    inside the MLC repos folder. Anything that is absolute, contains a path
+    separator, or carries a Windows drive letter (e.g. ``Z:\\pa\\aocc-scripts``)
+    is an explicit path the user wants to register as-is.
+
+    The check also recognises Windows-style paths when running on POSIX so the
+    behaviour is testable on any platform.
+    """
+    if not value:
+        return False
+    # Windows drive letter (e.g. ``Z:\\...`` or ``Z:/...``) or UNC path.
+    if re.match(r"^[a-zA-Z]:[\\/]", value) or value.startswith("\\\\"):
+        return True
+    if os.path.isabs(value):
+        return True
+    if os.sep in value:
+        return True
+    if os.altsep and os.altsep in value:
+        return True
+    return False
+
+
 class RepoAction(Action):
     """
     ####################################################################################################################
@@ -548,7 +575,25 @@ class RepoAction(Action):
                     repo_folder_name = res['value']
                     repo_path = os.path.join(self.repos_path, repo_folder_name)
 
-            os.makedirs(repo_path)
+                os.makedirs(repo_path)
+            elif _looks_like_filesystem_path(i_repo_path):
+                # The user passed an explicit filesystem path (absolute path,
+                # a path containing separators, or a Windows drive such as
+                # ``Z:\\pa\\aocc-scripts``) that does not exist or is not
+                # accessible to this process. Registering a new folder under
+                # the MLC repos directory would silently create the wrong path
+                # (see issue #331), so fail loudly instead.
+                return {
+                    "return": 1,
+                    "error": (
+                        f"The repo path '{i_repo_path}' does not exist or is "
+                        "not accessible. Please ensure the path is correct and "
+                        "that any mounted/network drive is available to this "
+                        "process before adding it as a repo."
+                    )
+                }
+            else:
+                os.makedirs(repo_path)
         else:
             repo_path = os.path.abspath(i_repo_path)
 
