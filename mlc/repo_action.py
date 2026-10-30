@@ -522,7 +522,7 @@ class RepoAction(Action):
                     "error": "The repository to be added is not specified"}
 
         i_repo_path = run_args['repo']  # can be a path, forder_name or URL
-        repo_folder_name = os.path.basename(i_repo_path.rstrip('/'))
+        repo_folder_name = os.path.basename(i_repo_path.rstrip('/\\'))
 
         repo_path = os.path.join(self.repos_path, repo_folder_name)
 
@@ -547,6 +547,9 @@ class RepoAction(Action):
                         return res
                     repo_folder_name = res['value']
                     repo_path = os.path.join(self.repos_path, repo_folder_name)
+            elif os.path.isabs(i_repo_path):
+                return {'return': 1,
+                        "error": f"Path {i_repo_path} does not exist or is not accessible"}
 
             os.makedirs(repo_path)
         else:
