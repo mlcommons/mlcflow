@@ -41,7 +41,7 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install --ignore-installed --verbose pip setuptools
         python -m pip install .
-        mlc pull repo mlcommons@mlperf-automations --branch=dev
+        mlc pull repo mlcommons@mlperf-automations --branch=main
   
     - name: Test MLPerf inference ResNet50 on Windows (prebuilt loadgen)
       if: runner.os == 'Windows'

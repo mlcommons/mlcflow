@@ -426,7 +426,7 @@ def regenerate_script_cmd(i):
 def get_docker_default(key):
     defaults = {
         "mlc_repo": "mlcommons@mlperf-automations",
-        "mlc_repo_branch": "dev",
+        "mlc_repo_branch": "main",
         "os": "ubuntu",
         "os_version": "",
         "fake_run_deps": False,

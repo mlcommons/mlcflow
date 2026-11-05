@@ -634,7 +634,7 @@ def get_apptainer_input(input_params, key, default=None):
 def get_apptainer_default(key):
     defaults = {
         "mlc_repo": "mlcommons@mlperf-automations",
-        "mlc_repo_branch": "dev",
+        "mlc_repo_branch": "main",
         "os": "ubuntu",
         "os_version": "",
         "fake_run_deps": False,

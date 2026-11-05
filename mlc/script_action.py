@@ -38,6 +38,35 @@ class ScriptAction(Action):
     Using both alias and UID: <script_alias>,<script_uid> (e.g., detect-os,5b4e0237da074764)
 
     """
+
+    # Docstrings shown by `--help` for each action; composite actions also
+    # show the help of the actions they wrap.
+    HELP_COMPONENTS = {
+        'run': ['run'],
+        'docker': ['docker_run', 'run'],
+        'docker_run': ['docker_run', 'run'],
+        'apptainer': ['apptainer_run', 'run'],
+        'apptainer_run': ['apptainer_run', 'run'],
+        'experiment': ['experiment', 'run'],
+        'remote_run': ['remote_run', 'run'],
+        'remote_docker': ['remote_docker', 'remote_run', 'docker_run', 'run'],
+        'remote_experiment': ['remote_experiment', 'remote_run',
+                              'experiment', 'run'],
+        'slurm_run': ['slurm_run', 'run'],
+        'slurm_docker': ['slurm_docker', 'slurm_run', 'docker_run', 'run'],
+        'slurm_apptainer': ['slurm_apptainer', 'slurm_run', 'apptainer_run',
+                            'run'],
+        'slurm_experiment': ['slurm_experiment', 'slurm_run', 'experiment',
+                             'run'],
+        'remote_slurm': ['remote_slurm', 'remote_run', 'slurm_run', 'run'],
+        'remote_slurm_experiment': ['remote_slurm_experiment', 'remote_run',
+                                    'slurm_run', 'experiment', 'run'],
+        'remote_slurm_docker': ['remote_slurm_docker', 'remote_run',
+                                'slurm_run', 'docker_run', 'run'],
+        'remote_slurm_apptainer': ['remote_slurm_apptainer', 'remote_run',
+                                   'slurm_run', 'apptainer_run', 'run'],
+    }
+
     parent = None
 
     def __init__(self, parent=None):
@@ -263,7 +292,7 @@ Main Script Meta:""")
                 "automation": "repo",
                 "action": "pull",
                 "repo": "mlcommons@mlperf-automations",
-                "branch": "dev",
+                "branch": "main",
                 "fast_forward_only": True
             })
 
@@ -275,14 +304,14 @@ Main Script Meta:""")
                 script_path = self.find_target_folder("script")
                 if not script_path or not self._content_repo_registered():
                     return {
-                        'return': 1, 'error': f"""Script automation still not found after pulling mlcommons@mlperf-automations --branch=dev."""}
+                        'return': 1, 'error': f"""Script automation still not found after pulling mlcommons@mlperf-automations --branch=main."""}
             else:
                 # If pull failed, return the original error with additional
                 # info
                 logger.error(
                     f"Failed to pull mlcommons@mlperf-automations repository: {result.get('error', 'Unknown error')}")
                 return {
-                    'return': 1, 'error': f"""Script automation not found and failed to automatically pull mlcommons@mlperf-automations --branch=dev. Please run "mlc pull repo mlcommons@mlperf-automations --branch=dev" manually: {result.get('error', 'Unknown error')}"""}
+                    'return': 1, 'error': f"""Script automation not found and failed to automatically pull mlcommons@mlperf-automations --branch=main. Please run "mlc pull repo mlcommons@mlperf-automations --branch=main" manually: {result.get('error', 'Unknown error')}"""}
 
         module_path = os.path.join(script_path, "module.py")
         module = self.dynamic_import_module(module_path)
@@ -413,7 +442,7 @@ Main Script Meta:""")
     12. --docker_mlc_repo:
         MLC repo to clone inside the image (default: mlcommons@mlperf-automations).
     13. --docker_mlc_repo_branch:
-        Branch of the MLC repo to clone inside the image (default: dev).
+        Branch of the MLC repo to clone inside the image (default: main).
     14. --docker_mlc_repo_path:
         Local path to an MLC repo to use inside the image.
     15. --docker_skip_mlc_sys_upgrade:
@@ -481,6 +510,19 @@ Main Script Meta:""")
         Push the built Docker image after execution.
     44. --docker_prune:
         Prune Docker resources as part of the run.
+    45. --docker_mounts:
+        Additional mounts (host:container) for the container.
+    46. --docker_run_override:
+        Run in the container even if docker run is disabled in the script meta.
+    47. --docker_fake_run_deps:
+        Fake-run the script dependencies during the image build.
+    48. --docker_run_final_cmds:
+        Commands to run at the end of the image build.
+    49. --docker_mlc_repos:
+        Additional MLC repos to make available inside the image.
+    50. --docker_split_mlc_run_cmd:
+        Emit a separate Dockerfile RUN step per dependency for better layer
+        caching (ignored when --docker_cache=no).
 
     Example Command:
 
@@ -531,7 +573,7 @@ Main Script Meta:""")
     9. --apptainer_mlc_repo:
         MLC repo to clone inside the image (default: mlcommons@mlperf-automations).
     10. --apptainer_mlc_repo_branch:
-        Branch of the MLC repo to clone inside the image (default: dev).
+        Branch of the MLC repo to clone inside the image (default: main).
     11. --apptainer_mlc_repo_path:
         Local path to an MLC repo to use inside the image.
     12. --apptainer_mlc_repos:
@@ -603,6 +645,14 @@ Main Script Meta:""")
         Enable verbose output during Apptainer operations.
     42. --apptainer_silent or --apptainer_s:
         Suppress output during Apptainer operations.
+    43. --apptainer_mlc_local_dir:
+        Writable host directory bound over the container's MLC local/cache
+        directory (with --apptainer_host_mlc_repos); set automatically under
+        --slurm_isolated.
+    44. --apptainer_fake_run_deps:
+        Fake-run the script dependencies during the image build.
+    45. --apptainer_run_final_cmds:
+        Commands to run at the end of the image build.
 
     Example Command:
 
@@ -690,6 +740,23 @@ Main Script Meta:""")
         relative --remote_python_venv, the venv is recreated for each run.
     15. --remote_isolated_base_dir:
         Base directory for creating the isolated temporary workspace (optional).
+    16. --remote_post_run_cmds:
+        Commands to run on the remote machine after the main script
+    17. --remote_env.<KEY>=<value>:
+        Environment variable to set on the remote machine (e.g., --remote_env.LC_ALL=C.UTF-8)
+    18. --remote_shell:
+        Shell that runs the commands on the remote machine (commands are piped to it)
+    19. --remote_copy_mlc_repos:
+        Copy local MLC repos to the remote machine (yes for all, or a list of repo names)
+    20. --remote_mlc_repos_path:
+        Remote directory for the copied MLC repos (default: MLC/repos)
+    21. --remote_copy_back_mlc_cache:
+        Copy the remote MLC cache back to the local machine after the run
+    22. --remote_copy_back_mlc_cache_path:
+        Local directory for the copied-back cache (default: local MLC cache)
+    23. --remote_action:
+        MLC action to run on the remote machine: run (default), docker, experiment,
+        slurm-run, slurm-docker, slurm-apptainer, slurm-experiment
 
     Example Command:
 
@@ -715,12 +782,43 @@ Main Script Meta:""")
 
     Options:
 
-    1. -j: Displays the output in JSON format.
+    1. -j or --json: Displays the output in JSON format.
     2. Instead of using `mlc run script --tags=`, you can simply use `mlcr`.
     3. *<Individual script inputs>: The `mlcr` command can accept additional inputs defined in the script's `input_mappings` metadata.
+       Use `mlcr <tags> --help` to list the inputs and variations of a script.
     4. --mlc_isolate: Run in an isolated temporary directory with a fresh MLC_REPOS.
     5. --mlc_isolate_dir: Base directory for isolation (default: system temp dir).
     6. --mlc_isolate_clean: Auto-remove the isolated directory after the run.
+    7. --mlc_input_file: Load run options from a YAML/JSON file (command-line options take precedence).
+    8. --mlc_output: Write tmp-state.json and tmp-run-env.out after a successful run.
+    9. --quiet: Do not ask questions; use defaults.
+    10. -v or --verbose / -s or --silent: Verbose / silent output.
+    11. --env.<KEY>=<value>: Set an environment variable for the script and its dependencies.
+    12. --const.<KEY>=<value>: Set an environment variable that dependencies cannot override.
+    13. --adr.<dep_name>.<key>=<value>: Customize a dependency, recursively (e.g., --adr.compiler.tags=gcc).
+    14. --add_deps.<dep_name>.<key>=<value>: Customize a direct dependency only.
+    15. --version, --version_min, --version_max, --version_max_usable: Constrain the version of the script.
+    16. --new: Ignore cached results and run again.
+    17. --renew: Rewrite the cache entry if it exists.
+    18. --skip_cache / --force_cache: Do not cache / force caching (if the script allows it).
+    19. --skip_remembered_selections: Do not reuse previously remembered selections.
+    20. --fake_run: Run the dependencies but skip the main script.
+    21. --fake_deps: Fake-run the dependencies.
+    22. --print_deps / --print_readme / --print_env: Print the dependency commands / a README of the steps / the env before each native script.
+    23. --dirty: Do not clean temporary files.
+    24. --save_env: Save env and state to tmp-env.sh/bat and tmp-state.json.
+    25. --shell: Save env and open a shell before running.
+    26. --time / --space: Print execution time / disk space used.
+    27. --ignore_script_error: Ignore error codes from native scripts.
+    28. --dump_version_info: Dump the resolved versions of dependencies.
+    29. --skip_sys_utils / --skip_sudo: Skip system utilities / sudo detection.
+    30. --debug_script_tags / --debug_script: Open a shell before running the given (or current) script.
+    31. --pause: Pause at the end of the main script.
+
+    Generic script inputs (exported as MLC_<NAME>):
+    --input, --output, --outdirname, --outbasename, --search_folder_path, --name,
+    --extra_cache_tags, --skip_compile, --skip_run, --accept_license,
+    --skip_system_deps, --git_ssh, --gh_token, --hf_token, --verify_ssl
 
         """
         if not run_args.get('tags') and not run_args.get('details'):
@@ -918,40 +1016,8 @@ Main Script Meta:""")
 
     The `remote-experiment` action runs an experiment on a remote machine via ssh connection.
 
-    Flags Available:
-
-    1. --remote_host:
-        IP or hostname for the remote machine (default: localhost)
-    2. --remote_port:
-        SSH port for the remote machine (default: 22)
-    3. --remote_user:
-        Username for SSH login on the remote machine
-    4. --remote_password:
-        Password for SSH authentication
-    5. --remote_ssh_key_file:
-        Path to the SSH private key file for authentication
-    6. --remote_skip_host_verify:
-        Skip SSH host key verification
-    7. --remote_python_venv:
-        Name of the Python virtual environment on the remote machine (default: mlcflow)
-    8. --remote_pull_mlc_repos:
-        Pull MLC repos on the remote machine before running
-    9. --remote_copy_directory:
-        Remote directory to copy files to (default: mlc-remote-artifacts)
-    10. --remote_pre_run_cmds:
-        Commands to run on the remote machine before the main script
-    11. --remote_client_refresh:
-        Refresh the SSH client connection
-    12. --remote_mlcflow_upgrade:
-        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
-    13. --remote_no_internet:
-        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
-    14. --remote_isolated:
-        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
-        that workspace, and clean it up on exit/signals. With the default
-        relative --remote_python_venv, the venv is recreated for each run.
-    15. --remote_isolated_base_dir:
-        Base directory for creating the isolated temporary workspace (optional).
+    Accepts all --remote_* flags from remote-run as well as all flags of
+    the `experiment` action.
 
     Example Command:
 
@@ -971,40 +1037,8 @@ Main Script Meta:""")
 
     The `remote-docker` action runs a script inside a Docker container on a remote machine via ssh connection.
 
-    Flags Available:
-
-    1. --remote_host:
-        IP or hostname for the remote machine (default: localhost)
-    2. --remote_port:
-        SSH port for the remote machine (default: 22)
-    3. --remote_user:
-        Username for SSH login on the remote machine
-    4. --remote_password:
-        Password for SSH authentication
-    5. --remote_ssh_key_file:
-        Path to the SSH private key file for authentication
-    6. --remote_skip_host_verify:
-        Skip SSH host key verification
-    7. --remote_python_venv:
-        Name of the Python virtual environment on the remote machine (default: mlcflow)
-    8. --remote_pull_mlc_repos:
-        Pull MLC repos on the remote machine before running
-    9. --remote_copy_directory:
-        Remote directory to copy files to (default: mlc-remote-artifacts)
-    10. --remote_pre_run_cmds:
-        Commands to run on the remote machine before the main script
-    11. --remote_client_refresh:
-        Refresh the SSH client connection
-    12. --remote_mlcflow_upgrade:
-        Upgrade mlcflow on the remote machine before running (the installer honours MLCFLOW_PIP_SPEC if set on the target host)
-    13. --remote_no_internet:
-        Use a locally available installer on the remote machine (incompatible with --remote_mlcflow_upgrade)
-    14. --remote_isolated:
-        Run in an isolated temporary workspace on remote host, set MLC_REPOS to
-        that workspace, and clean it up on exit/signals. With the default
-        relative --remote_python_venv, the venv is recreated for each run.
-    15. --remote_isolated_base_dir:
-        Base directory for creating the isolated temporary workspace (optional).
+    Accepts all --remote_* flags from remote-run as well as all flags of
+    the `docker` action.
 
     Example Command:
 
@@ -1086,6 +1120,10 @@ Main Script Meta:""")
         relative --slurm_python_venv, the venv is recreated for each run.
     29. --slurm_isolated_base_dir:
         Base directory for creating the isolated temporary workspace (optional).
+    30. --slurm_copy_back_mlc_cache:
+        Copy the node's MLC cache to a persistent location after the run
+    31. --slurm_copy_back_mlc_cache_path:
+        Destination for the copied cache (default: local MLC cache)
 
     Example Command:
 

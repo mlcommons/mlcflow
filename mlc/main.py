@@ -641,16 +641,33 @@ def main():
             actions = get_action(pre_args.target, default_parent)
             action_name = pre_args.action.replace("-", "_")
             try:
-                method = getattr(actions, action_name)
+                getattr(actions, action_name)
                 help_text += actions.__doc__ or ""
-                if method.__doc__:
-                    help_text += method.__doc__
+                for name in getattr(actions, 'HELP_COMPONENTS', {}).get(
+                        action_name, [action_name]):
+                    help_text += getattr(actions, name).__doc__ or ""
             except AttributeError:
                 logger.error(
                     f"Error: '{pre_args.action}' is not supported for {pre_args.target}.")
         if help_text != "":
             print(help_text)
         sys.exit(0)
+
+    # Script-specific help (`mlcsr <tags> --help`): show the options of the
+    # wrapping actions, then the script's own inputs, without running it.
+    if pre_args.help and getattr(args, 'target', None) in ('script', 'run'):
+        actions = get_action('script', default_parent)
+        components = [
+            c for c in getattr(actions, 'HELP_COMPONENTS', {}).get(
+                args.command, []) if c != 'run']
+        if components:
+            print(''.join(getattr(actions, c).__doc__ or ''
+                          for c in components))
+            res = actions.help(run_args)
+            if res['return'] > 0:
+                logging.error(res.get('error', 'Error displaying help'))
+                sys.exit(1)
+            sys.exit(0)
 
     if hasattr(args, 'target') and args.target == "repos":
         args.target = "repo"
