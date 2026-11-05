@@ -19,29 +19,15 @@ from filelock import FileLock, Timeout
 # How long to wait for another process's per-repo lock before giving up.
 # A cold clone of a large repo on a throttled link can run well past five
 # minutes, so the default is generous and can be raised further.
+#
+# MLC_REPO_LOCK_TIMEOUT: seconds (float) that `mlc pull repo` and
+# `mlc rm repo` wait for <repo_path>.lock. Default 1800 (30 min), used when
+# unset or empty; non-numeric or <= 0 values also fall back, with a warning. On
+# timeout the pull fails, unless another process has already left a valid,
+# registered checkout and no --branch/--checkout/--tag/--force was
+# requested. Does not affect the 60 s repos.json lock.
 REPO_LOCK_TIMEOUT_ENV = "MLC_REPO_LOCK_TIMEOUT"
 DEFAULT_REPO_LOCK_TIMEOUT = 1800
-
-
-# Per-repo lock paths currently held by this thread. register_repo() can
-# recurse back into pull_repo() for a dependency while the parent's lock is
-# still held, so without this a repo that (transitively) depends on itself
-# would block against its own lock for the full timeout.
-#
-# This does NOT rescue two *threads* pulling repos with crossed dependencies
-# (A deps B, B deps A): that is a genuine lock-order inversion between two
-# per-repo locks and still resolves only by timing out. It surfaces as a
-# Timeout error rather than silently, which is why the Timeout handler in
-# pull_repo must not report success indiscriminately.
-_held_repo_locks = threading.local()
-
-
-def _repo_locks_held_by_this_thread():
-    held = getattr(_held_repo_locks, "paths", None)
-    if held is None:
-        held = set()
-        _held_repo_locks.paths = held
-    return held
 
 
 class RepoLockPermissionError(Exception):
@@ -52,7 +38,7 @@ def _repo_lock_path(repo_path):
     """Lock-file path for a repo, normalised so aliases share one lock.
 
     The lock file is both the cross-process mutual-exclusion token and the
-    within-thread reentrancy key, so two spellings of the same repo
+    key of the same-thread cycle guard (_pulling_repos), so two spellings of the same repo
     ("<root>/r" vs "<root>/./r", or a symlinked MLC_REPOS) must map to one
     name -- otherwise two processes take different locks for the same
     directory and the exclusion silently does nothing. Only the parent is
@@ -71,11 +57,20 @@ def _repo_lock_path(repo_path):
 
 
 # Repos whose pull is already in progress on this thread. register_repo()
-# recurses into pull_repo() for each dependency, so a dependency cycle
-# (A -> B -> A) would otherwise recurse until the stack blows, running a git
-# pull and a repos.json rewrite at every level. The per-repo lock cannot stop
-# this on its own: same-thread reentrancy makes the nested acquire a no-op by
-# design, which is exactly what turns the old deadlock into a recursion storm.
+# recurses into pull_repo() for each dependency while the parent's lock is
+# still held. For a dependency cycle (A -> B -> A) the nested pull of A would
+# otherwise take a second FileLock on A's lock file -- which blocks even
+# within one thread -- and hang for the full timeout. Instead it is skipped:
+# A is already being pulled further up the stack.
+#
+# This is the only same-thread guard; _repo_lock itself is not reentrant.
+#
+# It does NOT rescue two *threads* pulling repos with crossed dependencies
+# (thread 1 pulls A which deps B, thread 2 pulls B which deps A): that is a
+# genuine lock-order inversion between two per-repo locks and still resolves
+# only by timing out. It surfaces as a Timeout error rather than silently,
+# which is why the Timeout handler in pull_repo must not report success
+# indiscriminately.
 _pulling_repos = threading.local()
 
 
@@ -102,12 +97,8 @@ def _repo_pull_lock(repo_lock_file, timeout):
 
 @contextlib.contextmanager
 def _repo_lock(repo_lock_file, timeout):
-    """Acquire a per-repo lock, tolerating same-thread re-entry."""
-    held = _repo_locks_held_by_this_thread()
-    if repo_lock_file in held:
-        # Already ours further up the call stack (dependency recursion).
-        yield
-        return
+    """Acquire a per-repo lock. Not reentrant: nested pulls are guarded by
+    _repo_pull_lock, and rm() never runs inside a pull."""
     try:
         lock = FileLock(repo_lock_file, timeout=timeout)
         lock.acquire()
@@ -116,11 +107,9 @@ def _repo_lock(repo_lock_file, timeout):
         # PermissionError around the whole pull would mislabel an EACCES
         # from git, rmtree or reading meta.yaml as a lock problem.
         raise RepoLockPermissionError(str(e)) from e
-    held.add(repo_lock_file)
     try:
         yield
     finally:
-        held.discard(repo_lock_file)
         lock.release()
 
 
@@ -371,7 +360,9 @@ class RepoAction(Action):
 
     # Return values of _git_repo_state().
     GIT_STATE_VALID = "valid"        # a git checkout rooted exactly here
-    GIT_STATE_INVALID = "invalid"    # definitely not a checkout; safe to remove
+    # interrupted clone; safe to remove
+    GIT_STATE_ABANDONED_CLONE = "abandoned_clone"
+    GIT_STATE_INVALID = "invalid"    # not a usable checkout; DO NOT remove
     GIT_STATE_UNKNOWN = "unknown"    # git could not answer; DO NOT remove
 
     # git's phrasing when a path is genuinely not a repository. Anything else
@@ -388,16 +379,18 @@ class RepoAction(Action):
 
         `rev-parse --show-toplevel` is used rather than `rev-parse HEAD` for
         two reasons:
-          * a freshly cloned *empty* repo has an unborn HEAD, so `rev-parse
-            HEAD` fails on a perfectly good checkout;
+          * a repo with an unborn HEAD but work in its tree fails `rev-parse
+            HEAD` although it is a perfectly good checkout;
           * `git -C` searches upwards, so a plain directory nested inside
             another checkout answers for the *enclosing* repo. Comparing the
             reported top level against repo_path rejects that.
 
-        The INVALID/UNKNOWN split matters because callers delete on INVALID.
-        A git that cannot be executed, or that refuses (e.g. "detected
-        dubious ownership" on a shared MLC_REPOS), must never be read as
-        "this is junk, remove it".
+        Only ABANDONED_CLONE may be deleted by callers. INVALID covers
+        everything else that is not a usable checkout -- a copy without
+        .git, a corrupted .git, a plain file -- and may hold the user's only
+        copy of their work, so it is reported, never removed. A git that
+        cannot be executed, or that refuses (e.g. "detected dubious
+        ownership" on a shared MLC_REPOS), is UNKNOWN for the same reason.
         """
         if not os.path.lexists(repo_path):
             return cls.GIT_STATE_INVALID          # nothing there at all
@@ -405,6 +398,11 @@ class RepoAction(Action):
             return cls.GIT_STATE_INVALID          # dangling symlink
         if not os.path.isdir(repo_path):
             return cls.GIT_STATE_INVALID          # a plain file
+        # Checked before --show-toplevel: an interrupted clone passes that
+        # probe (its .git is a well-formed repository), so it would otherwise
+        # be reported VALID and every later pull would fail against it.
+        if cls._is_abandoned_clone(repo_path):
+            return cls.GIT_STATE_ABANDONED_CLONE
         # NOTE: a *live* symlink to a real checkout must fall through to git.
         # Relocating a repo onto a bigger volume and symlinking it back is a
         # normal thing to do; short-circuiting on islink here would classify
@@ -443,6 +441,42 @@ class RepoAction(Action):
             "Leaving the directory untouched.")
         return cls.GIT_STATE_UNKNOWN
 
+    @staticmethod
+    def _is_abandoned_clone(repo_path):
+        """True only for what an interrupted `git clone` leaves behind.
+
+        Killing a real clone mid-transfer leaves a well-formed .git with no
+        refs, an unborn HEAD and an otherwise empty work tree. All three must
+        hold -- anything with a ref, a resolvable HEAD or a single other file
+        in it could be someone's work. Removing a completed clone of an
+        *empty* upstream also matches, which is harmless: it holds nothing
+        that re-cloning does not restore.
+        """
+        if os.path.islink(repo_path):
+            return False
+        git_dir = os.path.join(repo_path, '.git')
+        try:
+            if os.listdir(repo_path) != ['.git']:
+                return False
+            if os.path.islink(git_dir) or not os.path.isdir(git_dir):
+                return False
+            # --git-dir, not -C: -C searches upwards, and would read the refs
+            # of an enclosing checkout if this .git is not a valid repository.
+            refs = subprocess.run(
+                ['git', '--git-dir', git_dir, 'for-each-ref'],
+                capture_output=True, text=True)
+            if refs.returncode != 0 or refs.stdout.strip():
+                return False
+            head = subprocess.run(
+                ['git', '--git-dir', git_dir, 'rev-parse', '--verify', '-q',
+                 'HEAD'],
+                capture_output=True, text=True)
+            # 1 is "does not resolve"; anything else is git failing, which
+            # must not be read as permission to delete.
+            return head.returncode == 1
+        except (OSError, subprocess.SubprocessError):
+            return False
+
     @classmethod
     def _is_valid_git_repo(cls, repo_path):
         """True only when repo_path is a git checkout rooted exactly there."""
@@ -450,17 +484,9 @@ class RepoAction(Action):
 
     @staticmethod
     def _remove_broken_checkout(path):
-        """Remove a path that is known not to be a usable checkout.
-
-        Handles the non-directory cases too: a stale symlink or a plain file
-        sitting where the repo should be would make rmtree raise
-        NotADirectoryError.
-        """
+        """Remove a directory classified as GIT_STATE_ABANDONED_CLONE."""
         try:
-            if os.path.islink(path) or os.path.isfile(path):
-                os.remove(path)
-            else:
-                shutil.rmtree(path)
+            shutil.rmtree(path)
         except OSError as e:
             logger.warning(f"Failed to remove {path}: {e}")
 
@@ -878,11 +904,11 @@ class RepoAction(Action):
                 # every later pull fails against it. Such a directory is
                 # removed and cloned afresh.
                 #
-                # Only GIT_STATE_INVALID is removed. If git could not be run
-                # or refused to answer we do NOT delete: that path would
-                # destroy a healthy checkout -- including uncommitted work --
-                # over a missing git binary or a "dubious ownership" refusal
-                # on a shared MLC_REPOS.
+                # Only GIT_STATE_ABANDONED_CLONE is removed. Anything else that
+                # is not a usable checkout is reported and left alone: a copy
+                # without .git or a corrupted checkout may be the user's only
+                # copy of their work, and a missing git binary or a "dubious
+                # ownership" refusal says nothing about the directory at all.
                 if os.path.lexists(repo_path):
                     repo_state = self._git_repo_state(repo_path)
                     if repo_state == self.GIT_STATE_UNKNOWN:
@@ -895,6 +921,18 @@ class RepoAction(Action):
                             )
                         }
                     if repo_state == self.GIT_STATE_INVALID:
+                        return {
+                            'return': 1,
+                            'error': (
+                                f"{repo_path} exists but is not a git checkout "
+                                "that mlc can pull (for example a copy without "
+                                ".git, a corrupted .git, or a file or broken "
+                                "symlink in its place). mlc will not delete it "
+                                "automatically. Move or remove it yourself, "
+                                "then retry."
+                            )
+                        }
+                    if repo_state == self.GIT_STATE_ABANDONED_CLONE:
                         logger.warning(
                             f"{repo_path} exists but is not a usable git "
                             "checkout (likely a previously interrupted "

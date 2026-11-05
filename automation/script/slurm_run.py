@@ -113,6 +113,11 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     run_input = prune_result['new_input']
 
+    # Flag SLURM execution as an MLC env var (like docker's MLC_RUN_STATE_DOCKER)
+    # so scripts can enable deps via enable_if_env: MLC_RUN_STATE_SLURM.
+    if isinstance(run_input, dict):
+        run_input.setdefault('env', {})['MLC_RUN_STATE_SLURM'] = 'yes'
+
     cur_dir = os.getcwd()
 
     r = self_module._select_script(i)
