@@ -23,7 +23,7 @@ on:
 
 jobs:
   unit-tests:
-    runs-on: ${{ matrix.python-version == '3.8' && 'ubuntu-24.04' || 'ubuntu-latest' }}
+    runs-on: ${{ contains(fromJSON('["3.8", "3.9"]'), matrix.python-version) && 'ubuntu-24.04' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:

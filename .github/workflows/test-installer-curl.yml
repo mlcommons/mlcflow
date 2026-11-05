@@ -26,7 +26,7 @@ jobs:
   # _<arch>_py<major.minor> when default ~/mlcflow is incompatible.
   test-shared-home-python-matrix:
     name: Shared-home venv selection (Python ${{ matrix.python-version }})
-    runs-on: ${{ matrix.python-version == '3.8' && 'ubuntu-24.04' || 'ubuntu-latest' }}
+    runs-on: ${{ contains(fromJSON('["3.8", "3.9"]'), matrix.python-version) && 'ubuntu-24.04' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:

@@ -13,7 +13,7 @@ on:
 jobs:
   test_mlc_cli_core_actions:
 
-    runs-on: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8') && 'ubuntu-24.04' || matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -383,7 +383,7 @@ jobs:
 
   test_mlc_access_core_actions:
 
-    runs-on: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8') && 'ubuntu-24.04' || matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -437,7 +437,7 @@ jobs:
         cd .github/scripts && python -c "import test_mlc_access as test; test.run_tests()"
 
   test_mlc_help:
-    runs-on: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8') && 'ubuntu-24.04' || matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -523,7 +523,7 @@ jobs:
         mlc show cache -h
   
   test_mlc_script_actions:
-    runs-on: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8') && 'ubuntu-24.04' || matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:

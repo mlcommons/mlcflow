@@ -14,7 +14,7 @@ permissions:
 jobs:
   test_mlc_docker_core:
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
