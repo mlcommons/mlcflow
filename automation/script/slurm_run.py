@@ -226,22 +226,28 @@ def slurm_run(self_module, i, slurm_action='run'):
     if slurm_copy_back_mlc_cache:
         local_cache = slurm_copy_back_mlc_cache_path or get_local_mlc_cache_path(
             self_module)
-        safe_local_cache = (
-            str(local_cache)
-            .replace('\\', '\\\\')
-            .replace('"', '\\"')
-            .replace('$', '\\$')
-            .replace('`', '\\`')
-        )
-        if slurm_isolated:
+
+        def _dq(path):
+            return (str(path).replace('\\', '\\\\').replace('"', '\\"')
+                    .replace('$', '\\$').replace('`', '\\`'))
+
+        safe_local_cache = _dq(local_cache)
+        # An explicit container local dir (bound by apptainer.py only with
+        # host repos) is where the container's cache is written.
+        container_local_dir = ''
+        if slurm_action == 'apptainer' and is_true(
+                get_apptainer_input(i, 'host_mlc_repos', False)):
+            container_local_dir = get_apptainer_input(i, 'mlc_local_dir', '')
+        if container_local_dir:
+            source_cache = f'"{_dq(container_local_dir)}/cache/"'
+        elif slurm_isolated:
+            source_cache = '"$MLC_REPOS/local/cache/"'
+        else:
+            source_cache = '~/MLC/repos/local/cache/'
+        if slurm_isolated or slurm_copy_back_mlc_cache_path:
             run_cmds.append(
                 f'mkdir -p "{safe_local_cache}" && '
-                f'rsync -a "$MLC_REPOS/local/cache/" "{safe_local_cache}/"'
-            )
-        elif slurm_copy_back_mlc_cache_path:
-            run_cmds.append(
-                f'mkdir -p "{safe_local_cache}" && '
-                f'rsync -a ~/MLC/repos/local/cache/ "{safe_local_cache}/"'
+                f'rsync -a {source_cache} "{safe_local_cache}/"'
             )
 
     # Join all commands with && so failure stops execution

@@ -951,5 +951,21 @@ class TestSlurmApptainerMlcLocalDir(unittest.TestCase):
         self.assertIn('rsync -a "$MLC_REPOS/local/cache/"', cmd)
 
 
+    def test_copy_back_reads_explicit_local_dir_cache(self):
+        for key in ('apptainer_mlc_local_dir', 'docker_mlc_local_dir'):
+            with self.subTest(key=key):
+                cmd = self._srun_cmd({'apptainer_host_mlc_repos': 'yes',
+                                      'slurm_copy_back_mlc_cache': 'yes',
+                                      key: '/scratch/job-local'})
+                self.assertIn('rsync -a "/scratch/job-local/cache/"', cmd)
+                self.assertNotIn('"$MLC_REPOS/local/cache/"', cmd)
+
+    def test_copy_back_ignores_local_dir_without_host_repos(self):
+        # apptainer.py only binds the local dir together with host repos.
+        cmd = self._srun_cmd({'slurm_copy_back_mlc_cache': 'yes',
+                              'apptainer_mlc_local_dir': '/scratch/job-local'})
+        self.assertIn('rsync -a "$MLC_REPOS/local/cache/"', cmd)
+
+
 if __name__ == '__main__':
     unittest.main()
