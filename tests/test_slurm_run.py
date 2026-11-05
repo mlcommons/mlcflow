@@ -896,5 +896,60 @@ class TestCopyBackMlcCache(unittest.TestCase):
         self.assertIn('/shared/cache', bash_c_cmd)
 
 
+
+class TestSlurmApptainerMlcLocalDir(unittest.TestCase):
+    def _srun_cmd(self, extra):
+        from unittest.mock import patch, MagicMock
+
+        mock_self = MagicMock()
+        mock_self._select_script.return_value = {
+            'return': 0,
+            'script': MagicMock(
+                meta={'tags': [], 'alias': 'detect-os', 'uid': '0' * 16},
+                path='/fake/path')}
+        mock_self.update_run_state_for_selected_script_and_variations.return_value = {
+            'return': 0}
+        mock_self.logger = MagicMock()
+        captured = []
+
+        def fake_call(args):
+            captured.extend(args)
+            return 0
+
+        with patch('script.slurm_run.shutil.which',
+                   return_value='/usr/bin/srun'), \
+                patch('script.slurm_run.subprocess.call',
+                      side_effect=fake_call):
+            from script.slurm_run import slurm_run
+            r = slurm_run(mock_self, dict(
+                {'tags': 'detect,os', 'env': {}, 'slurm_isolated': 'yes'},
+                **extra), slurm_action='apptainer')
+        self.assertEqual(r['return'], 0)
+        return captured[-1]
+
+    def test_default_local_dir_in_isolated_workspace(self):
+        for key in ('apptainer_host_mlc_repos', 'docker_host_mlc_repos'):
+            with self.subTest(key=key):
+                cmd = self._srun_cmd({key: 'yes'})
+                self.assertIn(
+                    '--apptainer_mlc_local_dir="$MLC_REPOS/local"', cmd)
+
+    def test_explicit_local_dir_is_not_overridden(self):
+        for key in ('apptainer_mlc_local_dir', 'docker_mlc_local_dir'):
+            with self.subTest(key=key):
+                cmd = self._srun_cmd({'apptainer_host_mlc_repos': 'yes',
+                                      key: '/persistent/cache'})
+                self.assertNotIn('--apptainer_mlc_local_dir="$MLC_REPOS',
+                                 cmd)
+                self.assertIn(f'--{key}=/persistent/cache', cmd)
+
+
+    def test_copy_back_reads_the_bound_cache_dir(self):
+        cmd = self._srun_cmd({'apptainer_host_mlc_repos': 'yes',
+                              'slurm_copy_back_mlc_cache': 'yes'})
+        self.assertIn('--apptainer_mlc_local_dir="$MLC_REPOS/local"', cmd)
+        self.assertIn('rsync -a "$MLC_REPOS/local/cache/"', cmd)
+
+
 if __name__ == '__main__':
     unittest.main()

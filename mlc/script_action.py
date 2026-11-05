@@ -647,8 +647,8 @@ Main Script Meta:""")
         Suppress output during Apptainer operations.
     43. --apptainer_mlc_local_dir:
         Writable host directory bound over the container's MLC local/cache
-        directory (with --apptainer_host_mlc_repos); set automatically under
-        --slurm_isolated.
+        directory (with --apptainer_host_mlc_repos); under --slurm_isolated it
+        defaults to the isolated workspace's MLC local dir.
     44. --apptainer_fake_run_deps:
         Fake-run the script dependencies during the image build.
     45. --apptainer_run_final_cmds:

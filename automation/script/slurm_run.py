@@ -5,6 +5,7 @@ import subprocess
 import copy
 from utils import is_true, prune_input
 from script.script_utils import *
+from script.apptainer import get_apptainer_input
 
 
 def slurm_run(self_module, i, slurm_action='run'):
@@ -157,13 +158,12 @@ def slurm_run(self_module, i, slurm_action='run'):
 
     # With host repos baked into the image, MLC_REPOS points inside the
     # container and caches would land in the small, discarded writable-tmpfs
-    # overlay; keep them in the isolated workspace instead.
+    # overlay; bind the isolated workspace's local dir so copy-back sees them.
     if (slurm_isolated and slurm_action == 'apptainer'
-            and not i.get('apptainer_mlc_local_dir')
-            and is_true(i.get('apptainer_host_mlc_repos',
-                              i.get('docker_host_mlc_repos', False)))):
+            and not get_apptainer_input(i, 'mlc_local_dir')
+            and is_true(get_apptainer_input(i, 'host_mlc_repos', False))):
         script_run_cmd += \
-            ' --apptainer_mlc_local_dir="$MLC_ISOLATED_TMP_DIR/mlc-container-local"'
+            ' --apptainer_mlc_local_dir="$MLC_REPOS/local"'
 
     # Build the commands to run inside srun
     run_cmds = []
