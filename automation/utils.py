@@ -1209,20 +1209,16 @@ def parse_expiration(user_input: str) -> float:
 
 def quote_if_needed(val: str, quote: str = '') -> str:
     """
-    Return the value quoted for a POSIX shell if it contains whitespace,
-    quotes or shell metacharacters.
+    Return the value quoted for a POSIX shell when it contains anything other
+    than shell-safe characters. Single quotes are used, so $VAR, $(...),
+    backticks and backslashes stay literal. quote='"' forces quoting.
     """
     import shlex
     s = str(val)
-
-    # Single-quote values containing a double quote: a backslash-escaped
-    # quote would be corrupted when the command is re-embedded in a
-    # double-quoted `export VAR="..."` line (tmp-run.sh).
-    if '"' in s:
-        return shlex.quote(s)
-    if quote == '"' or any(c in s for c in ' \t\n<>|&;()\''):
-        return f'"{s}"'
-    return s
+    quoted = shlex.quote(s)
+    if quoted == s and quote == '"':
+        return f"'{s}'"
+    return quoted
 
 
 def has_function_in_file(py_file, func_name):

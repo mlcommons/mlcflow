@@ -39,10 +39,18 @@ class QuoteIfNeededTest(unittest.TestCase):
         from utils import quote_if_needed
         self.assertEqual(quote_if_needed('detect,os'), 'detect,os')
 
-    def test_shell_metachars_quoted(self):
+    def test_values_stay_literal_through_shell(self):
         from utils import quote_if_needed
-        for v in ['a b', '<<<X>>>', 'a;b', 'a|b', 'a&b', "it's"]:
-            self.assertEqual(quote_if_needed(v), f'"{v}"')
+        values = ['a b', '<<<X>>>', 'a;b', 'a|b', 'a&b', "it's", '$HOME',
+                  '$(id)', '`id`', 'C:\\path\\x', 'a*b', '']
+        line = ' '.join(quote_if_needed(v) for v in values)
+        out = subprocess.run(['bash', '-c', f'printf "%s\\0" {line}'],
+                             capture_output=True, check=True)
+        self.assertEqual(out.stdout.decode().split('\0')[:-1], values)
+
+    def test_forced_quote(self):
+        from utils import quote_if_needed
+        self.assertEqual(quote_if_needed('abc', '"'), "'abc'")
 
     def test_double_quote_value_single_quoted(self):
         from utils import quote_if_needed
