@@ -1207,18 +1207,18 @@ def parse_expiration(user_input: str) -> float:
     return time.time() + seconds
 
 
-def quote_if_needed(val: str, quote: str) -> str:
+def quote_if_needed(val: str, quote: str = '') -> str:
     """
-    Return the value, quoted with escaped quotes if it contains spaces
-    or quotes.
+    Return the value quoted for a POSIX shell when it contains anything other
+    than shell-safe characters. Single quotes are used, so $VAR, $(...),
+    backticks and backslashes stay literal. quote='"' forces quoting.
     """
+    import shlex
     s = str(val)
-
-    if " " in s or '"' in s or quote == '"':
-        # Escape all existing double quotes
-        s = s.replace('"', r'\"')
-        return f'"{s}"'
-    return s
+    quoted = shlex.quote(s)
+    if quoted == s and quote == '"':
+        return f"'{s}'"
+    return quoted
 
 
 def has_function_in_file(py_file, func_name):

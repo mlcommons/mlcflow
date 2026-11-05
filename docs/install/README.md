@@ -87,7 +87,7 @@ source ~/mlcflow/bin/activate
 ┌─────────────────────────────────────────────────────────────┐
 │ 7. Prompt for Repository Details (if interactive)          │
 │    - Repo name (default: mlcommons@mlperf-automations)     │
-│    - Branch (default: dev)                                 │
+│    - Branch (default: main)                                │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -149,7 +149,7 @@ bash mlcflow_linux.sh --yes --quiet
 | `--upgrade` | Upgrade mlcflow if already installed | Skip if present |
 | `--venv-dir <path>` | Custom virtual environment directory | `~/mlcflow` |
 | `--mlc-repo <repo>` | Repository in format `owner@repo` | `mlcommons@mlperf-automations` |
-| `--mlc-repo-branch <branch>` | Git branch to clone | `dev` |
+| `--mlc-repo-branch <branch>` | Git branch to clone | `main` |
 | `--install-python` | Auto-install Python if incompatible | Prompt user |
 | `--verbose` | Enable debug logging | Normal logging |
 | `--quiet` | Minimal output (errors/warnings only) | Normal logging |

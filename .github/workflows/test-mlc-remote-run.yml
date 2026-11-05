@@ -39,7 +39,7 @@ jobs:
 
     - name: Pull automation repo
       run: |
-        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+        mlc pull repo mlcommons@mlperf-automations --checkout=main
 
     - name: Set up passwordless SSH to localhost
       run: |

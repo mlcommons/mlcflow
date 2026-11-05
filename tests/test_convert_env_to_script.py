@@ -103,5 +103,38 @@ class ConvertEnvToScriptListTest(unittest.TestCase):
         self.assertEqual(result.stdout, 'one:two:three')
 
 
+class ConvertEnvToScriptQuotingTest(unittest.TestCase):
+    """A regenerated container command (single-quoted args) must survive the
+    Windows `set` serialization and still parse as POSIX arguments."""
+
+    def _container_cmd(self):
+        from script.docker_utils import regenerate_script_cmd
+        r = regenerate_script_cmd({
+            'script_uid': 'x', 'script_alias': 'x', 'tags': [],
+            'run_cmd': {'tags': 'detect,os', 'note': 'a b', 'empty': '',
+                        'quote': "it's"}})
+        return r['run_cmd_string']
+
+    def test_windows_set_keeps_quoted_args(self):
+        import shlex
+        from script.module import convert_env_to_script
+        cmd = self._container_cmd()
+        [line] = convert_env_to_script({'MLC_RUN_CMD': cmd}, WINDOWS_OS_INFO)
+        prefix = 'set MLC_RUN_CMD='
+        self.assertTrue(line.startswith(prefix))
+        # cmd.exe `set` stores the rest of the line verbatim.
+        value = line[len(prefix):]
+        self.assertEqual(value, cmd)
+        args = shlex.split(value)
+        self.assertIn('--note=a b', args)
+        self.assertIn('--empty=', args)
+        self.assertIn("--quote=it's", args)
+
+    def test_windows_set_does_not_backslash_single_quotes(self):
+        from script.module import convert_env_to_script
+        [line] = convert_env_to_script({'K': "it's"}, WINDOWS_OS_INFO)
+        self.assertEqual(line, "set K=it's")
+
+
 if __name__ == '__main__':
     unittest.main()

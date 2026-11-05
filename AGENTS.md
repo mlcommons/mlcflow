@@ -197,6 +197,8 @@ mlc <action> <target> [options]
 | `mlcrs <tags>` | `mlc remote-slurm script <tags>` |
 | `mlcres <tags>` | `mlc remote-experiment-slurm script <tags>` |
 | `mlcrse <tags>` | `mlc remote-slurm-experiment script <tags>` |
+| `mlcrsd <tags>` | `mlc remote-slurm-docker script <tags>` |
+| `mlcrsa <tags>` | `mlc remote-slurm-apptainer script <tags>` |
 
 All short commands call `mlc_expand_short(action)` in `main.py`, which inserts
 the missing positional args into `sys.argv` and calls `main()`.
@@ -234,7 +236,7 @@ This is the most important thing to understand when modifying `script_action.py`
 
 2. **Auto-pull if missing**: if neither the bundled path nor any registered
    repo has `automation/script/` (should not normally happen — it's shipped
-   with mlcflow), it pulls `mlcommons@mlperf-automations --branch=dev`
+   with mlcflow), it pulls `mlcommons@mlperf-automations --branch=main`
    automatically and retries once. This is now a last-resort fallback, not
    the common path.
 
@@ -460,12 +462,12 @@ use `.` in key names that should be flat strings.
 code 1. This is intentional to catch copy-paste artifacts. Quoted args are
 excluded from the check.
 
-**6. Auto-pull uses `--branch=dev`**
+**6. Auto-pull uses `--branch=main`**
 `automation/script/` is bundled with mlcflow and should always be found via
 `bundled_automation_path()`. If somehow neither that nor any registered repo
 has it, `call_script_module_function()` auto-pulls
-`mlcommons@mlperf-automations --branch=dev` as a last resort. If the local
-checkout is on `main`, the auto-pull may switch branches. This is a fallback path and
+`mlcommons@mlperf-automations --branch=main` as a last resort. If the local
+checkout is on another branch (e.g. `dev`), the auto-pull may switch branches. This is a fallback path and
 should not normally be triggered if the repo is already registered.
 
 **7. `ScriptAction.add()` always uses `cp` with `src_tags`**
