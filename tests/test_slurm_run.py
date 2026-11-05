@@ -896,7 +896,6 @@ class TestCopyBackMlcCache(unittest.TestCase):
         self.assertIn('/shared/cache', bash_c_cmd)
 
 
-
 class TestSlurmApptainerMlcLocalDir(unittest.TestCase):
     def _srun_cmd(self, extra):
         from unittest.mock import patch, MagicMock
@@ -943,13 +942,11 @@ class TestSlurmApptainerMlcLocalDir(unittest.TestCase):
                                  cmd)
                 self.assertIn(f'--{key}=/persistent/cache', cmd)
 
-
     def test_copy_back_reads_the_bound_cache_dir(self):
         cmd = self._srun_cmd({'apptainer_host_mlc_repos': 'yes',
                               'slurm_copy_back_mlc_cache': 'yes'})
         self.assertIn('--apptainer_mlc_local_dir="$MLC_REPOS/local"', cmd)
         self.assertIn('rsync -a "$MLC_REPOS/local/cache/"', cmd)
-
 
     def test_copy_back_reads_explicit_local_dir_cache(self):
         for key in ('apptainer_mlc_local_dir', 'docker_mlc_local_dir'):
@@ -965,7 +962,6 @@ class TestSlurmApptainerMlcLocalDir(unittest.TestCase):
         cmd = self._srun_cmd({'slurm_copy_back_mlc_cache': 'yes',
                               'apptainer_mlc_local_dir': '/scratch/job-local'})
         self.assertIn('rsync -a "$MLC_REPOS/local/cache/"', cmd)
-
 
     def test_non_isolated_copy_back_with_explicit_local_dir(self):
         cmd = self._srun_cmd({'slurm_isolated': 'no',

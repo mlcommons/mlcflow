@@ -110,7 +110,7 @@ class LoadCliInputFileTest(unittest.TestCase):
         # the typed positional tags must win; other file options merge in.
         from mlc.main import build_run_args
         path = self._write('full.yaml',
-                            'tags: run,spec\nquiet: true\ndocker_os: ubuntu\n')
+                           'tags: run,spec\nquiet: true\ndocker_os: ubuntu\n')
         args = argparse.Namespace(
             command='docker', target='script', details='detect,os',
             extra=[f'--mlc_input_file={path}'])
