@@ -1,4 +1,5 @@
 import os
+import shlex
 from mlc import utils
 from utils import *
 import logging
@@ -159,6 +160,13 @@ def apptainerfile(self_module, input_params):
 
     if is_true(get_apptainer_input(input_params, 'host_mlc_repos', '')):
         mlc_apptainer_input['host_mlc_repos'] = 'yes'
+
+    # Bind destinations must exist in the image rootfs, otherwise the
+    # build-time fake run fails when the binds are applied.
+    build_binds = get_apptainer_bind_mounts(
+        input_params, env, apptainer_settings, run_state)
+    if build_binds:
+        mlc_apptainer_input['bind'] = build_binds
 
     apptainer_v = False
     apptainer_s = False
@@ -352,12 +360,13 @@ def apptainer_run(self_module, i):
         mounts, env, apptainer_settings, run_state)
     container_env_string = bind_mounts.get('container_env_string', '')
 
-    # Forward input-mapped env vars to the container's mlcr command
+    # Forward input-mapped env vars to the container's mlcr command.
+    # Unresolved default_env placeholders (<<<VAR>>>) are dropped.
     input_mapping = meta.get('input_mapping', {})
     for input_key, env_key in input_mapping.items():
         val = env.get(env_key, '')
-        if val and isinstance(val, str):
-            container_env_string += f' --env.{env_key}={val}'
+        if val and isinstance(val, str) and '<<<' not in val:
+            container_env_string += f' --env.{env_key}={shlex.quote(val)}'
 
     # Forward framework-level env keys (MLC_OUTDIRNAME, MLC_INPUT, MLC_OUTPUT, etc.)
     # These are skipped in regenerate_script_cmd (docker_utils.py) and must be
@@ -367,14 +376,14 @@ def apptainer_run(self_module, i):
     for input_key in framework_input_mapping:
         env_key = 'MLC_' + input_key.upper().replace('-', '_').replace(' ', '_')
         val = env.get(env_key, '')
-        if val and isinstance(val, str):
-            container_env_string += f' --env.{env_key}={val}'
+        if val and isinstance(val, str) and '<<<' not in val:
+            container_env_string += f' --env.{env_key}={shlex.quote(val)}'
 
     # Forward proxy env vars (matching Docker behavior)
     for proxy_key in self_module.host_env_keys:
         proxy_value = os.environ.get(proxy_key)
         if proxy_value:
-            container_env_string += f' --env.{proxy_key}={proxy_value}'
+            container_env_string += f' --env.{proxy_key}={shlex.quote(proxy_value)}'
 
     # Generate the run command
     r = regenerate_script_cmd({'script_uid': script_uid,
@@ -419,6 +428,10 @@ def apptainer_run(self_module, i):
             build_image_extras)
     # Wire resolved docker.mounts to apptainer bind mounts
     resolved_mounts = bind_mounts.get('mounts', [])
+    mlc_local_bind = get_mlc_local_bind(i)
+    if mlc_local_bind:
+        os.makedirs(mlc_local_bind.split(':', 1)[0], exist_ok=True)
+        resolved_mounts.append(mlc_local_bind)
     if resolved_mounts:
         mlc_apptainer_input['bind'] = resolved_mounts
 
@@ -572,6 +585,35 @@ def process_apptainer_mounts(mounts, env, apptainer_settings, run_state):
 
     return {'return': 0, 'mounts': mounts,
             'container_env_string': container_env_string}
+
+
+def get_mlc_local_bind(input_params):
+    """Bind for --apptainer_mlc_local_dir: a writable host directory over the
+    container's MLC local dir (cache), used with --apptainer_host_mlc_repos so
+    caches do not land in the small, discarded --writable-tmpfs overlay."""
+    local_dir = get_apptainer_input(input_params, 'mlc_local_dir', '')
+    if not local_dir or not is_true(
+            get_apptainer_input(input_params, 'host_mlc_repos', '')):
+        return ''
+    return f"{os.path.abspath(local_dir)}:/opt/mlc_host_repos/local"
+
+
+def get_apptainer_bind_mounts(input_params, env, apptainer_settings,
+                              run_state):
+    """All bind mounts (user binds, resolved docker.mounts, MLC local dir)
+    known before the image is built."""
+    binds = get_apptainer_input(input_params, 'bind',
+                                apptainer_settings.get('bind')) or []
+    if isinstance(binds, str):
+        binds = [binds]
+    binds = list(binds)
+    mounts = copy.deepcopy(get_apptainer_input(input_params, 'mounts', []))
+    binds += process_apptainer_mounts(
+        mounts, env, apptainer_settings, run_state)['mounts']
+    mlc_local_bind = get_mlc_local_bind(input_params)
+    if mlc_local_bind:
+        binds.append(mlc_local_bind)
+    return binds
 
 
 def get_apptainer_input(input_params, key, default=None):

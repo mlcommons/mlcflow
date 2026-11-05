@@ -150,6 +150,16 @@ def slurm_run(self_module, i, slurm_action='run'):
     if quiet:
         script_run_cmd += ' --quiet'
 
+    # With host repos baked into the image, MLC_REPOS points inside the
+    # container and caches would land in the small, discarded writable-tmpfs
+    # overlay; keep them in the isolated workspace instead.
+    if (slurm_isolated and slurm_action == 'apptainer'
+            and not i.get('apptainer_mlc_local_dir')
+            and is_true(i.get('apptainer_host_mlc_repos',
+                              i.get('docker_host_mlc_repos', False)))):
+        script_run_cmd += \
+            ' --apptainer_mlc_local_dir="$MLC_ISOLATED_TMP_DIR/mlc-container-local"'
+
     # Build the commands to run inside srun
     run_cmds = []
 
@@ -302,6 +312,23 @@ def regenerate_script_cmd(i):
 
     i_run_cmd = i['run_cmd']
     slurm_action = i.get('slurm_action', 'run')
+
+    # Provenance only; the node-side mlc computes its own.
+    i_run_cmd.pop('mlc_run_cmd', None)
+
+    # Drop unresolved default_env placeholders (<<<VAR>>>) so they are not
+    # forwarded as explicit inputs to the node.
+    env = i_run_cmd.get('env')
+    if isinstance(env, dict):
+        for key in list(env):
+            value = env[key]
+            if isinstance(value, str) and '<<<' in value:
+                del env[key]
+            elif isinstance(value, list):
+                env[key] = [v for v in value
+                            if not (isinstance(v, str) and '<<<' in v)]
+                if not env[key]:
+                    del env[key]
 
     action_to_cmd = {
         'run': 'mlcr',

@@ -328,7 +328,7 @@ def regenerate_script_cmd(i):
                     if isinstance(val, str) and (
                         os.path.join("local", "cache", "") in val or
                         os.path.join("MLC", "repos", "") in val or
-                        "<<<" in value
+                        "<<<" in val
                     )
                 ]
 
@@ -373,6 +373,10 @@ def regenerate_script_cmd(i):
         for key in keys:
             if key in ["input", "output", "outdirname"]:
                 continue  # We have the corresponding env keys in container env string
+            # Provenance only; nesting an already shell-joined command breaks
+            # quoting in the container command and tmp-run.sh.
+            if key == "mlc_run_cmd" and not prefix:
+                continue
             # Construct the full key with the prefix.
             full_key = f"{prefix}.{key}" if prefix else key
 

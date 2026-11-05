@@ -273,6 +273,14 @@ def mlcrse():
     mlc_expand_short("remote-slurm-experiment")
 
 
+def mlcrsd():
+    mlc_expand_short("remote-slurm-docker")
+
+
+def mlcrsa():
+    mlc_expand_short("remote-slurm-apptainer")
+
+
 def mlce():
     mlc_expand_short("experiment")
 
@@ -405,6 +413,7 @@ def build_parser(pre_args):
     for action in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
                    'experiment', 'remote-run', 'remote-experiment',
                    'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                   'remote-slurm-docker', 'remote-slurm-apptainer',
                    'slurm-run',
                    'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
                    'doc', 'lint']:
@@ -455,6 +464,7 @@ def build_run_args(args):
     if args.command in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
                         'experiment', 'remote-run', 'remote-experiment',
                         'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                        'remote-slurm-docker', 'remote-slurm-apptainer',
                         'slurm-run',
                         'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
                         'doc', 'lint'] and args.target == "run":
@@ -607,6 +617,7 @@ def main():
                     'docker', 'docker-run', 'apptainer', 'apptainer-run',
                     'experiment', 'remote-run', 'remote-experiment',
                     'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
+                    'remote-slurm-docker', 'remote-slurm-apptainer',
                     'slurm-run', 'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
                     'doc', 'lint',
                 ]

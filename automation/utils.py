@@ -1207,16 +1207,20 @@ def parse_expiration(user_input: str) -> float:
     return time.time() + seconds
 
 
-def quote_if_needed(val: str, quote: str) -> str:
+def quote_if_needed(val: str, quote: str = '') -> str:
     """
-    Return the value, quoted with escaped quotes if it contains spaces
-    or quotes.
+    Return the value quoted for a POSIX shell if it contains whitespace,
+    quotes or shell metacharacters.
     """
+    import shlex
     s = str(val)
 
-    if " " in s or '"' in s or quote == '"':
-        # Escape all existing double quotes
-        s = s.replace('"', r'\"')
+    # Single-quote values containing a double quote: a backslash-escaped
+    # quote would be corrupted when the command is re-embedded in a
+    # double-quoted `export VAR="..."` line (tmp-run.sh).
+    if '"' in s:
+        return shlex.quote(s)
+    if quote == '"' or any(c in s for c in ' \t\n<>|&;()\''):
         return f'"{s}"'
     return s
 

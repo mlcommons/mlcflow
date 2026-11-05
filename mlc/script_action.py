@@ -1188,6 +1188,44 @@ Main Script Meta:""")
         return self.call_script_module_function(
             "remote_slurm_experiment", run_args)
 
+    def remote_slurm_docker(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: remote-slurm-docker
+    ################################################################################
+
+    The `remote-slurm-docker` action connects to a remote machine via SSH and
+    runs an MLC slurm-docker script there.  Accepts all --remote_*, --slurm_*
+    and --docker_* flags.
+
+    Example Command:
+
+    mlcrsd detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function(
+            "remote_slurm_docker", run_args)
+
+    def remote_slurm_apptainer(self, run_args):
+        """
+    ################################################################################
+    Target: Script
+    Action: remote-slurm-apptainer
+    ################################################################################
+
+    The `remote-slurm-apptainer` action connects to a remote machine via SSH
+    and runs an MLC slurm-apptainer script there.  Accepts all --remote_*,
+    --slurm_* and --apptainer_* flags.
+
+    Example Command:
+
+    mlcrsa detect,os --remote_host=mycluster.example.com --slurm_partition=gpu
+
+        """
+        return self.call_script_module_function(
+            "remote_slurm_apptainer", run_args)
+
 
 class ScriptExecutionError(Exception):
     def __init__(self, message, script_name=None, repo_alias=None,
