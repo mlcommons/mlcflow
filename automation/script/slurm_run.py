@@ -244,7 +244,7 @@ def slurm_run(self_module, i, slurm_action='run'):
             source_cache = '"$MLC_REPOS/local/cache/"'
         else:
             source_cache = '~/MLC/repos/local/cache/'
-        if slurm_isolated or slurm_copy_back_mlc_cache_path:
+        if slurm_isolated or slurm_copy_back_mlc_cache_path or container_local_dir:
             run_cmds.append(
                 f'mkdir -p "{safe_local_cache}" && '
                 f'rsync -a {source_cache} "{safe_local_cache}/"'

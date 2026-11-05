@@ -967,5 +967,19 @@ class TestSlurmApptainerMlcLocalDir(unittest.TestCase):
         self.assertIn('rsync -a "$MLC_REPOS/local/cache/"', cmd)
 
 
+    def test_non_isolated_copy_back_with_explicit_local_dir(self):
+        cmd = self._srun_cmd({'slurm_isolated': 'no',
+                              'apptainer_host_mlc_repos': 'yes',
+                              'slurm_copy_back_mlc_cache': 'yes',
+                              'apptainer_mlc_local_dir': '/scratch/job-local'})
+        self.assertIn('rsync -a "/scratch/job-local/cache/"', cmd)
+
+    def test_non_isolated_copy_back_default_still_skipped(self):
+        cmd = self._srun_cmd({'slurm_isolated': 'no',
+                              'apptainer_host_mlc_repos': 'yes',
+                              'slurm_copy_back_mlc_cache': 'yes'})
+        self.assertNotIn('rsync', cmd)
+
+
 if __name__ == '__main__':
     unittest.main()
