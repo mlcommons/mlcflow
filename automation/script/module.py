@@ -4558,6 +4558,18 @@ pip install mlcflow
         i['remote_action'] = 'slurm-experiment'
         return remote_run(self, i)
 
+    ############################################################
+    def remote_slurm_docker(self, i):
+        from script.remote_run import remote_run
+        i['remote_action'] = 'slurm-docker'
+        return remote_run(self, i)
+
+    ############################################################
+    def remote_slurm_apptainer(self, i):
+        from script.remote_run import remote_run
+        i['remote_action'] = 'slurm-apptainer'
+        return remote_run(self, i)
+
     ##########################################################################
 
     def _available_variations(self, i):
@@ -5428,12 +5440,14 @@ def convert_env_to_script(env, os_info, start_script=None):
             env_separator = os_info.get('env_separator', ':')
             env_value = env_separator.join(str(v) for v in env_value)
 
-        env_quote = os_info.get('env_quote', '"')
-        # Replace placeholders in the platform-specific environment command
-        # and escapes any quote in the env value
+        env_value = str(env_value)
+        # cmd.exe `set` takes the value literally (backslash is not an escape
+        # there), so only the POSIX double-quoted export needs escaping.
+        if not is_windows:
+            env_quote = os_info.get('env_quote', '"')
+            env_value = env_value.replace(env_quote, f"""\\{env_quote}""")
         env_command = os_info['set_env'].replace(
-            '${key}', key).replace(
-            '${value}', str(env_value).replace(env_quote, f"""\\{env_quote}"""))
+            '${key}', key).replace('${value}', env_value)
         script.append(env_command)
 
     return script

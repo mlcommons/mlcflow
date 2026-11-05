@@ -45,7 +45,7 @@ class ScriptActionApptainerTest(unittest.TestCase):
                 "automation": "repo",
                 "action": "pull",
                 "repo": "mlcommons@mlperf-automations",
-                "branch": "dev",
+                "branch": "main",
                 "fast_forward_only": True
             })
 

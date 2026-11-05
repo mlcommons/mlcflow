@@ -5,6 +5,7 @@ import subprocess
 import copy
 from utils import is_true, prune_input
 from script.script_utils import *
+from script.apptainer import get_apptainer_input
 
 
 def slurm_run(self_module, i, slurm_action='run'):
@@ -155,6 +156,15 @@ def slurm_run(self_module, i, slurm_action='run'):
     if quiet:
         script_run_cmd += ' --quiet'
 
+    # With host repos baked into the image, MLC_REPOS points inside the
+    # container and caches would land in the small, discarded writable-tmpfs
+    # overlay; bind the isolated workspace's local dir so copy-back sees them.
+    if (slurm_isolated and slurm_action == 'apptainer'
+            and not get_apptainer_input(i, 'mlc_local_dir')
+            and is_true(get_apptainer_input(i, 'host_mlc_repos', False))):
+        script_run_cmd += \
+            ' --apptainer_mlc_local_dir="$MLC_REPOS/local"'
+
     # Build the commands to run inside srun
     run_cmds = []
 
@@ -216,22 +226,28 @@ def slurm_run(self_module, i, slurm_action='run'):
     if slurm_copy_back_mlc_cache:
         local_cache = slurm_copy_back_mlc_cache_path or get_local_mlc_cache_path(
             self_module)
-        safe_local_cache = (
-            str(local_cache)
-            .replace('\\', '\\\\')
-            .replace('"', '\\"')
-            .replace('$', '\\$')
-            .replace('`', '\\`')
-        )
-        if slurm_isolated:
+
+        def _dq(path):
+            return (str(path).replace('\\', '\\\\').replace('"', '\\"')
+                    .replace('$', '\\$').replace('`', '\\`'))
+
+        safe_local_cache = _dq(local_cache)
+        # An explicit container local dir (bound by apptainer.py only with
+        # host repos) is where the container's cache is written.
+        container_local_dir = ''
+        if slurm_action == 'apptainer' and is_true(
+                get_apptainer_input(i, 'host_mlc_repos', False)):
+            container_local_dir = get_apptainer_input(i, 'mlc_local_dir', '')
+        if container_local_dir:
+            source_cache = f'"{_dq(container_local_dir)}/cache/"'
+        elif slurm_isolated:
+            source_cache = '"$MLC_REPOS/local/cache/"'
+        else:
+            source_cache = '~/MLC/repos/local/cache/'
+        if slurm_isolated or slurm_copy_back_mlc_cache_path or container_local_dir:
             run_cmds.append(
                 f'mkdir -p "{safe_local_cache}" && '
-                f'rsync -a "$MLC_REPOS/local/cache/" "{safe_local_cache}/"'
-            )
-        elif slurm_copy_back_mlc_cache_path:
-            run_cmds.append(
-                f'mkdir -p "{safe_local_cache}" && '
-                f'rsync -a ~/MLC/repos/local/cache/ "{safe_local_cache}/"'
+                f'rsync -a {source_cache} "{safe_local_cache}/"'
             )
 
     # Join all commands with && so failure stops execution
@@ -307,6 +323,23 @@ def regenerate_script_cmd(i):
 
     i_run_cmd = i['run_cmd']
     slurm_action = i.get('slurm_action', 'run')
+
+    # Provenance only; the node-side mlc computes its own.
+    i_run_cmd.pop('mlc_run_cmd', None)
+
+    # Drop unresolved default_env placeholders (<<<VAR>>>) so they are not
+    # forwarded as explicit inputs to the node.
+    env = i_run_cmd.get('env')
+    if isinstance(env, dict):
+        for key in list(env):
+            value = env[key]
+            if isinstance(value, str) and '<<<' in value:
+                del env[key]
+            elif isinstance(value, list):
+                env[key] = [v for v in value
+                            if not (isinstance(v, str) and '<<<' in v)]
+                if not env[key]:
+                    del env[key]
 
     action_to_cmd = {
         'run': 'mlcr',

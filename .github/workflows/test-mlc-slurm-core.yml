@@ -35,7 +35,7 @@ jobs:
 
     - name: Pull automation repo
       run: |
-        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+        mlc pull repo mlcommons@mlperf-automations --checkout=main
 
     - name: Run slurm unit tests
       run: |
