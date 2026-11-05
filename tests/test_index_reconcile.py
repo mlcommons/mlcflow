@@ -22,7 +22,11 @@ def _seed(repos_path, cache_entries, modified_times=None):
     _dump(os.path.join(repos_path, "index_cache.json"), cache_entries)
     _dump(os.path.join(repos_path, "index_script.json"), [])
     _dump(os.path.join(repos_path, "index_experiment.json"), [])
-    _dump(os.path.join(repos_path, "modified_times.json"), modified_times or {})
+    _dump(
+        os.path.join(
+            repos_path,
+            "modified_times.json"),
+        modified_times or {})
 
 
 def _cache_uids(repos_path):
