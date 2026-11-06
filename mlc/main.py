@@ -83,6 +83,17 @@ class Automation:
 
 
 mlc_run_cmd = None
+
+# Actions that only apply to scripts (and accept `run` as their target), in
+# the normalized underscore form that main() compares against.
+SCRIPT_ONLY_ACTIONS = (
+    'docker', 'docker_run', 'apptainer', 'apptainer_run',
+    'experiment', 'remote_run', 'remote_experiment',
+    'remote_docker', 'remote_slurm', 'remote_slurm_experiment',
+    'remote_slurm_docker', 'remote_slurm_apptainer',
+    'slurm_run', 'slurm_docker', 'slurm_apptainer', 'slurm_experiment',
+    'doc', 'lint',
+)
 _current_target = None
 
 
@@ -273,6 +284,14 @@ def mlcrse():
     mlc_expand_short("remote-slurm-experiment")
 
 
+def mlcrsd():
+    mlc_expand_short("remote-slurm-docker")
+
+
+def mlcrsa():
+    mlc_expand_short("remote-slurm-apptainer")
+
+
 def mlce():
     mlc_expand_short("experiment")
 
@@ -402,13 +421,8 @@ def build_parser(pre_args):
     reindex_parser.add_argument('extra', nargs=argparse.REMAINDER)
 
     # Script-only
-    for action in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
-                   'experiment', 'remote-run', 'remote-experiment',
-                   'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
-                   'slurm-run',
-                   'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
-                   'doc', 'lint']:
-        p = subparsers.add_parser(action, add_help=False)
+    for action in SCRIPT_ONLY_ACTIONS:
+        p = subparsers.add_parser(action.replace('_', '-'), add_help=False)
         p.add_argument('target', choices=['script', 'run'])
         p.add_argument(
             'details',
@@ -452,12 +466,7 @@ def build_run_args(args):
     if args.command in ['pull', 'rm', 'add', 'find'] and args.target == "repo":
         run_args['repo'] = args.details
 
-    if args.command in ['docker', 'docker-run', 'apptainer', 'apptainer-run',
-                        'experiment', 'remote-run', 'remote-experiment',
-                        'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
-                        'slurm-run',
-                        'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
-                        'doc', 'lint'] and args.target == "run":
+    if args.command in SCRIPT_ONLY_ACTIONS and args.target == "run":
         # run_args['target'] = 'script' #dont modify this as script might have
         # target as in input
         args.target = "script"
@@ -590,8 +599,7 @@ def main():
     if pre_args.help and not "tags" in run_args:
         help_text = ""
         if pre_args.target == "run":
-            if pre_args.action.startswith(
-                    "docker") or pre_args.action in ("apptainer", "apptainer-run"):
+            if pre_args.action in SCRIPT_ONLY_ACTIONS:
                 pre_args.target = "script"
             else:
                 logger.error(
@@ -601,17 +609,7 @@ def main():
         if not pre_args.action and not pre_args.target:
             help_text += main.__doc__
         elif pre_args.action and not pre_args.target:
-            script_only_actions = {
-                a.replace("-", "_")
-                for a in [
-                    'docker', 'docker-run', 'apptainer', 'apptainer-run',
-                    'experiment', 'remote-run', 'remote-experiment',
-                    'remote-docker', 'remote-slurm', 'remote-slurm-experiment',
-                    'slurm-run', 'slurm-docker', 'slurm-apptainer', 'slurm-experiment',
-                    'doc', 'lint',
-                ]
-            }
-            if pre_args.action in script_only_actions:
+            if pre_args.action in SCRIPT_ONLY_ACTIONS:
                 pre_args.target = 'script'
             elif pre_args.action not in ['script', 'cache', 'repo']:
                 logger.error(f"Invalid target {pre_args.action}")
@@ -630,16 +628,33 @@ def main():
             actions = get_action(pre_args.target, default_parent)
             action_name = pre_args.action.replace("-", "_")
             try:
-                method = getattr(actions, action_name)
+                getattr(actions, action_name)
                 help_text += actions.__doc__ or ""
-                if method.__doc__:
-                    help_text += method.__doc__
+                for name in getattr(actions, 'HELP_COMPONENTS', {}).get(
+                        action_name, [action_name]):
+                    help_text += getattr(actions, name).__doc__ or ""
             except AttributeError:
                 logger.error(
                     f"Error: '{pre_args.action}' is not supported for {pre_args.target}.")
         if help_text != "":
             print(help_text)
         sys.exit(0)
+
+    # Script-specific help (`mlcsr <tags> --help`): show the options of the
+    # wrapping actions, then the script's own inputs, without running it.
+    if pre_args.help and getattr(args, 'target', None) in ('script', 'run'):
+        actions = get_action('script', default_parent)
+        components = [
+            c for c in getattr(actions, 'HELP_COMPONENTS', {}).get(
+                args.command, []) if c != 'run']
+        if components:
+            print(''.join(getattr(actions, c).__doc__ or ''
+                          for c in components))
+            res = actions.help(run_args)
+            if res['return'] > 0:
+                logging.error(res.get('error', 'Error displaying help'))
+                sys.exit(1)
+            sys.exit(0)
 
     if hasattr(args, 'target') and args.target == "repos":
         args.target = "repo"

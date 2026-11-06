@@ -13,7 +13,7 @@ on:
 jobs:
   test_mlc_cli_core_actions:
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -45,7 +45,7 @@ jobs:
       run: |
         GH_MLC_REPO_PATH_FORK="${HOME}/MLC/repos/anandhu-eng@mlperf-automations"
         GH_MLC_REPO_JSON_PATH="${HOME}/MLC/repos/repos.json"
-        mlc pull repo anandhu-eng@mlperf-automations  --checkout=dev
+        mlc pull repo anandhu-eng@mlperf-automations  --checkout=main
         if [ ! -d "${GH_MLC_REPO_PATH_FORK}" ]; then
           echo "Repository folder $GH_MLC_REPO_PATH_FORK not found. Exiting with failure."
           exit 1
@@ -59,8 +59,8 @@ jobs:
           exit 1
         fi
         CURRENT_BRANCH=$(git -C "$GH_MLC_REPO_PATH_FORK" rev-parse --abbrev-ref HEAD)
-        if [ "$CURRENT_BRANCH" != "dev" ]; then
-          echo "Expected branch 'dev', but found '$CURRENT_BRANCH'. Exiting with failure."
+        if [ "$CURRENT_BRANCH" != "main" ]; then
+          echo "Expected branch 'main', but found '$CURRENT_BRANCH'. Exiting with failure."
           exit 1
         fi
 
@@ -76,7 +76,7 @@ jobs:
       run: |
         GH_MLC_REPO_PATH="${HOME}/MLC/repos/mlcommons@mlperf-automations"
         GH_MLC_REPO_JSON_PATH="${HOME}/MLC/repos/repos.json"
-        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+        mlc pull repo mlcommons@mlperf-automations --checkout=main
         if [ ! -d "$GH_MLC_REPO_PATH" ]; then
           echo "Repository folder $GH_MLC_REPO_PATH not found. Exiting with failure."
           exit 1
@@ -94,8 +94,8 @@ jobs:
           exit 1
         fi
         CURRENT_BRANCH=$(git -C "$GH_MLC_REPO_PATH" rev-parse --abbrev-ref HEAD)
-        if [ "$CURRENT_BRANCH" != "dev" ]; then
-          echo "Expected branch 'dev', but found '$CURRENT_BRANCH'. Exiting with failure."
+        if [ "$CURRENT_BRANCH" != "main" ]; then
+          echo "Expected branch 'main', but found '$CURRENT_BRANCH'. Exiting with failure."
           exit 1
         fi
         mlc pull repo
@@ -383,7 +383,7 @@ jobs:
 
   test_mlc_access_core_actions:
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -413,7 +413,7 @@ jobs:
     
     - name: Pull a forked mlperf-automations repository
       run: |
-        mlc pull repo anandhu-eng@mlperf-automations  --checkout=dev
+        mlc pull repo anandhu-eng@mlperf-automations  --checkout=main
     
     - name: Run find repo from test-mlc-access.py
       run: |
@@ -421,7 +421,7 @@ jobs:
 
     - name: Pull MLCOMMONS mlperf-automations repository
       run: |
-        mlc pull repo mlcommons@mlperf-automations --checkout=dev
+        mlc pull repo mlcommons@mlperf-automations --checkout=main
 
     - name: Test for rm cache - invalid cache entry tags(test succeeds if command fails)
       run: |
@@ -437,7 +437,7 @@ jobs:
         cd .github/scripts && python -c "import test_mlc_access as test; test.run_tests()"
 
   test_mlc_help:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -469,6 +469,13 @@ jobs:
       run: |
         mlc script --help
         mlc script --h
+    - name: MLC script short commands - action help (mlcr, mlcsr, mlcsa, mlcrd, ...)
+      run: |
+        python .github/scripts/test_mlc_help.py
+    - name: MLC script short commands - script help with tags
+      run: |
+        mlc pull repo mlcommons@mlperf-automations --branch=main
+        python .github/scripts/test_mlc_help.py --with-tags
     - name: MLC scripts - individual actions
       run: |
         mlc add script --help
@@ -480,6 +487,12 @@ jobs:
         mlc run script --help
         mlc show script --help
         mlc test script --help
+        mlc apptainer script --help
+        mlc experiment script --help
+        mlc remote-run script --help
+        mlc slurm-run script --help
+        mlc slurm-apptainer script --help
+        mlc remote-slurm-apptainer script --help
         mlc add script -h
         mlc docker script -h
         mlc find script -h
@@ -523,7 +536,7 @@ jobs:
         mlc show cache -h
   
   test_mlc_script_actions:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-latest' && contains(fromJSON('["3.8", "3.9"]'), matrix.python-version)) && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -550,5 +563,5 @@ jobs:
         python -m pip install .
     - name: MLC ${{matrix.action}} script
       run: |
-        mlcp mlcommons@mlperf-automations --branch=dev
+        mlcp mlcommons@mlperf-automations --branch=main
         ${{matrix.action}} detect,cpu

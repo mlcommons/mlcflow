@@ -227,6 +227,12 @@ class Index:
             if not os.path.isdir(folder_path):
                 continue
 
+            indexed_paths = {
+                os.path.normpath(item.get("path", ""))
+                for item in self.indices[folder_type]}
+            indexed_uids = {
+                item.get("uid") for item in self.indices[folder_type]}
+
             for automation_dir in os.listdir(folder_path):
                 automation_path = os.path.join(folder_path, automation_dir)
                 if not os.path.isdir(automation_path):
@@ -277,9 +283,19 @@ class Index:
                 mtime = self.get_item_mtime(config_path)
                 old_mtime = self._get_stored_mtime(config_path)
 
-                # skip if unchanged
+                # Skip if unchanged, unless the entry is missing from the
+                # index (e.g. a concurrent mlc process saved the index
+                # without it). A missing entry whose uid is indexed under
+                # another path is a duplicate uid and stays skipped.
                 if old_mtime == mtime and not repos_changed:
-                    continue
+                    if os.path.normpath(automation_path) in indexed_paths:
+                        continue
+                    if not isinstance(data, dict) or not data.get(
+                            "uid") or data.get("uid") in indexed_uids:
+                        continue
+                    logger.debug(
+                        f"Re-indexing {folder_type} missing from index: "
+                        f"{automation_path}")
 
                 # Validate script meta against schema during indexing if meta
                 # changed or repos changed
